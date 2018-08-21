@@ -1,6 +1,3 @@
-separate CMakeLists
-ignore -WDocumentation, -Wreserved-id-macro, in glfw scope
-
 get vulkan wrapper
 
 see precompiled headers
@@ -10,3 +7,7 @@ check avx2 bad performances reasons (probably eigen)
 
 use CMAKE_CXX_SIMULATE_ID to differentiate between clang and clang-cl
 check cmake cross-compiling
+
+don't forget to check for vectorization errors
+
+check VK_PROTOTYPES usefulness
