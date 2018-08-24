@@ -65,7 +65,7 @@
         },
         {
           "name": "CMAKE_LINKER",
-          "value": "${projectDir}\\lld-link.exe"
+          "value": "${projectDir}\\tools\\lld-link.exe"
         }
       ]
     },
@@ -89,7 +89,7 @@
         },
         {
           "name": "CMAKE_LINKER",
-          "value": "${projectDir}\\lld-link.exe"
+          "value": "${projectDir}\\tools\\lld-link.exe"
         }
       ]
     },
@@ -113,7 +113,7 @@
         },
         {
           "name": "CMAKE_LINKER",
-          "value": "${projectDir}\\lld-link.exe"
+          "value": "${projectDir}\\tools\\lld-link.exe"
         }
       ]
     }
