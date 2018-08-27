@@ -1,4 +1,5 @@
-add_definitions(-DVK_PROTOTYPES) # is it necessary ?
+#add_definitions(-DVK_PROTOTYPES) # is it necessary ?
+add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 
 # Vulkan
 find_library(VULKAN_LIBRARY
