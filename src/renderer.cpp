@@ -4,7 +4,9 @@
 #include <vulkan/vulkan.hpp>
 
 #include <iostream>
+
 #include <vector>
+#include <map>
 
 #define CHECK_VK_RESULT_FATAL(vk_function, msg) { \
 	vk::Result res; \
@@ -28,12 +30,15 @@ catch (const std::exception& e) \
 namespace Renderer
 {
 	static vk::Instance g_instance;
+	static vk::PhysicalDevice g_physicalDevice = nullptr;
+
 	static vk::AllocationCallbacks* g_allocator = nullptr;
 
 	static vk::DispatchLoaderDynamic g_dldy;
 
 	#ifndef NDEBUG
 	static vk::DebugUtilsMessengerEXT g_debugMessenger;
+
 	static VKAPI_ATTR VkBool32 VKAPI_CALL g_debugCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -182,9 +187,72 @@ namespace Renderer
 		#endif
 	}
 
+	static int RateDeviceSuitability(vk::PhysicalDevice device)
+	{
+		std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
+		int i = 0, indice = -1;
+		for (const auto& queueFamily : queueFamilies)
+		{
+			if (queueFamily.queueCount > 0 && queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
+			{
+				indice = i;
+				break;
+			}
+
+			i++;
+		}
+
+		if (indice == -1)
+			return 0;
+
+		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
+		//vk::PhysicalDeviceFeatures deviceFeatures = device.getFeatures();
+
+		int score = 0;
+
+		// Discrete GPUs have a significant performance advantage
+		if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
+			score += 1000;
+
+		// Maximum possible size of textures affects graphics quality
+		score += deviceProperties.limits.maxImageDimension2D;
+
+		return score;
+	}
+
+	static void InitDevice()
+	{
+		uint32_t deviceCount = 0;
+		vkEnumeratePhysicalDevices(g_instance, &deviceCount, nullptr);
+
+		if (deviceCount == 0)
+			throw std::runtime_error("failed to find GPUs with Vulkan support!");
+
+		std::vector<vk::PhysicalDevice> devices(deviceCount);
+		g_instance.enumeratePhysicalDevices(&deviceCount, devices.data());
+
+		{
+			// Use an ordered map to automatically sort candidates by increasing score
+			std::multimap<int, vk::PhysicalDevice> candidates;
+
+			for (const auto& device : devices)
+			{
+				int score = RateDeviceSuitability(device);
+				candidates.insert(std::make_pair(score, device));
+			}
+
+			// Check if the best candidate is suitable at all
+			if (candidates.rbegin()->first > 0)
+				g_physicalDevice = candidates.rbegin()->second;
+			else
+				throw std::runtime_error("Failed to find a suitable GPU");
+		}
+	}
+
 	static void InitVulkan()
 	{
 		CreateInstance();
+		InitDevice();
 	}
 
 	void Init(unsigned int width, unsigned int height)
@@ -224,6 +292,4 @@ namespace Renderer
 		while (Update());
 		Shutdown();
 	}
-
-
 }
