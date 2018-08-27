@@ -1,5 +1,3 @@
-get vulkan wrapper
-
 see precompiled headers
 
 be careful with 03
