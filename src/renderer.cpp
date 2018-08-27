@@ -31,6 +31,7 @@ namespace Renderer
 {
 	static vk::Instance g_instance;
 	static vk::PhysicalDevice g_physicalDevice = nullptr;
+	static vk::Device g_device = nullptr;
 
 	static vk::AllocationCallbacks* g_allocator = nullptr;
 
@@ -187,22 +188,22 @@ namespace Renderer
 		#endif
 	}
 
-	static int RateDeviceSuitability(vk::PhysicalDevice device)
+	static int GetAvailableQueueFamily(vk::PhysicalDevice device, vk::QueueFlags capabilities)
 	{
 		std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
-		int i = 0, indice = -1;
+		int i = 0;
 		for (const auto& queueFamily : queueFamilies)
 		{
-			if (queueFamily.queueCount > 0 && queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
-			{
-				indice = i;
-				break;
-			}
+			if (queueFamily.queueCount > 0 && queueFamily.queueFlags & capabilities)
+				return i;
 
 			i++;
 		}
+	}
 
-		if (indice == -1)
+	static int RateDeviceSuitability(vk::PhysicalDevice device)
+	{
+		if (GetAvailableQueueFamily(device, vk::QueueFlagBits::eGraphics) == -1)
 			return 0;
 
 		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
@@ -247,6 +248,8 @@ namespace Renderer
 			else
 				throw std::runtime_error("Failed to find a suitable GPU");
 		}
+
+
 	}
 
 	static void InitVulkan()
