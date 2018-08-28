@@ -31,11 +31,22 @@ namespace Renderer
 {
 	static vk::Instance g_instance;
 	static vk::PhysicalDevice g_physicalDevice = nullptr;
+
 	static vk::Device g_device = nullptr;
+
+	struct Queue
+	{
+		int index = -1;
+		vk::Queue queue = nullptr;
+	};
+
+	static Queue g_graphicsQueue;
 
 	static vk::AllocationCallbacks* g_allocator = nullptr;
 
 	static vk::DispatchLoaderDynamic g_dldy;
+
+	static std::vector<const char*> g_validationLayers;
 
 	#ifndef NDEBUG
 	static vk::DebugUtilsMessengerEXT g_debugMessenger;
@@ -151,13 +162,13 @@ namespace Renderer
 		const char** pExtensions = nullptr;
 
 		#ifndef NDEBUG
-		const std::vector<const char*> validationLayers = {
+		g_validationLayers = {
 			"VK_LAYER_LUNARG_standard_validation",
 			"VK_LAYER_LUNARG_monitor"
 		};
 
-		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-		createInfo.ppEnabledLayerNames = validationLayers.data();
+		createInfo.enabledLayerCount = static_cast<uint32_t>(g_validationLayers.size());
+		createInfo.ppEnabledLayerNames = g_validationLayers.data();
 
 		uint32_t requiredExtensionsCount = WindowHandler::GetRequiredInstanceExtensions(pExtensions);
 
@@ -201,9 +212,9 @@ namespace Renderer
 		}
 	}
 
-	static int RateDeviceSuitability(vk::PhysicalDevice device)
+	static int RateDeviceSuitability(vk::PhysicalDevice device, vk::QueueFlags capabilities)
 	{
-		if (GetAvailableQueueFamily(device, vk::QueueFlagBits::eGraphics) == -1)
+		if (GetAvailableQueueFamily(device, capabilities) == -1)
 			return 0;
 
 		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
@@ -232,13 +243,15 @@ namespace Renderer
 		std::vector<vk::PhysicalDevice> devices(deviceCount);
 		g_instance.enumeratePhysicalDevices(&deviceCount, devices.data());
 
+		vk::QueueFlags desiredQueueCapabilities = vk::QueueFlagBits::eGraphics;
+
 		{
 			// Use an ordered map to automatically sort candidates by increasing score
 			std::multimap<int, vk::PhysicalDevice> candidates;
 
 			for (const auto& device : devices)
 			{
-				int score = RateDeviceSuitability(device);
+				int score = RateDeviceSuitability(device, desiredQueueCapabilities);
 				candidates.insert(std::make_pair(score, device));
 			}
 
@@ -249,7 +262,32 @@ namespace Renderer
 				throw std::runtime_error("Failed to find a suitable GPU");
 		}
 
+		int indice = GetAvailableQueueFamily(g_physicalDevice, desiredQueueCapabilities);
+		float queuePriority = 1.0f;
+		vk::DeviceQueueCreateInfo queueCreateInfo(
+			vk::DeviceQueueCreateFlags(),
+			indice,
+			1,
+			&queuePriority
+		);
 
+		vk::PhysicalDeviceFeatures deviceFeatures = {};
+
+		vk::DeviceCreateInfo createInfo(
+			vk::DeviceCreateFlags(),
+			1,
+			&queueCreateInfo,
+			static_cast<uint32_t>(g_validationLayers.size()),
+			g_validationLayers.data(),
+			0,
+			nullptr,
+			&deviceFeatures
+		);
+
+		CHECK_VK_RESULT_FATAL(g_physicalDevice.createDevice(&createInfo, g_allocator, &g_device), "Failed to create logical device");
+
+		g_graphicsQueue.index = 0;
+		g_graphicsQueue.queue = g_device.getQueue(indice, g_graphicsQueue.index);
 	}
 
 	static void InitVulkan()
@@ -278,6 +316,8 @@ namespace Renderer
 	void Shutdown()
 	{
 		TRY_CATCH_BLOCK("Failed to shutdown renderer",
+
+			g_device.destroy(g_allocator);
 
 			#ifndef NDEBUG
 			g_instance.destroyDebugUtilsMessengerEXT(g_debugMessenger, g_allocator, g_dldy);
