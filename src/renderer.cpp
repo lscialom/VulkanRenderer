@@ -210,6 +210,8 @@ namespace Renderer
 
 			i++;
 		}
+
+		return -1;
 	}
 
 	static int RateDeviceSuitability(vk::PhysicalDevice device, vk::QueueFlags capabilities)
