@@ -234,14 +234,10 @@ namespace Renderer
 
 	static void InitDevice()
 	{
-		uint32_t deviceCount = 0;
-		vkEnumeratePhysicalDevices(g_instance, &deviceCount, nullptr);
+		std::vector<vk::PhysicalDevice> devices = g_instance.enumeratePhysicalDevices();
 
-		if (deviceCount == 0)
+		if (devices.empty())
 			throw std::runtime_error("failed to find GPUs with Vulkan support!");
-
-		std::vector<vk::PhysicalDevice> devices(deviceCount);
-		g_instance.enumeratePhysicalDevices(&deviceCount, devices.data());
 
 		vk::QueueFlags desiredQueueCapabilities = vk::QueueFlagBits::eGraphics;
 
