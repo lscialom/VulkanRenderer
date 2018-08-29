@@ -9,3 +9,5 @@ check cmake cross-compiling
 don't forget to check for vectorization errors
 
 check VK_PROTOTYPES usefulness
+
+Tagging + labels

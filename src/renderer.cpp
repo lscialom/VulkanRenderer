@@ -76,6 +76,7 @@ namespace Renderer
 		{
 			strcpy(prefix, "ERROR : ");
 		}
+
 		if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
 		{
 			strcat(prefix, "GENERAL");
@@ -144,6 +145,18 @@ namespace Renderer
 
 		return VK_FALSE;
 	}
+
+	static void SetMainObjectsDebugNames()
+	{
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eInstance, (uint64_t)((VkInstance)g_instance), "Vulkan Instance" }, g_dldy);
+
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::ePhysicalDevice, (uint64_t)((VkPhysicalDevice)g_physicalDevice), (std::string("Physical Device - ") + g_physicalDevice.getProperties().deviceName).c_str() }, g_dldy);
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDevice, (uint64_t)((VkDevice)g_device), (std::string("Logical Device - ") + g_physicalDevice.getProperties().deviceName).c_str() }, g_dldy);
+
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_graphicsQueue.queue), "Graphics Queue" }, g_dldy);
+
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDebugUtilsMessengerEXT, (uint64_t)((VkDebugUtilsMessengerEXT)g_debugMessenger), "Debug Messenger" }, g_dldy);
+	}
 	#endif
 
 	static void CreateInstance()
@@ -190,7 +203,7 @@ namespace Renderer
 		#ifndef NDEBUG
 		vk::DebugUtilsMessengerCreateInfoEXT dbgCreateInfo(
 			vk::DebugUtilsMessengerCreateFlagsEXT(),
-			vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
+			vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError, //Add eInfo for info logs
 			vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
 			g_debugCallback
 		);
@@ -271,18 +284,24 @@ namespace Renderer
 
 		vk::PhysicalDeviceFeatures deviceFeatures = {};
 
+		std::vector<const char*> extensions = {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME
+		};
+
 		vk::DeviceCreateInfo createInfo(
 			vk::DeviceCreateFlags(),
 			1,
 			&queueCreateInfo,
 			static_cast<uint32_t>(g_validationLayers.size()),
 			g_validationLayers.data(),
-			0,
-			nullptr,
+			static_cast<uint32_t>(extensions.size()),
+			extensions.data(),
 			&deviceFeatures
 		);
 
 		CHECK_VK_RESULT_FATAL(g_physicalDevice.createDevice(&createInfo, g_allocator, &g_device), "Failed to create logical device");
+
+		g_dldy.init(g_instance, g_device);
 
 		g_graphicsQueue.index = 0;
 		g_graphicsQueue.queue = g_device.getQueue(indice, g_graphicsQueue.index);
@@ -292,6 +311,10 @@ namespace Renderer
 	{
 		CreateInstance();
 		InitDevice();
+
+		#ifndef NDEBUG
+		SetMainObjectsDebugNames();
+		#endif
 	}
 
 	void Init(unsigned int width, unsigned int height)
