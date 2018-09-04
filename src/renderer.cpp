@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 
 #define CHECK_VK_RESULT_FATAL(vk_function, msg) { \
 	vk::Result res; \
@@ -36,6 +37,17 @@ namespace Renderer
 
 	static vk::SurfaceKHR g_surface;
 
+	struct QueueFamilyIndices
+	{
+		int graphicsFamily = -1;
+		int presentFamily = -1;
+
+		bool isComplete()
+		{
+			return graphicsFamily >= 0 && presentFamily >= 0;
+		}
+	};
+
 	struct Queue
 	{
 		int index = -1;
@@ -43,6 +55,7 @@ namespace Renderer
 	};
 
 	static Queue g_graphicsQueue;
+	static Queue g_presentQueue;
 
 	static vk::AllocationCallbacks* g_allocator = nullptr;
 
@@ -216,24 +229,35 @@ namespace Renderer
 		#endif
 	}
 
-	static int GetAvailableQueueFamily(vk::PhysicalDevice device, vk::QueueFlags capabilities)
+	static QueueFamilyIndices GetQueueFamilies(vk::PhysicalDevice device)
 	{
 		std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
+		QueueFamilyIndices indices;
+
 		int i = 0;
 		for (const auto& queueFamily : queueFamilies)
 		{
-			if (queueFamily.queueCount > 0 && queueFamily.queueFlags & capabilities)
-				return i;
+			if (queueFamily.queueCount > 0)
+			{
+				if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
+					indices.graphicsFamily = i;
+
+				if (device.getSurfaceSupportKHR(i, g_surface))
+					indices.presentFamily = i;
+			}
+
+			if (indices.isComplete())
+				break;
 
 			i++;
 		}
 
-		return -1;
+		return indices;
 	}
 
-	static int RateDeviceSuitability(vk::PhysicalDevice device, vk::QueueFlags capabilities)
+	static int RateDeviceSuitability(vk::PhysicalDevice device)
 	{
-		if (GetAvailableQueueFamily(device, capabilities) == -1)
+		if (!GetQueueFamilies(device).isComplete())
 			return 0;
 
 		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
@@ -258,15 +282,13 @@ namespace Renderer
 		if (devices.empty())
 			throw std::runtime_error("failed to find GPUs with Vulkan support!");
 
-		vk::QueueFlags desiredQueueCapabilities = vk::QueueFlagBits::eGraphics;
-
 		{
 			// Use an ordered map to automatically sort candidates by increasing score
 			std::multimap<int, vk::PhysicalDevice> candidates;
 
 			for (const auto& device : devices)
 			{
-				int score = RateDeviceSuitability(device, desiredQueueCapabilities);
+				int score = RateDeviceSuitability(device);
 				candidates.insert(std::make_pair(score, device));
 			}
 
@@ -277,14 +299,22 @@ namespace Renderer
 				throw std::runtime_error("Failed to find a suitable GPU");
 		}
 
-		int indice = GetAvailableQueueFamily(g_physicalDevice, desiredQueueCapabilities);
+		QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
+		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+		std::set<int> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
+
 		float queuePriority = 1.0f;
-		vk::DeviceQueueCreateInfo queueCreateInfo(
-			vk::DeviceQueueCreateFlags(),
-			indice,
-			1,
-			&queuePriority
-		);
+		for (int queueFamily : uniqueQueueFamilies)
+		{
+			vk::DeviceQueueCreateInfo queueCreateInfo(
+				vk::DeviceQueueCreateFlags(),
+				queueFamily,
+				1,
+				&queuePriority
+			);
+
+			queueCreateInfos.push_back(queueCreateInfo);
+		}
 
 		vk::PhysicalDeviceFeatures deviceFeatures = {};
 
@@ -294,8 +324,8 @@ namespace Renderer
 
 		vk::DeviceCreateInfo createInfo(
 			vk::DeviceCreateFlags(),
-			1,
-			&queueCreateInfo,
+			static_cast<uint32_t>(queueCreateInfos.size()),
+			queueCreateInfos.data(),
 			static_cast<uint32_t>(g_validationLayers.size()),
 			g_validationLayers.data(),
 			static_cast<uint32_t>(extensions.size()),
@@ -308,7 +338,10 @@ namespace Renderer
 		g_dldy.init(g_instance, g_device);
 
 		g_graphicsQueue.index = 0;
-		g_graphicsQueue.queue = g_device.getQueue(indice, g_graphicsQueue.index);
+		g_graphicsQueue.queue = g_device.getQueue(indices.graphicsFamily, g_graphicsQueue.index);
+
+		g_presentQueue.index = 0;
+		g_presentQueue.queue = g_device.getQueue(indices.presentFamily, g_presentQueue.index);
 	}
 
 	static void InitVulkan()
