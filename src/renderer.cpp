@@ -34,6 +34,8 @@ namespace Renderer
 
 	static vk::Device g_device = nullptr;
 
+	static vk::SurfaceKHR g_surface;
+
 	struct Queue
 	{
 		int index = -1;
@@ -149,6 +151,8 @@ namespace Renderer
 	static void SetMainObjectsDebugNames()
 	{
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eInstance, (uint64_t)((VkInstance)g_instance), "Vulkan Instance" }, g_dldy);
+
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eSurfaceKHR, (uint64_t)((VkSurfaceKHR)g_surface), "Window Surface" }, g_dldy);
 
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::ePhysicalDevice, (uint64_t)((VkPhysicalDevice)g_physicalDevice), (std::string("Physical Device - ") + g_physicalDevice.getProperties().deviceName).c_str() }, g_dldy);
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDevice, (uint64_t)((VkDevice)g_device), (std::string("Logical Device - ") + g_physicalDevice.getProperties().deviceName).c_str() }, g_dldy);
@@ -310,6 +314,7 @@ namespace Renderer
 	static void InitVulkan()
 	{
 		CreateInstance();
+		CHECK_VK_RESULT_FATAL((vk::Result)WindowHandler::CreateSurface((VkInstance)g_instance, (VkAllocationCallbacks*)g_allocator, (VkSurfaceKHR*)&g_surface), "Failed to create window surface");
 		InitDevice();
 
 		#ifndef NDEBUG
@@ -344,6 +349,7 @@ namespace Renderer
 			g_instance.destroyDebugUtilsMessengerEXT(g_debugMessenger, g_allocator, g_dldy);
 			#endif
 
+			g_instance.destroySurfaceKHR(g_surface, g_allocator);
 			g_instance.destroy(g_allocator);
 
 			WindowHandler::Shutdown();

@@ -7,7 +7,7 @@ namespace WindowHandler
 {
 	static GLFWwindow* g_window;
 
-	void Init(unsigned int width, unsigned int height)
+	void Init(uint32_t width, uint32_t height)
 	{
 		glfwInit();
 
@@ -23,6 +23,11 @@ namespace WindowHandler
 		extensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
 		return glfwExtensionCount;
+	}
+
+	int32_t CreateSurface(VkInstance instance, const VkAllocationCallbacks* allocator, VkSurfaceKHR* surface)
+	{
+		return glfwCreateWindowSurface(instance, g_window, allocator, surface);
 	}
 
 	bool Update()
