@@ -55,7 +55,7 @@ namespace Renderer
 	struct Queue
 	{
 		int index = -1;
-		vk::Queue queue = nullptr;
+		vk::Queue handle = nullptr;
 	};
 
 	static Queue g_graphicsQueue;
@@ -177,8 +177,8 @@ namespace Renderer
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::ePhysicalDevice, (uint64_t)((VkPhysicalDevice)g_physicalDevice), (std::string("Physical Device - ") + g_physicalDevice.getProperties().deviceName).c_str() }, g_dldy);
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDevice, (uint64_t)((VkDevice)g_device), (std::string("Logical Device - ") + g_physicalDevice.getProperties().deviceName).c_str() }, g_dldy);
 
-		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_graphicsQueue.queue), "Graphics Queue" }, g_dldy);
-		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_presentQueue.queue), "Present Queue" }, g_dldy);
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_graphicsQueue.handle), "Graphics Queue" }, g_dldy);
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_presentQueue.handle), "Present Queue" }, g_dldy);
 
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDebugUtilsMessengerEXT, (uint64_t)((VkDebugUtilsMessengerEXT)g_debugMessenger), "Debug Messenger" }, g_dldy);
 	}
@@ -354,10 +354,10 @@ namespace Renderer
 		g_dldy.init(g_instance, g_device);
 
 		g_graphicsQueue.index = 0;
-		g_graphicsQueue.queue = g_device.getQueue(indices.graphicsFamily, g_graphicsQueue.index);
+		g_graphicsQueue.handle = g_device.getQueue(indices.graphicsFamily, g_graphicsQueue.index);
 
 		g_presentQueue.index = 0;
-		g_presentQueue.queue = g_device.getQueue(indices.presentFamily, g_presentQueue.index);
+		g_presentQueue.handle = g_device.getQueue(indices.presentFamily, g_presentQueue.index);
 	}
 
 	static void InitVulkan()
