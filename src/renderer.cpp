@@ -33,6 +33,10 @@ namespace Renderer
 	static vk::Instance g_instance;
 	static vk::PhysicalDevice g_physicalDevice = nullptr;
 
+	static const std::vector<const char*> g_deviceExtensions = {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	};
+
 	static vk::Device g_device = nullptr;
 
 	static vk::SurfaceKHR g_surface;
@@ -61,9 +65,12 @@ namespace Renderer
 
 	static vk::DispatchLoaderDynamic g_dldy;
 
-	static std::vector<const char*> g_validationLayers;
-
 	#ifndef NDEBUG
+	static const std::vector<const char*> g_validationLayers = {
+		"VK_LAYER_LUNARG_standard_validation",
+		"VK_LAYER_LUNARG_monitor"
+	};
+
 	static vk::DebugUtilsMessengerEXT g_debugMessenger;
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL g_debugCallback(
@@ -192,11 +199,6 @@ namespace Renderer
 		const char** pExtensions = nullptr;
 
 		#ifndef NDEBUG
-		g_validationLayers = {
-			"VK_LAYER_LUNARG_standard_validation",
-			"VK_LAYER_LUNARG_monitor"
-		};
-
 		createInfo.enabledLayerCount = static_cast<uint32_t>(g_validationLayers.size());
 		createInfo.ppEnabledLayerNames = g_validationLayers.data();
 
@@ -255,9 +257,21 @@ namespace Renderer
 		return indices;
 	}
 
+	static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device)
+	{
+		const std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
+
+		std::set<std::string> requiredExtensions(g_deviceExtensions.begin(), g_deviceExtensions.end());
+
+		for (const auto& extension : availableExtensions)
+			requiredExtensions.erase(extension.extensionName);
+
+		return requiredExtensions.empty();
+	}
+
 	static int RateDeviceSuitability(vk::PhysicalDevice device)
 	{
-		if (!GetQueueFamilies(device).isComplete())
+		if (!GetQueueFamilies(device).isComplete() || !CheckDeviceExtensionSupport(device))
 			return 0;
 
 		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
@@ -277,7 +291,7 @@ namespace Renderer
 
 	static void InitDevice()
 	{
-		std::vector<vk::PhysicalDevice> devices = g_instance.enumeratePhysicalDevices();
+		const std::vector<vk::PhysicalDevice> devices = g_instance.enumeratePhysicalDevices();
 
 		if (devices.empty())
 			throw std::runtime_error("failed to find GPUs with Vulkan support!");
@@ -299,9 +313,9 @@ namespace Renderer
 				throw std::runtime_error("Failed to find a suitable GPU");
 		}
 
-		QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
 		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
-		std::set<int> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
+		const QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
+		const std::set<int> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
 
 		float queuePriority = 1.0f;
 		for (int queueFamily : uniqueQueueFamilies)
@@ -318,18 +332,19 @@ namespace Renderer
 
 		vk::PhysicalDeviceFeatures deviceFeatures = {};
 
-		std::vector<const char*> extensions = {
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME
-		};
-
 		vk::DeviceCreateInfo createInfo(
 			vk::DeviceCreateFlags(),
 			static_cast<uint32_t>(queueCreateInfos.size()),
 			queueCreateInfos.data(),
+			#ifndef NDEBUG
 			static_cast<uint32_t>(g_validationLayers.size()),
 			g_validationLayers.data(),
-			static_cast<uint32_t>(extensions.size()),
-			extensions.data(),
+			#else
+			0,
+			nullptr,
+			#endif
+			static_cast<uint32_t>(g_deviceExtensions.size()),
+			g_deviceExtensions.data(),
 			&deviceFeatures
 		);
 
