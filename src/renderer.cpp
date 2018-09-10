@@ -9,6 +9,11 @@
 #include <map>
 #include <set>
 
+//-----------------------------------------------------------------------------
+// MACROS
+//-----------------------------------------------------------------------------
+
+//Redundant pattern
 #define CHECK_VK_RESULT_FATAL(vk_function, msg) { \
 	vk::Result res; \
 	if ((res = vk_function) != vk::Result::eSuccess) \
@@ -18,6 +23,7 @@
 	} \
 }
 
+//For visibility's sake
 #define TRY_CATCH_BLOCK(msg, code) try \
 { \
 	code \
@@ -30,14 +36,29 @@ catch (const std::exception& e) \
 
 namespace Renderer
 {
-	static uint32_t g_width, g_height = 0;
-
-	static vk::Instance g_instance;
-	static vk::PhysicalDevice g_physicalDevice;
+	//-----------------------------------------------------------------------------
+	// CONFIGURATION CONSTANTS
+	//-----------------------------------------------------------------------------
 
 	static const std::vector<const char*> g_deviceExtensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
+
+	#ifndef NDEBUG
+	static const std::vector<const char*> g_validationLayers = {
+		"VK_LAYER_LUNARG_standard_validation",
+		"VK_LAYER_LUNARG_monitor"
+	};
+	#endif
+
+	//-----------------------------------------------------------------------------
+	// CONTEXT
+	//-----------------------------------------------------------------------------
+
+	static uint32_t g_width, g_height = 0;
+
+	static vk::Instance g_instance;
+	static vk::PhysicalDevice g_physicalDevice;
 
 	static vk::Device g_device;
 
@@ -55,24 +76,6 @@ namespace Renderer
 
 	} g_swapchain;
 
-	struct SwapChainSupportDetails
-	{
-		vk::SurfaceCapabilitiesKHR capabilities;
-		std::vector<vk::SurfaceFormatKHR> formats;
-		std::vector<vk::PresentModeKHR> presentModes;
-	};
-
-	struct QueueFamilyIndices
-	{
-		int graphicsFamily = -1;
-		int presentFamily = -1;
-
-		bool isComplete()
-		{
-			return graphicsFamily >= 0 && presentFamily >= 0;
-		}
-	};
-
 	struct Queue
 	{
 		int index = -1;
@@ -86,12 +89,11 @@ namespace Renderer
 
 	static vk::DispatchLoaderDynamic g_dldy;
 
-	#ifndef NDEBUG
-	static const std::vector<const char*> g_validationLayers = {
-		"VK_LAYER_LUNARG_standard_validation",
-		"VK_LAYER_LUNARG_monitor"
-	};
+	//-----------------------------------------------------------------------------
+	// DEBUG UTILS
+	//-----------------------------------------------------------------------------
 
+	#ifndef NDEBUG
 	static vk::DebugUtilsMessengerEXT g_debugMessenger;
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL g_debugCallback(
@@ -207,14 +209,114 @@ namespace Renderer
 	}
 	#endif
 
+	//-----------------------------------------------------------------------------
+	// CONFIGURATION HELPERS
+	//-----------------------------------------------------------------------------
+
+	struct QueueFamilyIndices
+	{
+		int graphicsFamily = -1;
+		int presentFamily = -1;
+
+		bool isComplete()
+		{
+			return graphicsFamily >= 0 && presentFamily >= 0;
+		}
+	};
+
+	static QueueFamilyIndices GetQueueFamilies(vk::PhysicalDevice device)
+	{
+		std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
+		QueueFamilyIndices indices;
+
+		int i = 0;
+		for (const auto& queueFamily : queueFamilies)
+		{
+			if (queueFamily.queueCount > 0)
+			{
+				if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
+					indices.graphicsFamily = i;
+
+				if (device.getSurfaceSupportKHR(i, g_surface))
+					indices.presentFamily = i;
+			}
+
+			if (indices.isComplete())
+				break;
+
+			i++;
+		}
+
+		return indices;
+	}
+
+	struct SwapChainSupportDetails
+	{
+		vk::SurfaceCapabilitiesKHR capabilities;
+		std::vector<vk::SurfaceFormatKHR> formats;
+		std::vector<vk::PresentModeKHR> presentModes;
+	};
+
+	static SwapChainSupportDetails QuerySwapChainSupport(vk::PhysicalDevice device)
+	{
+		SwapChainSupportDetails details;
+
+		details.capabilities = device.getSurfaceCapabilitiesKHR(g_surface);
+		details.formats = device.getSurfaceFormatsKHR(g_surface);
+		details.presentModes = device.getSurfacePresentModesKHR(g_surface);
+
+		return details;
+	}
+
+	static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device)
+	{
+		const std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
+
+		std::set<std::string> requiredExtensions(g_deviceExtensions.begin(), g_deviceExtensions.end());
+
+		for (const auto& extension : availableExtensions)
+			requiredExtensions.erase(extension.extensionName);
+
+		return requiredExtensions.empty();
+	}
+
+	static int RateDeviceSuitability(vk::PhysicalDevice device)
+	{
+		if (!GetQueueFamilies(device).isComplete() || !CheckDeviceExtensionSupport(device))
+			return 0;
+
+		//Done separately since we need to check for the swapchain extension support first
+		SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(device);
+		if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
+			return 0;
+
+		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
+		//vk::PhysicalDeviceFeatures deviceFeatures = device.getFeatures();
+
+		int score = 0;
+
+		// Discrete GPUs have a significant performance advantage
+		if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
+			score += 1000;
+
+		// Maximum possible size of textures affects graphics quality
+		score += deviceProperties.limits.maxImageDimension2D;
+
+		return score;
+	}
+
+	//-----------------------------------------------------------------------------
+	// INITIALIZATION
+	//-----------------------------------------------------------------------------
+
 	static void CreateInstance()
 	{
 		vk::ApplicationInfo appInfo(
 			"Renderer",
-		    VK_MAKE_VERSION(1, 0, 0),
-		    "No Engine",
-		    VK_MAKE_VERSION(1, 0, 0),
-		    VK_API_VERSION_1_1
+			VK_MAKE_VERSION(1, 0, 0),
+			"No Engine",
+			VK_MAKE_VERSION(1, 0, 0),
+			VK_API_VERSION_1_1
 		);
 
 		vk::InstanceCreateInfo createInfo;
@@ -253,80 +355,6 @@ namespace Renderer
 
 		g_debugMessenger = g_instance.createDebugUtilsMessengerEXT(dbgCreateInfo, g_allocator, g_dldy);
 		#endif
-	}
-
-	static QueueFamilyIndices GetQueueFamilies(vk::PhysicalDevice device)
-	{
-		std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
-		QueueFamilyIndices indices;
-
-		int i = 0;
-		for (const auto& queueFamily : queueFamilies)
-		{
-			if (queueFamily.queueCount > 0)
-			{
-				if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
-					indices.graphicsFamily = i;
-
-				if (device.getSurfaceSupportKHR(i, g_surface))
-					indices.presentFamily = i;
-			}
-
-			if (indices.isComplete())
-				break;
-
-			i++;
-		}
-
-		return indices;
-	}
-
-	static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device)
-	{
-		const std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
-
-		std::set<std::string> requiredExtensions(g_deviceExtensions.begin(), g_deviceExtensions.end());
-
-		for (const auto& extension : availableExtensions)
-			requiredExtensions.erase(extension.extensionName);
-
-		return requiredExtensions.empty();
-	}
-
-	static SwapChainSupportDetails QuerySwapChainSupport(vk::PhysicalDevice device)
-	{
-		SwapChainSupportDetails details;
-
-		details.capabilities = device.getSurfaceCapabilitiesKHR(g_surface);
-		details.formats = device.getSurfaceFormatsKHR(g_surface);
-		details.presentModes = device.getSurfacePresentModesKHR(g_surface);
-
-		return details;
-	}
-
-	static int RateDeviceSuitability(vk::PhysicalDevice device)
-	{
-		if (!GetQueueFamilies(device).isComplete() || !CheckDeviceExtensionSupport(device))
-			return 0;
-
-		//Done separately since we need to check for the swapchain extension support first
-		SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(device);
-		if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
-			return 0;
-
-		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
-		//vk::PhysicalDeviceFeatures deviceFeatures = device.getFeatures();
-
-		int score = 0;
-
-		// Discrete GPUs have a significant performance advantage
-		if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
-			score += 1000;
-
-		// Maximum possible size of textures affects graphics quality
-		score += deviceProperties.limits.maxImageDimension2D;
-
-		return score;
 	}
 
 	static void InitDevice()
@@ -518,6 +546,10 @@ namespace Renderer
 		SetMainObjectsDebugNames();
 		#endif
 	}
+
+	//-----------------------------------------------------------------------------
+	// USER FUNCTIONS
+	//-----------------------------------------------------------------------------
 
 	void Init(unsigned int width, unsigned int height)
 	{
