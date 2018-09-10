@@ -30,16 +30,29 @@ catch (const std::exception& e) \
 
 namespace Renderer
 {
+	static uint32_t g_width, g_height = 0;
+
 	static vk::Instance g_instance;
-	static vk::PhysicalDevice g_physicalDevice = nullptr;
+	static vk::PhysicalDevice g_physicalDevice;
 
 	static const std::vector<const char*> g_deviceExtensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
 
-	static vk::Device g_device = nullptr;
+	static vk::Device g_device;
 
 	static vk::SurfaceKHR g_surface;
+
+	static struct
+	{
+		vk::SwapchainKHR handle;
+
+		std::vector<vk::Image> images;
+
+		vk::Format format;
+		vk::Extent2D extent;
+
+	} g_swapchain;
 
 	struct SwapChainSupportDetails
 	{
@@ -277,7 +290,7 @@ namespace Renderer
 		return requiredExtensions.empty();
 	}
 
-	static SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice device)
+	static SwapChainSupportDetails QuerySwapChainSupport(vk::PhysicalDevice device)
 	{
 		SwapChainSupportDetails details;
 
@@ -294,7 +307,7 @@ namespace Renderer
 			return 0;
 
 		//Done separately since we need to check for the swapchain extension support first
-		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+		SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(device);
 		if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
 			return 0;
 
@@ -383,11 +396,97 @@ namespace Renderer
 		g_presentQueue.handle = g_device.getQueue(indices.presentFamily, g_presentQueue.index);
 	}
 
+	static void InitSwapchain()
+	{
+		SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(g_physicalDevice);
+
+		vk::SurfaceFormatKHR format = swapChainSupport.formats[0]; //safe since it has been checked that there are available formats
+		if (swapChainSupport.formats.size() == 1 && swapChainSupport.formats[0].format == vk::Format::eUndefined)
+			format = { vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear };
+		else
+		{
+			for (const auto& availableFormat : swapChainSupport.formats)
+			{
+				if (availableFormat.format == vk::Format::eB8G8R8A8Unorm && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+					format = availableFormat;
+			}
+		}
+
+		vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo;
+		for (const auto& availablePresentMode : swapChainSupport.presentModes)
+		{
+			if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+			{
+				presentMode = availablePresentMode;
+				break;
+			}
+			else if (availablePresentMode == vk::PresentModeKHR::eImmediate)
+				presentMode = availablePresentMode;
+		}
+
+		vk::Extent2D extent;
+		if (swapChainSupport.capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+		{
+			extent = swapChainSupport.capabilities.currentExtent;
+		}
+		else
+		{
+			VkExtent2D actualExtent = { g_width, g_height };
+
+			actualExtent.width = std::max(swapChainSupport.capabilities.minImageExtent.width, std::min(swapChainSupport.capabilities.maxImageExtent.width, actualExtent.width));
+			actualExtent.height = std::max(swapChainSupport.capabilities.minImageExtent.height, std::min(swapChainSupport.capabilities.maxImageExtent.height, actualExtent.height));
+
+			extent = actualExtent;
+		}
+
+		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+		if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
+			imageCount = swapChainSupport.capabilities.maxImageCount;
+
+		QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
+		uint32_t queueFamilyIndices[] = { (uint32_t)indices.graphicsFamily, (uint32_t)indices.presentFamily };
+
+		vk::SharingMode imageSharingMode = vk::SharingMode::eExclusive;
+		uint32_t queueFamilyIndexCount = 0;
+
+		if (indices.graphicsFamily != indices.presentFamily)
+		{
+			imageSharingMode = vk::SharingMode::eConcurrent;
+			queueFamilyIndexCount = sizeof(queueFamilyIndices) / sizeof(uint32_t);
+		}
+
+		vk::SwapchainCreateInfoKHR createInfo(
+			vk::SwapchainCreateFlagsKHR(),
+			g_surface,
+			imageCount,
+			format.format,
+			format.colorSpace,
+			extent,
+			1,
+			vk::ImageUsageFlagBits::eColorAttachment,
+			imageSharingMode,
+			queueFamilyIndexCount,
+			queueFamilyIndices,
+			swapChainSupport.capabilities.currentTransform,
+			vk::CompositeAlphaFlagBitsKHR::eOpaque,
+			presentMode,
+			VK_TRUE
+			//Old swapchain
+		);
+
+		g_device.createSwapchainKHR(&createInfo, g_allocator, &g_swapchain.handle);
+
+		g_swapchain.images = g_device.getSwapchainImagesKHR(g_swapchain.handle);
+		g_swapchain.format = format.format;
+		g_swapchain.extent = extent;
+	}
+
 	static void InitVulkan()
 	{
 		CreateInstance();
 		CHECK_VK_RESULT_FATAL((vk::Result)WindowHandler::CreateSurface((VkInstance)g_instance, (VkAllocationCallbacks*)g_allocator, (VkSurfaceKHR*)&g_surface), "Failed to create window surface");
 		InitDevice();
+		InitSwapchain(); //TODO Set debug names
 
 		#ifndef NDEBUG
 		SetMainObjectsDebugNames();
@@ -396,6 +495,10 @@ namespace Renderer
 
 	void Init(unsigned int width, unsigned int height)
 	{
+		assert(width != 0 && height != 0);
+
+		g_width = width, g_height = height;
+
 		TRY_CATCH_BLOCK("Failed to init renderer",
 
 			WindowHandler::Init(width, height);
@@ -414,6 +517,8 @@ namespace Renderer
 	void Shutdown()
 	{
 		TRY_CATCH_BLOCK("Failed to shutdown renderer",
+
+			g_device.destroySwapchainKHR(g_swapchain.handle, g_allocator);
 
 			g_device.destroy(g_allocator);
 
