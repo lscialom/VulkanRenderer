@@ -48,6 +48,7 @@ namespace Renderer
 		vk::SwapchainKHR handle;
 
 		std::vector<vk::Image> images;
+		std::vector<vk::ImageView> imageViews;
 
 		vk::Format format;
 		vk::Extent2D extent;
@@ -479,6 +480,29 @@ namespace Renderer
 		g_swapchain.images = g_device.getSwapchainImagesKHR(g_swapchain.handle);
 		g_swapchain.format = format.format;
 		g_swapchain.extent = extent;
+
+		vk::ImageSubresourceRange imageSubresourceRange(
+			vk::ImageAspectFlagBits::eColor,
+			0,
+			1,
+			0,
+			1
+		);
+
+		g_swapchain.imageViews.resize(g_swapchain.images.size());
+		for (size_t i = 0; i < g_swapchain.images.size(); i++)
+		{
+			vk::ImageViewCreateInfo createInfo(
+				vk::ImageViewCreateFlags(),
+				g_swapchain.images[i],
+				vk::ImageViewType::e2D,
+				g_swapchain.format,
+				vk::ComponentMapping(),
+				imageSubresourceRange
+			);
+
+			CHECK_VK_RESULT_FATAL(g_device.createImageView(&createInfo, g_allocator, &g_swapchain.imageViews[i]), "Failed to create image views");
+		}
 	}
 
 	static void InitVulkan()
@@ -517,6 +541,8 @@ namespace Renderer
 	void Shutdown()
 	{
 		TRY_CATCH_BLOCK("Failed to shutdown renderer",
+			for (auto imageView : g_swapchain.imageViews)
+				g_device.destroyImageView(imageView, g_allocator);
 
 			g_device.destroySwapchainKHR(g_swapchain.handle, g_allocator);
 
