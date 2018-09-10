@@ -201,6 +201,8 @@ namespace Renderer
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_graphicsQueue.handle), "Graphics Queue" }, g_dldy);
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_presentQueue.handle), "Present Queue" }, g_dldy);
 
+		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eSwapchainKHR, (uint64_t)((VkSwapchainKHR)g_swapchain.handle), "Swapchain" }, g_dldy);
+
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDebugUtilsMessengerEXT, (uint64_t)((VkDebugUtilsMessengerEXT)g_debugMessenger), "Debug Messenger" }, g_dldy);
 	}
 	#endif
@@ -510,7 +512,7 @@ namespace Renderer
 		CreateInstance();
 		CHECK_VK_RESULT_FATAL((vk::Result)WindowHandler::CreateSurface((VkInstance)g_instance, (VkAllocationCallbacks*)g_allocator, (VkSurfaceKHR*)&g_surface), "Failed to create window surface");
 		InitDevice();
-		InitSwapchain(); //TODO Set debug names
+		InitSwapchain();
 
 		#ifndef NDEBUG
 		SetMainObjectsDebugNames();
