@@ -41,6 +41,13 @@ namespace Renderer
 
 	static vk::SurfaceKHR g_surface;
 
+	struct SwapChainSupportDetails
+	{
+		vk::SurfaceCapabilitiesKHR capabilities;
+		std::vector<vk::SurfaceFormatKHR> formats;
+		std::vector<vk::PresentModeKHR> presentModes;
+	};
+
 	struct QueueFamilyIndices
 	{
 		int graphicsFamily = -1;
@@ -270,9 +277,25 @@ namespace Renderer
 		return requiredExtensions.empty();
 	}
 
+	static SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice device)
+	{
+		SwapChainSupportDetails details;
+
+		details.capabilities = device.getSurfaceCapabilitiesKHR(g_surface);
+		details.formats = device.getSurfaceFormatsKHR(g_surface);
+		details.presentModes = device.getSurfacePresentModesKHR(g_surface);
+
+		return details;
+	}
+
 	static int RateDeviceSuitability(vk::PhysicalDevice device)
 	{
 		if (!GetQueueFamilies(device).isComplete() || !CheckDeviceExtensionSupport(device))
+			return 0;
+
+		//Done separately since we need to check for the swapchain extension support first
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+		if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
 			return 0;
 
 		vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
