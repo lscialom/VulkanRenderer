@@ -44,6 +44,12 @@ namespace Renderer
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
 
+	static const std::vector<const char*> g_instanceExtensions = {
+		#ifndef NDEBUG
+		VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+		#endif
+	};
+
 	#ifndef NDEBUG
 	static const std::vector<const char*> g_validationLayers = {
 		"VK_LAYER_LUNARG_standard_validation",
@@ -324,21 +330,19 @@ namespace Renderer
 
 		const char** pExtensions = nullptr;
 
-		#ifndef NDEBUG
-		createInfo.enabledLayerCount = static_cast<uint32_t>(g_validationLayers.size());
-		createInfo.ppEnabledLayerNames = g_validationLayers.data();
-
 		uint32_t requiredExtensionsCount = WindowHandler::GetRequiredInstanceExtensions(pExtensions);
-
 		std::vector<const char*> extensions(pExtensions, pExtensions + requiredExtensionsCount);
-		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
+		extensions.insert(extensions.end(), g_instanceExtensions.begin(), g_instanceExtensions.end());
 
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 		createInfo.ppEnabledExtensionNames = extensions.data();
+
+		#ifndef NDEBUG
+		createInfo.enabledLayerCount = static_cast<uint32_t>(g_validationLayers.size());
+		createInfo.ppEnabledLayerNames = g_validationLayers.data();
 		#else
 		createInfo.enabledLayerCount = 0;
-		createInfo.enabledExtensionCount = WindowHandler::GetRequiredInstanceExtensions(pExtensions);
-		createInfo.ppEnabledExtensionNames = pExtensions;
 		#endif
 
 		CHECK_VK_RESULT_FATAL(vk::createInstance(&createInfo, g_allocator, &g_instance), "Failed to init vulkan instance");
