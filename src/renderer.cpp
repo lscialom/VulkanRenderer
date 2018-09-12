@@ -102,6 +102,39 @@ namespace Renderer
 	#ifndef NDEBUG
 	static vk::DebugUtilsMessengerEXT g_debugMessenger;
 
+	#define DEBUG_CALLBACK_ARGUMENTS VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, \
+                                         VkDebugUtilsMessageTypeFlagsEXT messageType, \
+                                         const VkDebugUtilsMessengerCallbackDataEXT* callbackData, \
+                                         void* userData
+
+	#define DEBUG_CALLBACK_RETURN_TYPE VKAPI_ATTR VkBool32 VKAPI_CALL
+
+	struct DebugMessengerInfo
+	{
+		using DebugCallbackfn = DEBUG_CALLBACK_RETURN_TYPE(*)(DEBUG_CALLBACK_ARGUMENTS);
+
+		vk::DebugUtilsMessageSeverityFlagsEXT severityFlags;
+		vk::DebugUtilsMessageTypeFlagsEXT typeFlags;
+
+		const char* name;
+		DebugCallbackfn callback;
+		void* userData = nullptr;
+
+		vk::DebugUtilsMessengerCreateInfoEXT MakeCreateInfo()
+		{
+			return vk::DebugUtilsMessengerCreateInfoEXT(
+				vk::DebugUtilsMessengerCreateFlagsEXT(),
+				severityFlags,
+				typeFlags,
+				callback,
+				userData
+			);
+		}
+	};
+
+	#undef DEBUG_CALLBACK_ARGUMENTS
+	#undef DEBUG_CALLBACK_RETURN_TYPE
+
 	static VKAPI_ATTR VkBool32 VKAPI_CALL g_debugCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
