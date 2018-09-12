@@ -162,7 +162,7 @@ namespace Renderer
 		std::string prefix = vk::to_string(static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(messageSeverity));
 
 		prefix += " : ";
-		prefix += vk::to_string(static_cast<vk::DebugUtilsMessageTypeFlagBitsEXT>(messageType));
+		prefix += vk::to_string(static_cast<vk::DebugUtilsMessageTypeFlagsEXT>(messageType));
 
 		std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::toupper);
 
