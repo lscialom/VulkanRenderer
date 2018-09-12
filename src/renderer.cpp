@@ -37,10 +37,16 @@ catch (const std::exception& e) \
 namespace Renderer
 {
 	//-----------------------------------------------------------------------------
+	// FORWARD DEFINITIONS
+	//-----------------------------------------------------------------------------
+
+	static std::string GetFullFormattedDebugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* callbackData);
+
+	//-----------------------------------------------------------------------------
 	// CONFIGURATION CONSTANTS
 	//-----------------------------------------------------------------------------
 
-	static const std::vector<const char*> g_deviceExtensions = {
+	static constexpr const std::array<const char*, 1> g_deviceExtensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
 
@@ -51,10 +57,59 @@ namespace Renderer
 	};
 
 	#ifndef NDEBUG
-	static const std::vector<const char*> g_validationLayers = {
+	static constexpr const std::array<const char*, 2> g_validationLayers = {
 		"VK_LAYER_LUNARG_standard_validation",
 		"VK_LAYER_LUNARG_monitor"
 	};
+
+	#define DEBUG_CALLBACK_RETURN_TYPE VkBool32
+
+	#define DEBUG_CALLBACK_ARGUMENTS VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, \
+                                         VkDebugUtilsMessageTypeFlagsEXT messageType, \
+                                         const VkDebugUtilsMessengerCallbackDataEXT* callbackData, \
+                                         void* userData
+
+	struct DebugMessengerInfo
+	{
+		using DebugCallbackfn = DEBUG_CALLBACK_RETURN_TYPE(VKAPI_CALL *)(DEBUG_CALLBACK_ARGUMENTS) VKAPI_ATTR;
+
+		const char* name;
+
+		vk::DebugUtilsMessageSeverityFlagsEXT severityFlags;
+		vk::DebugUtilsMessageTypeFlagsEXT typeFlags;
+
+		DebugCallbackfn callback;
+		void* userData = nullptr;
+
+		vk::DebugUtilsMessengerCreateInfoEXT MakeCreateInfo() const
+		{
+			return vk::DebugUtilsMessengerCreateInfoEXT(
+				vk::DebugUtilsMessengerCreateFlagsEXT(),
+				severityFlags,
+				typeFlags,
+				callback,
+				userData
+			);
+		}
+	};
+
+	static std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{ {
+		{
+			"Debug Messenger",
+			vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError, //Add eInfo for info logs
+			vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+			[](DEBUG_CALLBACK_ARGUMENTS) -> DEBUG_CALLBACK_RETURN_TYPE
+			{
+				std::cout << GetFullFormattedDebugMessage(messageSeverity, messageType, callbackData) << std::endl;
+				return VK_FALSE;
+			},
+			nullptr
+		}
+	} };
+
+	#undef DEBUG_CALLBACK_ARGUMENTS
+	#undef DEBUG_CALLBACK_RETURN_TYPE
+
 	#endif
 
 	//-----------------------------------------------------------------------------
@@ -100,40 +155,7 @@ namespace Renderer
 	//-----------------------------------------------------------------------------
 
 	#ifndef NDEBUG
-	static vk::DebugUtilsMessengerEXT g_debugMessenger;
-
-	#define DEBUG_CALLBACK_ARGUMENTS VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, \
-                                         VkDebugUtilsMessageTypeFlagsEXT messageType, \
-                                         const VkDebugUtilsMessengerCallbackDataEXT* callbackData, \
-                                         void* userData
-
-	#define DEBUG_CALLBACK_RETURN_TYPE VKAPI_ATTR VkBool32 VKAPI_CALL
-
-	struct DebugMessengerInfo
-	{
-		using DebugCallbackfn = DEBUG_CALLBACK_RETURN_TYPE(*)(DEBUG_CALLBACK_ARGUMENTS);
-
-		vk::DebugUtilsMessageSeverityFlagsEXT severityFlags;
-		vk::DebugUtilsMessageTypeFlagsEXT typeFlags;
-
-		const char* name;
-		DebugCallbackfn callback;
-		void* userData = nullptr;
-
-		vk::DebugUtilsMessengerCreateInfoEXT MakeCreateInfo()
-		{
-			return vk::DebugUtilsMessengerCreateInfoEXT(
-				vk::DebugUtilsMessengerCreateFlagsEXT(),
-				severityFlags,
-				typeFlags,
-				callback,
-				userData
-			);
-		}
-	};
-
-	#undef DEBUG_CALLBACK_ARGUMENTS
-	#undef DEBUG_CALLBACK_RETURN_TYPE
+	static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
 
 	static std::string GetDebugMessagePrefix(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType)
 	{
@@ -221,17 +243,6 @@ namespace Renderer
 		return FormatDebugMessage(messageSeverity, messageType, callbackData) + StringifyDebugMessageObjects(callbackData) + StringifyDebugMessageLabels(callbackData);
 	}
 
-	static VKAPI_ATTR VkBool32 VKAPI_CALL g_debugCallback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-		VkDebugUtilsMessageTypeFlagsEXT messageType,
-		const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-		void* userData)
-	{
-		std::cout << GetFullFormattedDebugMessage(messageSeverity, messageType, callbackData) << std::endl;
-
-		return VK_FALSE;
-	}
-
 	static void SetMainObjectsDebugNames()
 	{
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eInstance, (uint64_t)((VkInstance)g_instance), "Vulkan Instance" }, g_dldy);
@@ -246,7 +257,8 @@ namespace Renderer
 
 		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eSwapchainKHR, (uint64_t)((VkSwapchainKHR)g_swapchain.handle), "Swapchain" }, g_dldy);
 
-		g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDebugUtilsMessengerEXT, (uint64_t)((VkDebugUtilsMessengerEXT)g_debugMessenger), "Debug Messenger" }, g_dldy);
+		for(size_t i = 0; i<g_debugMessengers.size(); ++i)
+			g_device.setDebugUtilsObjectNameEXT({ vk::ObjectType::eDebugUtilsMessengerEXT, (uint64_t)((VkDebugUtilsMessengerEXT)g_debugMessengers[i]), g_debugMessengersInfos[i].name }, g_dldy);
 	}
 	#endif
 
@@ -385,14 +397,8 @@ namespace Renderer
 		g_dldy.init(g_instance);
 
 		#ifndef NDEBUG
-		vk::DebugUtilsMessengerCreateInfoEXT dbgCreateInfo(
-			vk::DebugUtilsMessengerCreateFlagsEXT(),
-			vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError, //Add eInfo for info logs
-			vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-			g_debugCallback
-		);
-
-		g_debugMessenger = g_instance.createDebugUtilsMessengerEXT(dbgCreateInfo, g_allocator, g_dldy);
+		for (size_t i = 0; i < g_debugMessengersInfos.size(); ++i)
+			g_debugMessengers.push_back(g_instance.createDebugUtilsMessengerEXT(g_debugMessengersInfos[i].MakeCreateInfo(), g_allocator, g_dldy));
 		#endif
 	}
 
@@ -622,7 +628,8 @@ namespace Renderer
 			g_device.destroy(g_allocator);
 
 			#ifndef NDEBUG
-			g_instance.destroyDebugUtilsMessengerEXT(g_debugMessenger, g_allocator, g_dldy);
+			for (size_t i = 0; i < g_debugMessengers.size(); ++i)
+				g_instance.destroyDebugUtilsMessengerEXT(g_debugMessengers[i], g_allocator, g_dldy);
 			#endif
 
 			g_instance.destroySurfaceKHR(g_surface, g_allocator);
