@@ -135,97 +135,99 @@ namespace Renderer
 	#undef DEBUG_CALLBACK_ARGUMENTS
 	#undef DEBUG_CALLBACK_RETURN_TYPE
 
+	static std::string GetDebugMessagePrefix(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType)
+	{
+		std::string prefix = vk::to_string(static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(messageSeverity));
+
+		prefix += " : ";
+		prefix += vk::to_string(static_cast<vk::DebugUtilsMessageTypeFlagBitsEXT>(messageType));
+
+		std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::toupper);
+
+		return prefix;
+	}
+
+	static std::string FormatDebugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* callbackData)
+	{
+		char* buf = (char *)malloc(strlen(callbackData->pMessage) + 500);
+
+		sprintf(buf,
+			"%s - Message ID Number %d, Message ID Name : %s\n\t%s",
+			GetDebugMessagePrefix(messageSeverity, messageType).c_str(),
+			callbackData->messageIdNumber,
+			callbackData->pMessageIdName,
+			callbackData->pMessage);
+
+		std::string message = buf;
+		free(buf);
+
+		return message;
+	}
+
+	static std::string StringifyDebugMessageObjects(const VkDebugUtilsMessengerCallbackDataEXT* callbackData)
+	{
+		if (callbackData->objectCount == 0)
+			return std::string();
+
+		char tmp[500];
+		sprintf(tmp, "\n\n\t Objects - %d\n", callbackData->objectCount);
+
+		std::string message(tmp);
+		for (uint32_t object = 0; object < callbackData->objectCount; ++object)
+		{
+			char tmp_message[500];
+			sprintf(tmp_message,
+				"\t\t Object[%d] - Type %s, Value %p, Name \"%s\"\n",
+				object,
+				vk::to_string((vk::ObjectType)callbackData->pObjects[object].objectType).c_str(),
+				(void*)(callbackData->pObjects[object].objectHandle),
+				callbackData->pObjects[object].pObjectName);
+			
+			message += tmp_message;
+		}
+
+		return message;
+	}
+
+	static std::string StringifyDebugMessageLabels(const VkDebugUtilsMessengerCallbackDataEXT* callbackData)
+	{
+		if (callbackData->cmdBufLabelCount == 0)
+			return std::string();
+
+		char tmp[500];
+		sprintf(tmp, "\n\n\t Command Buffer Labels - %d\n", callbackData->cmdBufLabelCount);
+
+		std::string message(tmp);
+		for (uint32_t label = 0; label < callbackData->cmdBufLabelCount; ++label)
+		{
+			char tmp_message[500];
+			sprintf(tmp_message,
+				"\t\t Label[%d] - %s { %f, %f, %f, %f}\n",
+				label,
+				callbackData->pCmdBufLabels[label].pLabelName,
+				callbackData->pCmdBufLabels[label].color[0],
+				callbackData->pCmdBufLabels[label].color[1],
+				callbackData->pCmdBufLabels[label].color[2],
+				callbackData->pCmdBufLabels[label].color[3]);
+
+			message += tmp_message;
+		}
+
+		return message;
+	}
+
+	static std::string GetFullFormattedDebugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* callbackData)
+	{
+		return FormatDebugMessage(messageSeverity, messageType, callbackData) + StringifyDebugMessageObjects(callbackData) + StringifyDebugMessageLabels(callbackData);
+	}
+
 	static VKAPI_ATTR VkBool32 VKAPI_CALL g_debugCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
 		const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
 		void* userData)
 	{
-		char prefix[64];
-		char *message = (char *)malloc(strlen(callbackData->pMessage) + 500);
-		assert(message);
-		if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
-		{
-			strcpy(prefix, "VERBOSE : ");
-		}
-		else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-		{
-			strcpy(prefix, "INFO : ");
-		}
-		else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-		{
-			strcpy(prefix, "WARNING : ");
-		}
-		else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-		{
-			strcpy(prefix, "ERROR : ");
-		}
-
-		if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
-		{
-			strcat(prefix, "GENERAL");
-		}
-		else
-		{
-			if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
-			{
-				strcat(prefix, "SPEC");
-			}
-			if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
-			{
-				if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
-				{
-					strcat(prefix, "|");
-				}
-				strcat(prefix, "PERF");
-			}
-		}
-
-		sprintf(message,
-			"%s - Message ID Number %d, Message ID Name : %s\n\t%s",
-			prefix,
-			callbackData->messageIdNumber,
-			callbackData->pMessageIdName,
-			callbackData->pMessage);
-		if (callbackData->objectCount > 0)
-		{
-			char tmp_message[500];
-			sprintf(tmp_message, "\n\n\t Objects - %d\n", callbackData->objectCount);
-			strcat(message, tmp_message);
-			for (uint32_t object = 0; object < callbackData->objectCount; ++object)
-			{
-				sprintf(tmp_message,
-					"\t\t Object[%d] - Type %s, Value %p, Name \"%s\"\n",
-					object,
-					vk::to_string((vk::ObjectType)callbackData->pObjects[object].objectType).c_str(),
-					(void*)(callbackData->pObjects[object].objectHandle),
-					callbackData->pObjects[object].pObjectName);
-				strcat(message, tmp_message);
-			}
-		}
-		if (callbackData->cmdBufLabelCount > 0)
-		{
-			char tmp_message[500];
-			sprintf(tmp_message,
-				"\n\n\t Command Buffer Labels - %d\n",
-				callbackData->cmdBufLabelCount);
-			strcat(message, tmp_message);
-			for (uint32_t label = 0; label < callbackData->cmdBufLabelCount; ++label)
-			{
-				sprintf(tmp_message,
-					"\t\t Label[%d] - %s { %f, %f, %f, %f}\n",
-					label,
-					callbackData->pCmdBufLabels[label].pLabelName,
-					callbackData->pCmdBufLabels[label].color[0],
-					callbackData->pCmdBufLabels[label].color[1],
-					callbackData->pCmdBufLabels[label].color[2],
-					callbackData->pCmdBufLabels[label].color[3]);
-				strcat(message, tmp_message);
-			}
-		}
-		printf("%s\n", message);
-		fflush(stdout);
-		free(message);
+		std::cout << GetFullFormattedDebugMessage(messageSeverity, messageType, callbackData) << std::endl;
 
 		return VK_FALSE;
 	}
