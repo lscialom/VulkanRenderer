@@ -47,6 +47,8 @@ namespace Renderer
 	// CONFIGURATION CONSTANTS
 	//-----------------------------------------------------------------------------
 
+	static constexpr const uint8_t MAX_IN_FLIGHT_FRAMES = 2;
+
 	static constexpr const std::array<const char*, 1> g_deviceExtensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
@@ -526,31 +528,38 @@ namespace Renderer
 	// DRAW
 	//-----------------------------------------------------------------------------
 
-	static vk::Semaphore g_imageAvailableSemaphore;
-	static vk::Semaphore g_renderFinishedSemaphore;
+	static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> g_imageAvailableSemaphores;
+	static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> g_renderFinishedSemaphores;
+
+	static std::array<vk::Fence, MAX_IN_FLIGHT_FRAMES> inFlightFences;
+
+	static size_t currentFrame = 0;
 
 	static void Draw()
 	{
+		g_device.waitForFences(1, &inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+		g_device.resetFences(1, &inFlightFences[currentFrame]);
+
 		uint32_t imageIndex;
-		g_device.acquireNextImageKHR(g_swapchain.handle, std::numeric_limits<uint64_t>::max(), g_imageAvailableSemaphore, nullptr, &imageIndex);
+		g_device.acquireNextImageKHR(g_swapchain.handle, std::numeric_limits<uint64_t>::max(), g_imageAvailableSemaphores[currentFrame], nullptr, &imageIndex);
 
 		vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
 		vk::SubmitInfo submitInfo(
 			1,
-			&g_imageAvailableSemaphore,
+			&g_imageAvailableSemaphores[currentFrame],
 			&waitStage,
 			1,
 			&g_commandPool.commandbuffers[imageIndex],
 			1,
-			&g_renderFinishedSemaphore
+			&g_renderFinishedSemaphores[currentFrame]
 		);
 
-		CHECK_VK_RESULT_FATAL(g_graphicsQueue.handle.submit(1, &submitInfo, nullptr), "Failed to submit draw command buffer.");
+		CHECK_VK_RESULT_FATAL(g_graphicsQueue.handle.submit(1, &submitInfo, inFlightFences[currentFrame]), "Failed to submit draw command buffer.");
 
 		vk::PresentInfoKHR presentInfo(
 			1,
-			&g_renderFinishedSemaphore,
+			&g_renderFinishedSemaphores[currentFrame],
 			1,
 			&g_swapchain.handle,
 			&imageIndex,
@@ -558,6 +567,8 @@ namespace Renderer
 		);
 
 		g_presentQueue.handle.presentKHR(&presentInfo);
+
+		currentFrame = (currentFrame + 1) % MAX_IN_FLIGHT_FRAMES;
 	}
 
 	//-----------------------------------------------------------------------------
@@ -966,12 +977,21 @@ namespace Renderer
 		}
 	}
 
-	static void InitSemaphores()
+	static void InitSyncBarriers()
 	{
 		vk::SemaphoreCreateInfo semaphoreInfo = {};
 
-		CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_imageAvailableSemaphore), "Failed to create semaphores.");
-		CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_renderFinishedSemaphore), "Failed to create semaphores.");
+		vk::FenceCreateInfo fenceInfo = {
+			vk::FenceCreateFlagBits::eSignaled
+		};
+
+		for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++)
+		{
+			CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_imageAvailableSemaphores[i]), "Failed to create semaphores.");
+			CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_renderFinishedSemaphores[i]), "Failed to create semaphores.");
+
+			CHECK_VK_RESULT_FATAL(g_device.createFence(&fenceInfo, g_allocator, &inFlightFences[i]), "Failed to create semaphores.");
+		}
 	}
 
 	static void InitVulkan()
@@ -987,7 +1007,7 @@ namespace Renderer
 		InitFramebuffers();
 		InitCommandPool();
 
-		InitSemaphores();
+		InitSyncBarriers();
 
 		#ifndef NDEBUG
 		SetMainObjectsDebugNames();
@@ -1025,8 +1045,13 @@ namespace Renderer
 	void Shutdown()
 	{
 		TRY_CATCH_BLOCK("Failed to shutdown renderer",
-			g_device.destroySemaphore(g_imageAvailableSemaphore, g_allocator);
-			g_device.destroySemaphore(g_renderFinishedSemaphore, g_allocator);
+			for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++)
+			{
+				g_device.destroySemaphore(g_imageAvailableSemaphores[i], g_allocator);
+				g_device.destroySemaphore(g_renderFinishedSemaphores[i], g_allocator);
+
+				g_device.destroyFence(inFlightFences[i], g_allocator);
+			}
 
 			g_device.destroyCommandPool(g_commandPool.handle, g_allocator);
 
