@@ -149,6 +149,14 @@ namespace Renderer
 	static Queue g_graphicsQueue;
 	static Queue g_presentQueue;
 
+	struct CommandPool
+	{
+		vk::CommandPool handle;
+		std::vector<vk::CommandBuffer> commandbuffers;
+	};
+
+	static CommandPool g_commandPool;
+
 	static vk::AllocationCallbacks* g_allocator = nullptr;
 
 	static vk::DispatchLoaderDynamic g_dldy;
@@ -346,12 +354,23 @@ namespace Renderer
 			&colorAttachmentRef
 		);
 
+		vk::SubpassDependency dependency(
+			VK_SUBPASS_EXTERNAL,
+			0,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			(vk::AccessFlagBits)0,
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite
+		);
+
 		vk::RenderPassCreateInfo renderPassInfo(
 			vk::RenderPassCreateFlags(),
 			1,
 			&colorAttachment,
 			1,
-			&subpass
+			&subpass,
+			1,
+			&dependency
 		);
 
 		CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo, g_allocator, &g_graphicsPipeline.renderPass), "Failed to create render pass.");
@@ -501,6 +520,44 @@ namespace Renderer
 
 		g_device.destroyShaderModule(fragShaderModule, g_allocator);
 		g_device.destroyShaderModule(vertShaderModule, g_allocator);
+	}
+
+	//-----------------------------------------------------------------------------
+	// DRAW
+	//-----------------------------------------------------------------------------
+
+	static vk::Semaphore g_imageAvailableSemaphore;
+	static vk::Semaphore g_renderFinishedSemaphore;
+
+	static void Draw()
+	{
+		uint32_t imageIndex;
+		g_device.acquireNextImageKHR(g_swapchain.handle, std::numeric_limits<uint64_t>::max(), g_imageAvailableSemaphore, nullptr, &imageIndex);
+
+		vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+
+		vk::SubmitInfo submitInfo(
+			1,
+			&g_imageAvailableSemaphore,
+			&waitStage,
+			1,
+			&g_commandPool.commandbuffers[imageIndex],
+			1,
+			&g_renderFinishedSemaphore
+		);
+
+		CHECK_VK_RESULT_FATAL(g_graphicsQueue.handle.submit(1, &submitInfo, nullptr), "Failed to submit draw command buffer.");
+
+		vk::PresentInfoKHR presentInfo(
+			1,
+			&g_renderFinishedSemaphore,
+			1,
+			&g_swapchain.handle,
+			&imageIndex,
+			nullptr
+		);
+
+		g_presentQueue.handle.presentKHR(&presentInfo);
 	}
 
 	//-----------------------------------------------------------------------------
@@ -845,6 +902,78 @@ namespace Renderer
 		}
 	}
 
+	static void InitCommandPool()
+	{
+		QueueFamilyIndices queueFamilyIndices = GetQueueFamilies(g_physicalDevice);
+
+		vk::CommandPoolCreateInfo poolInfo(
+			vk::CommandPoolCreateFlags(),
+			queueFamilyIndices.graphicsFamily
+		);
+
+		CHECK_VK_RESULT_FATAL(g_device.createCommandPool(&poolInfo, g_allocator, &g_commandPool.handle), "Failed to create command pool.");
+
+		g_commandPool.commandbuffers.resize(g_swapchain.framebuffers.size());
+
+		vk::CommandBufferAllocateInfo allocInfo(
+			g_commandPool.handle,
+			vk::CommandBufferLevel::ePrimary,
+			(uint32_t)g_commandPool.commandbuffers.size()
+		);
+
+		CHECK_VK_RESULT_FATAL(g_device.allocateCommandBuffers(&allocInfo, g_commandPool.commandbuffers.data()), "Failed to allocate command buffers.");
+
+		vk::CommandBufferBeginInfo beginInfo(
+			vk::CommandBufferUsageFlagBits::eSimultaneousUse,
+			nullptr
+		);
+
+		vk::Viewport viewport(
+			0,
+			0,
+			(float)g_swapchain.extent.width,
+			(float)g_swapchain.extent.height,
+			0,
+			1
+		);
+
+		const std::array<float, 4> clearColorArray = { { 0.0f, 0.0f, 0.0f, 1.0f } };
+		vk::ClearColorValue clearColorValue = clearColorArray;
+
+		vk::ClearValue clearColor(clearColorValue);
+		for (size_t i = 0; i < g_commandPool.commandbuffers.size(); i++)
+		{
+			CHECK_VK_RESULT_FATAL(g_commandPool.commandbuffers[i].begin(&beginInfo), "Failed to begin recording command buffer.");
+			
+			vk::RenderPassBeginInfo renderPassInfo(
+				g_graphicsPipeline.renderPass,
+				g_swapchain.framebuffers[i],
+				{ {0, 0}, g_swapchain.extent },
+				1,
+				&clearColor
+			);
+
+			g_commandPool.commandbuffers[i].setViewport(0, 1, &viewport); //TODO buffers are recorded once so can't change viewport
+
+			g_commandPool.commandbuffers[i].beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+			g_commandPool.commandbuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics, g_graphicsPipeline.handle);
+
+			g_commandPool.commandbuffers[i].draw(3, 1, 0, 0);
+
+			g_commandPool.commandbuffers[i].endRenderPass();
+
+			g_commandPool.commandbuffers[i].end(); //Strangely, it does returns void instead of vk::Result so no error checking is possible here
+		}
+	}
+
+	static void InitSemaphores()
+	{
+		vk::SemaphoreCreateInfo semaphoreInfo = {};
+
+		CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_imageAvailableSemaphore), "Failed to create semaphores.");
+		CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_renderFinishedSemaphore), "Failed to create semaphores.");
+	}
+
 	static void InitVulkan()
 	{
 		CreateInstance();
@@ -856,6 +985,9 @@ namespace Renderer
 		CreatePipeline();
 
 		InitFramebuffers();
+		InitCommandPool();
+
+		InitSemaphores();
 
 		#ifndef NDEBUG
 		SetMainObjectsDebugNames();
@@ -883,13 +1015,21 @@ namespace Renderer
 	{
 		TRY_CATCH_BLOCK("Failed to update renderer",
 
-			return WindowHandler::Update();
+			bool signal = WindowHandler::Update();
+			Draw();
+
+			return signal;
 		);
 	}
 
 	void Shutdown()
 	{
 		TRY_CATCH_BLOCK("Failed to shutdown renderer",
+			g_device.destroySemaphore(g_imageAvailableSemaphore, g_allocator);
+			g_device.destroySemaphore(g_renderFinishedSemaphore, g_allocator);
+
+			g_device.destroyCommandPool(g_commandPool.handle, g_allocator);
+
 			for (auto framebuffer : g_swapchain.framebuffers)
 				g_device.destroyFramebuffer(framebuffer, g_allocator);
 
@@ -919,7 +1059,10 @@ namespace Renderer
 	void Run(unsigned int width, unsigned int height)
 	{
 		Init(width, height);
+
 		while (Update());
+		g_device.waitIdle();
+
 		Shutdown();
 	}
 }
