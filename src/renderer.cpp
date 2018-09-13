@@ -628,10 +628,15 @@ namespace Renderer
 	// PIPELINE
 	//-----------------------------------------------------------------------------
 
-	static vk::RenderPass g_renderPass;
-	static vk::PipelineLayout g_pipelineLayout;
+	struct Pipeline
+	{
+		vk::RenderPass renderPass;
+		vk::PipelineLayout pipelineLayout;
 
-	static vk::Pipeline g_graphicsPipeline;
+		vk::Pipeline handle;
+	};
+
+	static Pipeline g_graphicsPipeline;
 
 	static vk::ShaderModule CreateShaderModule(const std::vector<char>& code)
 	{
@@ -683,7 +688,7 @@ namespace Renderer
 			&subpass
 		);
 
-		CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo, g_allocator, &g_renderPass), "Failed to create render pass.");
+		CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo, g_allocator, &g_graphicsPipeline.renderPass), "Failed to create render pass.");
 	}
 
 	static void CreatePipeline()
@@ -804,7 +809,7 @@ namespace Renderer
 			nullptr
 		);
 
-		CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo, g_allocator, &g_pipelineLayout), "Failed to create pipeline layout.");
+		CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo, g_allocator, &g_graphicsPipeline.pipelineLayout), "Failed to create pipeline layout.");
 
 		vk::GraphicsPipelineCreateInfo pipelineInfo(
 			vk::PipelineCreateFlags(),
@@ -819,14 +824,14 @@ namespace Renderer
 			nullptr,
 			&colorBlending,
 			&dynamicStateCreateInfo,
-			g_pipelineLayout,
-			g_renderPass,
+			g_graphicsPipeline.pipelineLayout,
+			g_graphicsPipeline.renderPass,
 			0,
 			nullptr,
 			-1
 		);
 
-		CHECK_VK_RESULT_FATAL(g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo, g_allocator, &g_graphicsPipeline), "Failed to create pipeline layout.");
+		CHECK_VK_RESULT_FATAL(g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo, g_allocator, &g_graphicsPipeline.handle), "Failed to create pipeline layout.");
 
 		g_device.destroyShaderModule(fragShaderModule, g_allocator);
 		g_device.destroyShaderModule(vertShaderModule, g_allocator);
@@ -860,9 +865,9 @@ namespace Renderer
 	void Shutdown()
 	{
 		TRY_CATCH_BLOCK("Failed to shutdown renderer",
-			g_device.destroyPipeline(g_graphicsPipeline, g_allocator);
-			g_device.destroyPipelineLayout(g_pipelineLayout, g_allocator);
-			g_device.destroyRenderPass(g_renderPass, g_allocator);
+			g_device.destroyPipeline(g_graphicsPipeline.handle, g_allocator);
+			g_device.destroyPipelineLayout(g_graphicsPipeline.pipelineLayout, g_allocator);
+			g_device.destroyRenderPass(g_graphicsPipeline.renderPass, g_allocator);
 
 			for (auto imageView : g_swapchain.imageViews)
 				g_device.destroyImageView(imageView, g_allocator);
