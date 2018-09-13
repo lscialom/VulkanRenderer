@@ -53,7 +53,14 @@ namespace Renderer
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
 
-	static const std::vector<const char*> g_instanceExtensions = {
+	#ifndef NDEBUG
+	static constexpr const uint8_t INSTANCE_DEBUG_EXTENSION_COUNT = 1;
+	#else
+	static constexpr const uint8_t INSTANCE_DEBUG_EXTENSION_COUNT = 0;
+	#endif
+
+	static constexpr const uint8_t INSTANCE_EXTENSION_COUNT = 0 + INSTANCE_DEBUG_EXTENSION_COUNT;
+	static constexpr const std::array<const char*, INSTANCE_EXTENSION_COUNT> g_instanceExtensions = {
 		#ifndef NDEBUG
 		VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 		#endif
