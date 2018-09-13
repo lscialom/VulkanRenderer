@@ -103,7 +103,7 @@ namespace Renderer
 		}
 	};
 
-	static std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{ {
+	static const std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{ {
 		{
 			"Debug Messenger",
 			vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError, //Add eInfo for info logs
