@@ -43,9 +43,6 @@ namespace Renderer
 
 	static std::string GetFullFormattedDebugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* callbackData);
 
-	static void CreateRenderPass();
-	static void CreatePipeline();
-
 	//-----------------------------------------------------------------------------
 	// CONFIGURATION CONSTANTS
 	//-----------------------------------------------------------------------------
@@ -135,6 +132,8 @@ namespace Renderer
 
 		std::vector<vk::Image> images;
 		std::vector<vk::ImageView> imageViews;
+
+		std::vector<vk::Framebuffer> framebuffers;
 
 		vk::Format format;
 		vk::Extent2D extent;
@@ -289,6 +288,219 @@ namespace Renderer
 		file.close();
 
 		return buffer;
+	}
+
+	//-----------------------------------------------------------------------------
+	// PIPELINE
+	//-----------------------------------------------------------------------------
+
+	struct Pipeline
+	{
+		vk::RenderPass renderPass;
+		vk::PipelineLayout pipelineLayout;
+
+		vk::Pipeline handle;
+	};
+
+	static Pipeline g_graphicsPipeline;
+
+	static vk::ShaderModule CreateShaderModule(const std::vector<char>& code)
+	{
+		vk::ShaderModuleCreateInfo createInfo(
+			vk::ShaderModuleCreateFlags(),
+			code.size(),
+			reinterpret_cast<const uint32_t*>(code.data())
+		);
+
+		vk::ShaderModule shaderModule;
+		CHECK_VK_RESULT_FATAL(g_device.createShaderModule(&createInfo, g_allocator, &shaderModule), "Failed to create shader module");
+
+		return shaderModule;
+	}
+
+	static void CreateRenderPass()
+	{
+		vk::AttachmentDescription colorAttachment(
+			vk::AttachmentDescriptionFlags(),
+			g_swapchain.format,
+			vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eClear,
+			vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eDontCare,
+			vk::AttachmentStoreOp::eDontCare,
+			vk::ImageLayout::eUndefined,
+			vk::ImageLayout::ePresentSrcKHR
+		);
+
+		vk::AttachmentReference colorAttachmentRef(
+			0,
+			vk::ImageLayout::eColorAttachmentOptimal
+		);
+
+		vk::SubpassDescription subpass(
+			vk::SubpassDescriptionFlags(),
+			vk::PipelineBindPoint::eGraphics,
+			0,
+			nullptr,
+			1,
+			&colorAttachmentRef
+		);
+
+		vk::RenderPassCreateInfo renderPassInfo(
+			vk::RenderPassCreateFlags(),
+			1,
+			&colorAttachment,
+			1,
+			&subpass
+		);
+
+		CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo, g_allocator, &g_graphicsPipeline.renderPass), "Failed to create render pass.");
+	}
+
+	static void CreatePipeline()
+	{
+		auto vertShaderCode = ReadFile("../resources/shaders/spv/shader.vert.spv");
+		auto fragShaderCode = ReadFile("../resources/shaders/spv/shader.frag.spv");
+
+		vk::ShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+		vk::ShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+
+		vk::PipelineShaderStageCreateInfo vertShaderStageInfo(
+			vk::PipelineShaderStageCreateFlags(),
+			vk::ShaderStageFlagBits::eVertex,
+			vertShaderModule,
+			"main"
+		);
+
+		vk::PipelineShaderStageCreateInfo fragShaderStageInfo(
+			vk::PipelineShaderStageCreateFlags(),
+			vk::ShaderStageFlagBits::eFragment,
+			fragShaderModule,
+			"main"
+		);
+
+		vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+		vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
+			vk::PipelineVertexInputStateCreateFlags(),
+			0,
+			nullptr,
+			0,
+			nullptr
+		);
+
+		vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
+			vk::PipelineInputAssemblyStateCreateFlags(),
+			vk::PrimitiveTopology::eTriangleList,
+			VK_FALSE
+		);
+
+		vk::Viewport viewport(
+			0,
+			0,
+			(float)g_swapchain.extent.width,
+			(float)g_swapchain.extent.height,
+			0,
+			1
+		);
+
+		vk::Rect2D scissor(
+			{ 0, 0 },
+			g_swapchain.extent
+		);
+
+		vk::PipelineViewportStateCreateInfo viewportState(
+			vk::PipelineViewportStateCreateFlags(),
+			1,
+			&viewport,
+			1,
+			&scissor
+		);
+
+		vk::PipelineRasterizationStateCreateInfo rasterizer(
+			vk::PipelineRasterizationStateCreateFlags(),
+			VK_FALSE,
+			VK_FALSE,
+			vk::PolygonMode::eFill,
+			vk::CullModeFlagBits::eBack,
+			vk::FrontFace::eClockwise,
+			VK_FALSE,
+			0,
+			0,
+			0,
+			1
+		);
+
+		vk::PipelineMultisampleStateCreateInfo multisampling(
+			vk::PipelineMultisampleStateCreateFlags(),
+			vk::SampleCountFlagBits::e1,
+			VK_FALSE,
+			1,
+			nullptr,
+			VK_FALSE,
+			VK_FALSE
+		);
+
+		vk::PipelineColorBlendAttachmentState colorBlendAttachment(
+			VK_TRUE,
+			vk::BlendFactor::eSrcAlpha,
+			vk::BlendFactor::eOneMinusSrcAlpha,
+			vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne,
+			vk::BlendFactor::eZero,
+			vk::BlendOp::eAdd,
+			vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
+		);
+
+		vk::PipelineColorBlendStateCreateInfo colorBlending(
+			vk::PipelineColorBlendStateCreateFlags(),
+			VK_FALSE,
+			vk::LogicOp::eCopy,
+			1,
+			&colorBlendAttachment
+		);
+
+		vk::DynamicState dynamicState = vk::DynamicState::eViewport;
+		vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo(
+			vk::PipelineDynamicStateCreateFlags(),
+			1,
+			&dynamicState
+		);
+
+		vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
+			vk::PipelineLayoutCreateFlags(),
+			0,
+			nullptr,
+			0,
+			nullptr
+		);
+
+		CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo, g_allocator, &g_graphicsPipeline.pipelineLayout), "Failed to create pipeline layout.");
+
+		vk::GraphicsPipelineCreateInfo pipelineInfo(
+			vk::PipelineCreateFlags(),
+			2,
+			shaderStages,
+			&vertexInputInfo,
+			&inputAssembly,
+			nullptr,
+			&viewportState,
+			&rasterizer,
+			&multisampling,
+			nullptr,
+			&colorBlending,
+			&dynamicStateCreateInfo,
+			g_graphicsPipeline.pipelineLayout,
+			g_graphicsPipeline.renderPass,
+			0,
+			nullptr,
+			-1
+		);
+
+		CHECK_VK_RESULT_FATAL(g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo, g_allocator, &g_graphicsPipeline.handle), "Failed to create pipeline layout.");
+
+		g_device.destroyShaderModule(fragShaderModule, g_allocator);
+		g_device.destroyShaderModule(vertShaderModule, g_allocator);
 	}
 
 	//-----------------------------------------------------------------------------
@@ -609,6 +821,30 @@ namespace Renderer
 		}
 	}
 
+	static void InitFramebuffers()
+	{
+		g_swapchain.framebuffers.resize(g_swapchain.imageViews.size());
+
+		for (size_t i = 0; i < g_swapchain.imageViews.size(); i++)
+		{
+			vk::ImageView attachments[] = {
+				g_swapchain.imageViews[i]
+			};
+
+			vk::FramebufferCreateInfo framebufferInfo(
+				vk::FramebufferCreateFlags(),
+				g_graphicsPipeline.renderPass,
+				1,
+				attachments,
+				g_swapchain.extent.width,
+				g_swapchain.extent.height,
+				1
+			);
+
+			CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo, g_allocator, &g_swapchain.framebuffers[i]), "Failed to create framebuffer.");
+		}
+	}
+
 	static void InitVulkan()
 	{
 		CreateInstance();
@@ -619,222 +855,11 @@ namespace Renderer
 		CreateRenderPass();
 		CreatePipeline();
 
+		InitFramebuffers();
+
 		#ifndef NDEBUG
 		SetMainObjectsDebugNames();
 		#endif
-	}
-
-	//-----------------------------------------------------------------------------
-	// PIPELINE
-	//-----------------------------------------------------------------------------
-
-	struct Pipeline
-	{
-		vk::RenderPass renderPass;
-		vk::PipelineLayout pipelineLayout;
-
-		vk::Pipeline handle;
-	};
-
-	static Pipeline g_graphicsPipeline;
-
-	static vk::ShaderModule CreateShaderModule(const std::vector<char>& code)
-	{
-		vk::ShaderModuleCreateInfo createInfo(
-			vk::ShaderModuleCreateFlags(),
-			code.size(),
-			reinterpret_cast<const uint32_t*>(code.data())
-		);
-
-		vk::ShaderModule shaderModule;
-		CHECK_VK_RESULT_FATAL(g_device.createShaderModule(&createInfo, g_allocator, &shaderModule), "Failed to create shader module");
-
-		return shaderModule;
-	}
-
-	static void CreateRenderPass()
-	{
-		vk::AttachmentDescription colorAttachment(
-			vk::AttachmentDescriptionFlags(),
-			g_swapchain.format,
-			vk::SampleCountFlagBits::e1,
-			vk::AttachmentLoadOp::eClear,
-			vk::AttachmentStoreOp::eStore,
-			vk::AttachmentLoadOp::eDontCare,
-			vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eUndefined,
-			vk::ImageLayout::ePresentSrcKHR
-		);
-
-		vk::AttachmentReference colorAttachmentRef(
-			0,
-			vk::ImageLayout::eColorAttachmentOptimal
-		);
-
-		vk::SubpassDescription subpass(
-			vk::SubpassDescriptionFlags(),
-			vk::PipelineBindPoint::eGraphics,
-			0,
-			nullptr,
-			1,
-			&colorAttachmentRef
-		);
-
-		vk::RenderPassCreateInfo renderPassInfo(
-			vk::RenderPassCreateFlags(),
-			1,
-			&colorAttachment,
-			1,
-			&subpass
-		);
-
-		CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo, g_allocator, &g_graphicsPipeline.renderPass), "Failed to create render pass.");
-	}
-
-	static void CreatePipeline()
-	{
-		auto vertShaderCode = ReadFile("../resources/shaders/spv/shader.vert.spv");
-		auto fragShaderCode = ReadFile("../resources/shaders/spv/shader.frag.spv");
-
-		vk::ShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-		vk::ShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
-
-		vk::PipelineShaderStageCreateInfo vertShaderStageInfo(
-			vk::PipelineShaderStageCreateFlags(),
-			vk::ShaderStageFlagBits::eVertex,
-			vertShaderModule,
-			"main"
-		);
-
-		vk::PipelineShaderStageCreateInfo fragShaderStageInfo(
-			vk::PipelineShaderStageCreateFlags(),
-			vk::ShaderStageFlagBits::eFragment,
-			fragShaderModule,
-			"main"
-		);
-
-		vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-		vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
-			vk::PipelineVertexInputStateCreateFlags(),
-			0,
-			nullptr,
-			0,
-			nullptr
-		);
-
-		vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
-			vk::PipelineInputAssemblyStateCreateFlags(),
-			vk::PrimitiveTopology::eTriangleList,
-			VK_FALSE
-		);
-
-		vk::Viewport viewport(
-			0,
-			0,
-			(float)g_swapchain.extent.width,
-			(float)g_swapchain.extent.height,
-			0,
-			1
-		);
-
-		vk::Rect2D scissor(
-			{ 0, 0 },
-			g_swapchain.extent
-		);
-
-		vk::PipelineViewportStateCreateInfo viewportState(
-			vk::PipelineViewportStateCreateFlags(),
-			1,
-			&viewport,
-			1,
-			&scissor
-		);
-
-		vk::PipelineRasterizationStateCreateInfo rasterizer(
-			vk::PipelineRasterizationStateCreateFlags(),
-			VK_FALSE,
-			VK_FALSE,
-			vk::PolygonMode::eFill,
-			vk::CullModeFlagBits::eBack,
-			vk::FrontFace::eClockwise,
-			VK_FALSE,
-			0,
-			0,
-			0,
-			1
-		);
-
-		vk::PipelineMultisampleStateCreateInfo multisampling(
-			vk::PipelineMultisampleStateCreateFlags(),
-			vk::SampleCountFlagBits::e1,
-			VK_FALSE,
-			1,
-			nullptr,
-			VK_FALSE,
-			VK_FALSE
-		);
-
-		vk::PipelineColorBlendAttachmentState colorBlendAttachment(
-			VK_TRUE,
-			vk::BlendFactor::eSrcAlpha,
-			vk::BlendFactor::eOneMinusSrcAlpha,
-			vk::BlendOp::eAdd,
-			vk::BlendFactor::eOne,
-			vk::BlendFactor::eZero,
-			vk::BlendOp::eAdd,
-			vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
-		);
-
-		vk::PipelineColorBlendStateCreateInfo colorBlending(
-			vk::PipelineColorBlendStateCreateFlags(),
-			VK_FALSE,
-			vk::LogicOp::eCopy,
-			1,
-			&colorBlendAttachment
-		);
-
-		vk::DynamicState dynamicState = vk::DynamicState::eViewport;
-		vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo(
-			vk::PipelineDynamicStateCreateFlags(),
-			1,
-			&dynamicState
-		);
-
-		vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-			vk::PipelineLayoutCreateFlags(),
-			0,
-			nullptr,
-			0,
-			nullptr
-		);
-
-		CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo, g_allocator, &g_graphicsPipeline.pipelineLayout), "Failed to create pipeline layout.");
-
-		vk::GraphicsPipelineCreateInfo pipelineInfo(
-			vk::PipelineCreateFlags(),
-			2,
-			shaderStages,
-			&vertexInputInfo,
-			&inputAssembly,
-			nullptr,
-			&viewportState,
-			&rasterizer,
-			&multisampling,
-			nullptr,
-			&colorBlending,
-			&dynamicStateCreateInfo,
-			g_graphicsPipeline.pipelineLayout,
-			g_graphicsPipeline.renderPass,
-			0,
-			nullptr,
-			-1
-		);
-
-		CHECK_VK_RESULT_FATAL(g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo, g_allocator, &g_graphicsPipeline.handle), "Failed to create pipeline layout.");
-
-		g_device.destroyShaderModule(fragShaderModule, g_allocator);
-		g_device.destroyShaderModule(vertShaderModule, g_allocator);
 	}
 
 	//-----------------------------------------------------------------------------
@@ -865,6 +890,9 @@ namespace Renderer
 	void Shutdown()
 	{
 		TRY_CATCH_BLOCK("Failed to shutdown renderer",
+			for (auto framebuffer : g_swapchain.framebuffers)
+				g_device.destroyFramebuffer(framebuffer, g_allocator);
+
 			g_device.destroyPipeline(g_graphicsPipeline.handle, g_allocator);
 			g_device.destroyPipelineLayout(g_graphicsPipeline.pipelineLayout, g_allocator);
 			g_device.destroyRenderPass(g_graphicsPipeline.renderPass, g_allocator);
