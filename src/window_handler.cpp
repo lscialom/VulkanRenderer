@@ -7,14 +7,23 @@ namespace WindowHandler
 {
 	static GLFWwindow* g_window;
 
+	static bool* g_framebufferResizeCallbackSignal = nullptr;
+	static void framebufferResizeCallback(GLFWwindow*, int, int)
+	{
+		if (g_framebufferResizeCallbackSignal == nullptr)
+			return;
+
+		*g_framebufferResizeCallbackSignal = true;
+	}
+
 	void Init(uint32_t width, uint32_t height)
 	{
 		glfwInit();
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 		g_window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
+		glfwSetFramebufferSizeCallback(g_window, framebufferResizeCallback);
 	}
 
 	uint32_t GetRequiredInstanceExtensions(const char**& extensions)
@@ -33,6 +42,11 @@ namespace WindowHandler
 	void GetFramebufferSize(int* width, int* height)
 	{
 		glfwGetFramebufferSize(g_window, width, height);
+	}
+
+	void SetFramebufferSizeCallbackSignal(bool* callback)
+	{
+		g_framebufferResizeCallbackSignal = callback;
 	}
 
 	bool Update()

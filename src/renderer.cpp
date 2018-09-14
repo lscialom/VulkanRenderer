@@ -150,6 +150,9 @@ namespace Renderer
 
 	static vk::DispatchLoaderDynamic g_dldy;
 
+	static bool g_framebufferResized = false;
+
+
 	//-----------------------------------------------------------------------------
 	// CONFIGURATION HELPERS
 	//-----------------------------------------------------------------------------
@@ -343,7 +346,10 @@ namespace Renderer
 				}
 
 				if (presentMode == vk::PresentModeKHR::eFifo)
+				{
+					requiredPresentMode = vk::PresentModeKHR::eFifo;
 					std::cout << vk::to_string(requiredPresentMode) << " not supported. Using FIFO V-Sync mode instead." << std::endl;
+				}
 			}
 
 			if (swapChainSupport.capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
@@ -394,8 +400,8 @@ namespace Renderer
 				swapChainSupport.capabilities.currentTransform,
 				vk::CompositeAlphaFlagBitsKHR::eOpaque,
 				presentMode,
-				VK_TRUE,
-				swapchain
+				VK_TRUE
+				//swapchain
 			);
 
 			g_device.createSwapchainKHR(&createInfo, g_allocator, &swapchain);
@@ -757,6 +763,15 @@ namespace Renderer
 
 		void refresh()
 		{
+			int width = 0, height = 0;
+			while (width == 0 || height == 0)
+			{
+				WindowHandler::GetFramebufferSize(&width, &height);
+				WindowHandler::Update();
+			}
+
+			g_device.waitIdle();
+
 			destroy();
 			init();
 		}
@@ -932,8 +947,11 @@ namespace Renderer
 		);
 
 		result = g_presentQueue.handle.presentKHR(&presentInfo);
-		if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR)
+		if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || g_framebufferResized)
+		{
+			g_framebufferResized = false;
 			g_renderContext.refresh();
+		}
 		else
 			CHECK_VK_RESULT_FATAL(result, "Failed to present Swapchain image.");
 
@@ -1079,7 +1097,7 @@ namespace Renderer
 			CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_imageAvailableSemaphores[i]), "Failed to create semaphores.");
 			CHECK_VK_RESULT_FATAL(g_device.createSemaphore(&semaphoreInfo, g_allocator, &g_renderFinishedSemaphores[i]), "Failed to create semaphores.");
 
-			CHECK_VK_RESULT_FATAL(g_device.createFence(&fenceInfo, g_allocator, &inFlightFences[i]), "Failed to create semaphores.");
+			CHECK_VK_RESULT_FATAL(g_device.createFence(&fenceInfo, g_allocator, &g_inFlightFences[i]), "Failed to create semaphores.");
 		}
 	}
 
@@ -1133,7 +1151,7 @@ namespace Renderer
 				g_device.destroySemaphore(g_imageAvailableSemaphores[i], g_allocator);
 				g_device.destroySemaphore(g_renderFinishedSemaphores[i], g_allocator);
 
-				g_device.destroyFence(inFlightFences[i], g_allocator);
+				g_device.destroyFence(g_inFlightFences[i], g_allocator);
 			}
 
 			g_renderContext.destroy();
@@ -1167,9 +1185,6 @@ namespace Renderer
 	void SetPresentMode(PresentMode presentMode)
 	{
 		g_renderContext.requiredPresentMode = static_cast<vk::PresentModeKHR>(presentMode);
-
-		//g_device.waitIdle(); //Not needed if oldSwapchain is passed through swapchain create info
-
 		g_renderContext.refresh();
 	}
 }
