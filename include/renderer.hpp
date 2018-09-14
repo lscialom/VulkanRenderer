@@ -12,7 +12,7 @@ namespace Renderer
 	{
 		Immediate = 0,
 		Mailbox = 1,
-		VSync
+		VSync = 2
 	};
 
 	VULKAN_RENDERER_EXPORTS void Init(unsigned int width, unsigned int height);
