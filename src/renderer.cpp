@@ -128,8 +128,6 @@ namespace Renderer
 	// GLOBAL CONTEXT
 	//-----------------------------------------------------------------------------
 
-	static uint32_t g_width, g_height = 0;
-
 	static vk::Instance g_instance;
 	static vk::PhysicalDevice g_physicalDevice;
 
@@ -304,6 +302,8 @@ namespace Renderer
 		vk::Format requiredFormat;
 		vk::Extent2D extent;
 
+		vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eFifo;
+
 		struct Pipeline
 		{
 			vk::RenderPass renderPass;
@@ -330,16 +330,20 @@ namespace Renderer
 				}
 			}
 
-			vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo;
-			for (const auto& availablePresentMode : swapChainSupport.presentModes)
+			vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo; //Fifo mode's availability is guaranteed
+			if(requiredPresentMode != vk::PresentModeKHR::eFifo)
 			{
-				if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+				for (const auto& availablePresentMode : swapChainSupport.presentModes)
 				{
-					presentMode = availablePresentMode;
-					break;
+					if (availablePresentMode == requiredPresentMode)
+					{
+						presentMode = availablePresentMode;
+						break;
+					}
 				}
-				else if (availablePresentMode == vk::PresentModeKHR::eImmediate)
-					presentMode = availablePresentMode;
+
+				if (presentMode == vk::PresentModeKHR::eFifo)
+					std::cout << vk::to_string(requiredPresentMode) << " not supported. Using FIFO V-Sync mode instead." << std::endl;
 			}
 
 			if (swapChainSupport.capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
@@ -348,7 +352,10 @@ namespace Renderer
 			}
 			else
 			{
-				VkExtent2D actualExtent = { g_width, g_height };
+				int width, height;
+				WindowHandler::GetFramebufferSize(&width, &height);
+
+				VkExtent2D actualExtent = { width, height };
 
 				actualExtent.width = std::max(swapChainSupport.capabilities.minImageExtent.width, std::min(swapChainSupport.capabilities.maxImageExtent.width, actualExtent.width));
 				actualExtent.height = std::max(swapChainSupport.capabilities.minImageExtent.height, std::min(swapChainSupport.capabilities.maxImageExtent.height, actualExtent.height));
@@ -387,8 +394,8 @@ namespace Renderer
 				swapChainSupport.capabilities.currentTransform,
 				vk::CompositeAlphaFlagBitsKHR::eOpaque,
 				presentMode,
-				VK_TRUE
-				//Old swapchain
+				VK_TRUE,
+				swapchain
 			);
 
 			g_device.createSwapchainKHR(&createInfo, g_allocator, &swapchain);
@@ -748,6 +755,12 @@ namespace Renderer
 			destroy_swapchain();
 		}
 
+		void refresh()
+		{
+			destroy();
+			init();
+		}
+
 	} g_renderContext;
 
 	//-----------------------------------------------------------------------------
@@ -869,44 +882,62 @@ namespace Renderer
 	static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> g_imageAvailableSemaphores;
 	static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> g_renderFinishedSemaphores;
 
-	static std::array<vk::Fence, MAX_IN_FLIGHT_FRAMES> inFlightFences;
+	static std::array<vk::Fence, MAX_IN_FLIGHT_FRAMES> g_inFlightFences;
 
-	static size_t currentFrame = 0;
+	static size_t g_currentFrame = 0;
 
 	static void Draw()
 	{
-		g_device.waitForFences(1, &inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
-		g_device.resetFences(1, &inFlightFences[currentFrame]);
+		g_device.waitForFences(1, &g_inFlightFences[g_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 
 		uint32_t imageIndex;
-		g_device.acquireNextImageKHR(g_renderContext.swapchain, std::numeric_limits<uint64_t>::max(), g_imageAvailableSemaphores[currentFrame], nullptr, &imageIndex);
+		vk::Result result = g_device.acquireNextImageKHR(g_renderContext.swapchain, std::numeric_limits<uint64_t>::max(), g_imageAvailableSemaphores[g_currentFrame], nullptr, &imageIndex);
+
+		if (result == vk::Result::eErrorOutOfDateKHR)
+		{
+			g_renderContext.refresh();
+			return;
+		}
+		else if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+		{
+			std::string err = "[FATAL]";
+			err += "Failed to acquire Swapchain image."; err += " : "; err += vk::to_string(result);
+
+			throw std::runtime_error(err.c_str());
+		}
 
 		vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
 		vk::SubmitInfo submitInfo(
 			1,
-			&g_imageAvailableSemaphores[currentFrame],
+			&g_imageAvailableSemaphores[g_currentFrame],
 			&waitStage,
 			1,
 			&g_renderContext.commandbuffers[imageIndex],
 			1,
-			&g_renderFinishedSemaphores[currentFrame]
+			&g_renderFinishedSemaphores[g_currentFrame]
 		);
 
-		CHECK_VK_RESULT_FATAL(g_graphicsQueue.handle.submit(1, &submitInfo, inFlightFences[currentFrame]), "Failed to submit draw command buffer.");
+		g_device.resetFences(1, &g_inFlightFences[g_currentFrame]);
+
+		CHECK_VK_RESULT_FATAL(g_graphicsQueue.handle.submit(1, &submitInfo, g_inFlightFences[g_currentFrame]), "Failed to submit draw command buffer.");
 
 		vk::PresentInfoKHR presentInfo(
 			1,
-			&g_renderFinishedSemaphores[currentFrame],
+			&g_renderFinishedSemaphores[g_currentFrame],
 			1,
 			&g_renderContext.swapchain,
 			&imageIndex,
 			nullptr
 		);
 
-		g_presentQueue.handle.presentKHR(&presentInfo);
+		result = g_presentQueue.handle.presentKHR(&presentInfo);
+		if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR)
+			g_renderContext.refresh();
+		else
+			CHECK_VK_RESULT_FATAL(result, "Failed to present Swapchain image.");
 
-		currentFrame = (currentFrame + 1) % MAX_IN_FLIGHT_FRAMES;
+		g_currentFrame = (g_currentFrame + 1) % MAX_IN_FLIGHT_FRAMES;
 	}
 
 	//-----------------------------------------------------------------------------
@@ -1076,8 +1107,6 @@ namespace Renderer
 	{
 		assert(width != 0 && height != 0);
 
-		g_width = width, g_height = height;
-
 		TRY_CATCH_BLOCK("Failed to init renderer",
 
 			WindowHandler::Init(width, height);
@@ -1133,5 +1162,14 @@ namespace Renderer
 		g_device.waitIdle();
 
 		Shutdown();
+	}
+
+	void SetPresentMode(PresentMode presentMode)
+	{
+		g_renderContext.requiredPresentMode = static_cast<vk::PresentModeKHR>(presentMode);
+
+		//g_device.waitIdle(); //Not needed if oldSwapchain is passed through swapchain create info
+
+		g_renderContext.refresh();
 	}
 }

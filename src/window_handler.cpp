@@ -30,6 +30,11 @@ namespace WindowHandler
 		return glfwCreateWindowSurface(instance, g_window, allocator, surface);
 	}
 
+	void GetFramebufferSize(int* width, int* height)
+	{
+		glfwGetFramebufferSize(g_window, width, height);
+	}
+
 	bool Update()
 	{
 		glfwPollEvents();

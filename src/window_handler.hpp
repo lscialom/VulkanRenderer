@@ -14,4 +14,5 @@ namespace WindowHandler
 
 	uint32_t GetRequiredInstanceExtensions(const char**& extensions);
 	int32_t CreateSurface(VkInstance instance, const VkAllocationCallbacks* allocator, VkSurfaceKHR* surface);
+	void GetFramebufferSize(int* width, int* height);
 }
