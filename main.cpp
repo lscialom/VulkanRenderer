@@ -5,9 +5,8 @@
 #define WIDTH 800
 #define HEIGHT 600
 
-int main()
-{
-	Renderer::Run(WIDTH, HEIGHT);
+int main() {
+  Renderer::Run(WIDTH, HEIGHT);
 
-	return 0;
+  return 0;
 }
