@@ -3,6 +3,11 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include <Eigen/Dense>
+
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
 #include <fstream>
 #include <iostream>
 
@@ -18,7 +23,7 @@
 #define CHECK_VK_RESULT_FATAL(vk_function, msg)                                \
   {                                                                            \
     vk::Result res;                                                            \
-    if ((res = vk_function) != vk::Result::eSuccess) {                         \
+    if ((res = (vk::Result)vk_function) != vk::Result::eSuccess) {             \
       std::string err = "[FATAL]";                                             \
       err += msg;                                                              \
       err += " : ";                                                            \
@@ -280,6 +285,37 @@ static std::vector<char> ReadFile(const std::string &filename) {
 }
 
 //-----------------------------------------------------------------------------
+// RENDER DATA STRUCTURES
+//-----------------------------------------------------------------------------
+
+struct Vertex {
+  Eigen::Vector2f pos;
+  Eigen::Vector3f color;
+
+  static vk::VertexInputBindingDescription get_binding_description() {
+    return vk::VertexInputBindingDescription(0, sizeof(Vertex),
+                                             vk::VertexInputRate::eVertex);
+  }
+
+  static std::array<vk::VertexInputAttributeDescription, 2>
+  get_attribute_descriptions() {
+    return std::array<vk::VertexInputAttributeDescription, 2>{
+        {{0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)},
+         {1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)}}};
+  }
+};
+
+static const std::vector<Vertex> g_vertices = {
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
+
+struct Object {
+  vk::Buffer vertexBuffer;
+  VmaAllocation allocation;
+};
+
+//-----------------------------------------------------------------------------
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
 
@@ -305,6 +341,10 @@ static struct {
   };
 
   Pipeline graphicsPipeline;
+
+  VmaAllocator allocator;
+
+  std::vector<Object> objects;
 
   void init_swapchain() {
     SwapChainSupportDetails swapChainSupport =
@@ -472,8 +512,13 @@ static struct {
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
                                                         fragShaderStageInfo};
 
+    auto bindingDescription = Vertex::get_binding_description();
+    auto attributeDescriptions = Vertex::get_attribute_descriptions();
+
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
-        vk::PipelineVertexInputStateCreateFlags(), 0, nullptr, 0, nullptr);
+        vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
+        static_cast<uint32_t>(attributeDescriptions.size()),
+        attributeDescriptions.data());
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
         vk::PipelineInputAssemblyStateCreateFlags(),
@@ -601,7 +646,13 @@ static struct {
       commandbuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics,
                                      graphicsPipeline.handle);
 
-      commandbuffers[i].draw(3, 1, 0, 0);
+      vk::DeviceSize offsets[] = {0};
+      for (size_t j = 0; j < objects.size(); ++j) {
+        commandbuffers[i].bindVertexBuffers(0, 1, &objects[j].vertexBuffer,
+                                            offsets);
+        commandbuffers[i].draw(static_cast<uint32_t>(g_vertices.size()), 1, 0,
+                               0);
+      }
 
       commandbuffers[i].endRenderPass();
 
@@ -617,17 +668,64 @@ static struct {
                                 commandbuffers.data());
   }
 
-  void init() {
+  void init_vma() {
+    VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.physicalDevice = g_physicalDevice;
+    allocatorInfo.device = g_device;
+
+    vmaCreateAllocator(&allocatorInfo, &allocator);
+  }
+
+  void destroy_vma() {
+    for (size_t i = 0; i < objects.size(); ++i)
+      vmaDestroyBuffer(allocator, objects[i].vertexBuffer,
+                       objects[i].allocation);
+
+    vmaDestroyAllocator(allocator);
+  }
+
+  void init_objects() {
+    VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufferInfo.size = sizeof(g_vertices[0]) * g_vertices.size();
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
+    allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    VkBuffer buffer;
+    VmaAllocation allocation;
+    CHECK_VK_RESULT_FATAL(vmaCreateBuffer(allocator, &bufferInfo, &allocInfo,
+                                          &buffer, &allocation, nullptr),
+                          "Failed to create vertex buffer.");
+
+    objects.push_back({buffer, allocation});
+
+    void *mappedData;
+    vmaMapMemory(allocator, objects[0].allocation, &mappedData);
+    memcpy(mappedData, g_vertices.data(), (size_t)bufferInfo.size);
+    vmaUnmapMemory(allocator, objects[0].allocation);
+  }
+
+  void init(bool initMemory = true) {
     init_swapchain();
 
     init_render_pass();
     init_pipeline();
 
     init_framebuffers();
+
+    if (initMemory) {
+      init_vma();
+      init_objects();
+    }
+
     init_commandbuffers();
   }
 
-  void destroy() {
+  void destroy(bool freeMemory = true) {
     destroy_framebuffers();
     destroy_commandbuffers();
 
@@ -635,6 +733,9 @@ static struct {
     destroy_render_pass();
 
     destroy_swapchain();
+
+    if (freeMemory)
+      destroy_vma();
   }
 
   void refresh() {
@@ -646,8 +747,8 @@ static struct {
 
     g_device.waitIdle();
 
-    destroy();
-    init();
+    destroy(false);
+    init(false);
   }
 
 } g_renderContext;
