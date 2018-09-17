@@ -152,6 +152,8 @@ static vk::CommandPool g_commandPool;
 
 static vk::AllocationCallbacks *g_allocator = nullptr;
 
+static VmaAllocator g_vmaAllocator;
+
 static vk::DispatchLoaderDynamic g_dldy;
 
 static bool g_framebufferResized = false;
@@ -313,6 +315,28 @@ static const std::vector<Vertex> g_vertices = {
 struct Object {
   vk::Buffer vertexBuffer;
   VmaAllocation allocation;
+
+  ~Object() {
+    if (vertexBuffer)
+      vmaDestroyBuffer(g_vmaAllocator, vertexBuffer, allocation);
+  }
+
+  void init(size_t dataSize) {
+    VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufferInfo.size = dataSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
+    allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    CHECK_VK_RESULT_FATAL(vmaCreateBuffer(g_vmaAllocator, &bufferInfo,
+                                          &allocInfo, (VkBuffer *)&vertexBuffer,
+                                          &allocation, nullptr),
+                          "Failed to create vertex buffer.");
+  }
 };
 
 //-----------------------------------------------------------------------------
@@ -341,8 +365,6 @@ static struct {
   };
 
   Pipeline graphicsPipeline;
-
-  VmaAllocator allocator;
 
   std::vector<Object> objects;
 
@@ -668,45 +690,16 @@ static struct {
                                 commandbuffers.data());
   }
 
-  void init_vma() {
-    VmaAllocatorCreateInfo allocatorInfo = {};
-    allocatorInfo.physicalDevice = g_physicalDevice;
-    allocatorInfo.device = g_device;
-
-    vmaCreateAllocator(&allocatorInfo, &allocator);
-  }
-
-  void destroy_vma() {
-    for (size_t i = 0; i < objects.size(); ++i)
-      vmaDestroyBuffer(allocator, objects[i].vertexBuffer,
-                       objects[i].allocation);
-
-    vmaDestroyAllocator(allocator);
-  }
-
   void init_objects() {
-    VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufferInfo.size = sizeof(g_vertices[0]) * g_vertices.size();
-    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    objects.resize(1);
 
-    VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
-    allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    VkBuffer buffer;
-    VmaAllocation allocation;
-    CHECK_VK_RESULT_FATAL(vmaCreateBuffer(allocator, &bufferInfo, &allocInfo,
-                                          &buffer, &allocation, nullptr),
-                          "Failed to create vertex buffer.");
-
-    objects.push_back({buffer, allocation});
+    size_t bufferSize = sizeof(g_vertices[0]) * g_vertices.size();
+    objects[0].init(bufferSize);
 
     void *mappedData;
-    vmaMapMemory(allocator, objects[0].allocation, &mappedData);
-    memcpy(mappedData, g_vertices.data(), (size_t)bufferInfo.size);
-    vmaUnmapMemory(allocator, objects[0].allocation);
+    vmaMapMemory(g_vmaAllocator, objects[0].allocation, &mappedData);
+    memcpy(mappedData, g_vertices.data(), bufferSize);
+    vmaUnmapMemory(g_vmaAllocator, objects[0].allocation);
   }
 
   void init(bool initMemory = true) {
@@ -718,14 +711,13 @@ static struct {
     init_framebuffers();
 
     if (initMemory) {
-      init_vma();
       init_objects();
     }
 
     init_commandbuffers();
   }
 
-  void destroy(bool freeMemory = true) {
+  void destroy() {
     destroy_framebuffers();
     destroy_commandbuffers();
 
@@ -733,9 +725,6 @@ static struct {
     destroy_render_pass();
 
     destroy_swapchain();
-
-    if (freeMemory)
-      destroy_vma();
   }
 
   void refresh() {
@@ -747,7 +736,7 @@ static struct {
 
     g_device.waitIdle();
 
-    destroy(false);
+    destroy();
     init(false);
   }
 
@@ -1084,6 +1073,14 @@ static void InitCommandPool() {
       "Failed to create command pool.");
 }
 
+static void InitVMA() {
+  VmaAllocatorCreateInfo allocatorInfo = {};
+  allocatorInfo.physicalDevice = g_physicalDevice;
+  allocatorInfo.device = g_device;
+
+  vmaCreateAllocator(&allocatorInfo, &g_vmaAllocator);
+}
+
 static void InitSyncBarriers() {
   vk::SemaphoreCreateInfo semaphoreInfo = {};
 
@@ -1113,7 +1110,9 @@ static void InitVulkan() {
                             (VkSurfaceKHR *)&g_surface),
                         "Failed to create window surface");
   InitDevice();
+
   InitCommandPool();
+  InitVMA();
 
   g_renderContext.init();
 
@@ -1157,6 +1156,9 @@ void Shutdown() {
       }
 
       g_renderContext.destroy();
+      g_renderContext.objects.clear();
+
+      vmaDestroyAllocator(g_vmaAllocator);
 
       g_device.destroyCommandPool(g_commandPool, g_allocator);
 
