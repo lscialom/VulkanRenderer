@@ -149,6 +149,7 @@ static Queue g_graphicsQueue;
 static Queue g_presentQueue;
 
 static vk::CommandPool g_commandPool;
+static vk::CommandPool g_stagingCommandPool;
 
 static vk::AllocationCallbacks *g_allocator = nullptr;
 
@@ -316,6 +317,16 @@ static const std::vector<Vertex> g_vertices = {
 
 static VmaAllocator g_vmaAllocator;
 
+struct Object {
+  vk::Buffer buffer;
+  VmaAllocation allocation;
+
+  ~Object() {
+    if (buffer)
+      vmaDestroyBuffer(g_vmaAllocator, buffer, allocation);
+  }
+};
+
 static void CreateBuffer(VkDeviceSize size, vk::BufferUsageFlags usage,
                          vk::MemoryPropertyFlags properties, vk::Buffer *buffer,
                          VmaAllocation *allocation) {
@@ -334,29 +345,60 @@ static void CreateBuffer(VkDeviceSize size, vk::BufferUsageFlags usage,
                         "Failed to create vertex buffer.");
 }
 
+static void CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer,
+                       VkDeviceSize size) {
+  vk::CommandBufferAllocateInfo allocInfo(g_stagingCommandPool,
+                                          vk::CommandBufferLevel::ePrimary, 1);
+
+  vk::CommandBuffer commandBuffer;
+  g_device.allocateCommandBuffers(&allocInfo, &commandBuffer);
+
+  vk::CommandBufferBeginInfo beginInfo(
+      vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+  commandBuffer.begin(&beginInfo);
+
+  vk::BufferCopy copyRegion(0, // TODO src offset
+                            0, // TODO dst offset
+                            size);
+
+  commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
+
+  commandBuffer.end();
+
+  vk::SubmitInfo submitInfo = {};
+  submitInfo.commandBufferCount = 1;
+  submitInfo.pCommandBuffers = &commandBuffer;
+
+  g_graphicsQueue.handle.submit(1, &submitInfo, nullptr);
+  g_graphicsQueue.handle.waitIdle();
+
+  g_device.freeCommandBuffers(g_stagingCommandPool, 1, &commandBuffer);
+}
+
 static void CreateVertexBuffer(const std::vector<Vertex> &vertexBuffer,
                                vk::Buffer &buffer, VmaAllocation &allocation) {
   VkDeviceSize bufferSize = sizeof(Vertex) * vertexBuffer.size();
-  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer,
+
+  Object stagingBuffer;
+
+  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
                vk::MemoryPropertyFlagBits::eHostVisible |
                    vk::MemoryPropertyFlagBits::eHostCoherent,
-               &buffer, &allocation);
+               &stagingBuffer.buffer, &stagingBuffer.allocation);
 
   void *data;
-  vmaMapMemory(g_vmaAllocator, allocation, &data);
+  vmaMapMemory(g_vmaAllocator, stagingBuffer.allocation, &data);
   memcpy(data, vertexBuffer.data(), (size_t)bufferSize);
-  vmaUnmapMemory(g_vmaAllocator, allocation);
+  vmaUnmapMemory(g_vmaAllocator, stagingBuffer.allocation);
+
+  CreateBuffer(bufferSize,
+               vk::BufferUsageFlagBits::eTransferDst |
+                   vk::BufferUsageFlagBits::eVertexBuffer,
+               vk::MemoryPropertyFlagBits::eDeviceLocal, &buffer, &allocation);
+
+  CopyBuffer(stagingBuffer.buffer, buffer, bufferSize);
 }
-
-struct Object {
-  vk::Buffer vertexBuffer;
-  VmaAllocation allocation;
-
-  ~Object() {
-    if (vertexBuffer)
-      vmaDestroyBuffer(g_vmaAllocator, vertexBuffer, allocation);
-  }
-};
 
 //-----------------------------------------------------------------------------
 // RENDER CONTEXT
@@ -689,8 +731,7 @@ static struct {
 
       vk::DeviceSize offsets[] = {0};
       for (size_t j = 0; j < objects.size(); ++j) {
-        commandbuffers[i].bindVertexBuffers(0, 1, &objects[j].vertexBuffer,
-                                            offsets);
+        commandbuffers[i].bindVertexBuffers(0, 1, &objects[j].buffer, offsets);
         commandbuffers[i].draw(static_cast<uint32_t>(g_vertices.size()), 1, 0,
                                0);
       }
@@ -711,8 +752,7 @@ static struct {
 
   void init_objects() {
     objects.resize(1);
-    CreateVertexBuffer(g_vertices, objects[0].vertexBuffer,
-                       objects[0].allocation);
+    CreateVertexBuffer(g_vertices, objects[0].buffer, objects[0].allocation);
   }
 
   void init(bool initMemory = true) {
@@ -1075,15 +1115,24 @@ static void InitDevice() {
       g_device.getQueue(indices.presentFamily, g_presentQueue.index);
 }
 
-static void InitCommandPool() {
+static void InitCommandPools() {
   QueueFamilyIndices queueFamilyIndices = GetQueueFamilies(g_physicalDevice);
 
   vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlags(),
                                      queueFamilyIndices.graphicsFamily);
 
+  vk::CommandPoolCreateInfo stagingPoolInfo(
+      vk::CommandPoolCreateFlagBits::eTransient,
+      queueFamilyIndices.graphicsFamily);
+
   CHECK_VK_RESULT_FATAL(
       g_device.createCommandPool(&poolInfo, g_allocator, &g_commandPool),
       "Failed to create command pool.");
+
+  CHECK_VK_RESULT_FATAL(g_device.createCommandPool(&stagingPoolInfo,
+                                                   g_allocator,
+                                                   &g_stagingCommandPool),
+                        "Failed to create staging command pool.");
 }
 
 static void InitVMA() {
@@ -1124,7 +1173,7 @@ static void InitVulkan() {
                         "Failed to create window surface");
   InitDevice();
 
-  InitCommandPool();
+  InitCommandPools();
   InitVMA();
 
   g_renderContext.init();
@@ -1174,6 +1223,7 @@ void Shutdown() {
       vmaDestroyAllocator(g_vmaAllocator);
 
       g_device.destroyCommandPool(g_commandPool, g_allocator);
+      g_device.destroyCommandPool(g_stagingCommandPool, g_allocator);
 
       g_device.destroy(g_allocator);
 
