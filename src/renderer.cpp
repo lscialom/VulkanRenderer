@@ -711,15 +711,8 @@ static struct {
 
   void init_objects() {
     objects.resize(1);
-
-    size_t bufferSize = sizeof(g_vertices[0]) * g_vertices.size();
     CreateVertexBuffer(g_vertices, objects[0].vertexBuffer,
                        objects[0].allocation);
-
-    void *mappedData;
-    vmaMapMemory(g_vmaAllocator, objects[0].allocation, &mappedData);
-    memcpy(mappedData, g_vertices.data(), bufferSize);
-    vmaUnmapMemory(g_vmaAllocator, objects[0].allocation);
   }
 
   void init(bool initMemory = true) {
