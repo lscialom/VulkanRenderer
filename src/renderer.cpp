@@ -433,18 +433,51 @@ CreateIndexBuffer(const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
   CopyBuffer(stagingBuffer.handle, buffer, bufferSize);
 }
 
+static vk::DeviceSize
+CreateVIBuffer(const std::vector<Vertex> &vertexBuffer,
+               const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
+               vk::Buffer &buffer, VmaAllocation &allocation) {
+  VkDeviceSize iBufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
+  VkDeviceSize vBufferSize = sizeof(Vertex) * vertexBuffer.size();
+
+  VkDeviceSize bufferSize = iBufferSize + vBufferSize;
+  VkDeviceSize offset = iBufferSize;
+
+  Buffer stagingBuffer;
+  CreateBuffer(iBufferSize + vBufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+               vk::MemoryPropertyFlagBits::eHostVisible |
+                   vk::MemoryPropertyFlagBits::eHostCoherent,
+               &stagingBuffer.handle, &stagingBuffer.allocation);
+
+  void *data;
+  vmaMapMemory(g_vmaAllocator, stagingBuffer.allocation, &data);
+  memcpy(data, indexBuffer.data(), (size_t)iBufferSize);
+  memcpy((char *)data + offset, vertexBuffer.data(), (size_t)vBufferSize);
+  vmaUnmapMemory(g_vmaAllocator, stagingBuffer.allocation);
+
+  CreateBuffer(bufferSize,
+               vk::BufferUsageFlagBits::eTransferDst |
+                   vk::BufferUsageFlagBits::eVertexBuffer |
+                   vk::BufferUsageFlagBits::eIndexBuffer,
+               vk::MemoryPropertyFlagBits::eDeviceLocal, &buffer, &allocation);
+
+  CopyBuffer(stagingBuffer.handle, buffer, bufferSize);
+
+  return offset;
+}
+
 //-----------------------------------------------------------------------------
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
 
 struct Object {
-  Buffer vertexBuffer;
-  Buffer indexBuffer;
+  Buffer buffer;
+  vk::DeviceSize offset = 0;
 
   void init(const std::vector<Vertex> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {
-    CreateVertexBuffer(vertices, vertexBuffer.handle, vertexBuffer.allocation);
-    CreateIndexBuffer(indices, indexBuffer.handle, indexBuffer.allocation);
+    offset =
+        CreateVIBuffer(vertices, indices, buffer.handle, buffer.allocation);
   }
 };
 
@@ -773,12 +806,11 @@ static struct {
       commandbuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics,
                                      graphicsPipeline.handle);
 
-      vk::DeviceSize offsets[] = {0};
       for (size_t j = 0; j < objects.size(); ++j) {
-        commandbuffers[i].bindVertexBuffers(
-            0, 1, &objects[j].vertexBuffer.handle, offsets);
-        commandbuffers[i].bindIndexBuffer(objects[j].indexBuffer.handle, 0,
+        commandbuffers[i].bindIndexBuffer(objects[j].buffer.handle, 0,
                                           VULKAN_INDICES_TYPE);
+        commandbuffers[i].bindVertexBuffers(0, 1, &objects[j].buffer.handle,
+                                            &objects[j].offset);
         commandbuffers[i].drawIndexed(static_cast<uint32_t>(g_indices.size()),
                                       1, 0, 0, 0);
       }
