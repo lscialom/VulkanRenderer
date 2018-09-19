@@ -474,6 +474,8 @@ struct Object {
   Buffer buffer;
   vk::DeviceSize offset = 0;
 
+  // TODO record_draw_command
+
   void init(const std::vector<Vertex> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {
     offset =
@@ -807,6 +809,7 @@ static struct {
                                      graphicsPipeline.handle);
 
       for (size_t j = 0; j < objects.size(); ++j) {
+        // TODO record_draw_command
         commandbuffers[i].bindIndexBuffer(objects[j].buffer.handle, 0,
                                           VULKAN_INDICES_TYPE);
         commandbuffers[i].bindVertexBuffers(0, 1, &objects[j].buffer.handle,
