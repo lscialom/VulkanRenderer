@@ -127,6 +127,11 @@ static const std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{
 #undef DEBUG_CALLBACK_ARGUMENTS
 #undef DEBUG_CALLBACK_RETURN_TYPE
 
+#define VERTEX_INDICES_TYPE uint16_t
+#define VULKAN_INDICES_TYPE                                                    \
+  (sizeof(VERTEX_INDICES_TYPE) == sizeof(uint16_t) ? vk::IndexType::eUint16    \
+                                                   : vk::IndexType::eUint32)
+
 #endif
 
 //-----------------------------------------------------------------------------
@@ -307,9 +312,12 @@ struct Vertex {
 };
 
 static const std::vector<Vertex> g_vertices = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
+
+static const std::vector<VERTEX_INDICES_TYPE> g_indices = {0, 1, 2, 2, 3, 0};
 
 //-----------------------------------------------------------------------------
 // MEMORY
@@ -317,13 +325,13 @@ static const std::vector<Vertex> g_vertices = {
 
 static VmaAllocator g_vmaAllocator;
 
-struct Object {
-  vk::Buffer buffer;
+struct Buffer {
+  vk::Buffer handle;
   VmaAllocation allocation;
 
-  ~Object() {
-    if (buffer)
-      vmaDestroyBuffer(g_vmaAllocator, buffer, allocation);
+  ~Buffer() {
+    if (handle)
+      vmaDestroyBuffer(g_vmaAllocator, handle, allocation);
   }
 };
 
@@ -380,12 +388,12 @@ static void CreateVertexBuffer(const std::vector<Vertex> &vertexBuffer,
                                vk::Buffer &buffer, VmaAllocation &allocation) {
   VkDeviceSize bufferSize = sizeof(Vertex) * vertexBuffer.size();
 
-  Object stagingBuffer;
+  Buffer stagingBuffer;
 
   CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
                vk::MemoryPropertyFlagBits::eHostVisible |
                    vk::MemoryPropertyFlagBits::eHostCoherent,
-               &stagingBuffer.buffer, &stagingBuffer.allocation);
+               &stagingBuffer.handle, &stagingBuffer.allocation);
 
   void *data;
   vmaMapMemory(g_vmaAllocator, stagingBuffer.allocation, &data);
@@ -397,12 +405,48 @@ static void CreateVertexBuffer(const std::vector<Vertex> &vertexBuffer,
                    vk::BufferUsageFlagBits::eVertexBuffer,
                vk::MemoryPropertyFlagBits::eDeviceLocal, &buffer, &allocation);
 
-  CopyBuffer(stagingBuffer.buffer, buffer, bufferSize);
+  CopyBuffer(stagingBuffer.handle, buffer, bufferSize);
+}
+
+static void
+CreateIndexBuffer(const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
+                  vk::Buffer &buffer, VmaAllocation &allocation) {
+  VkDeviceSize bufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
+
+  Buffer stagingBuffer;
+
+  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+               vk::MemoryPropertyFlagBits::eHostVisible |
+                   vk::MemoryPropertyFlagBits::eHostCoherent,
+               &stagingBuffer.handle, &stagingBuffer.allocation);
+
+  void *data;
+  vmaMapMemory(g_vmaAllocator, stagingBuffer.allocation, &data);
+  memcpy(data, indexBuffer.data(), (size_t)bufferSize);
+  vmaUnmapMemory(g_vmaAllocator, stagingBuffer.allocation);
+
+  CreateBuffer(bufferSize,
+               vk::BufferUsageFlagBits::eTransferDst |
+                   vk::BufferUsageFlagBits::eIndexBuffer,
+               vk::MemoryPropertyFlagBits::eDeviceLocal, &buffer, &allocation);
+
+  CopyBuffer(stagingBuffer.handle, buffer, bufferSize);
 }
 
 //-----------------------------------------------------------------------------
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
+
+struct Object {
+  Buffer vertexBuffer;
+  Buffer indexBuffer;
+
+  void init(const std::vector<Vertex> &vertices,
+            const std::vector<VERTEX_INDICES_TYPE> &indices) {
+    CreateVertexBuffer(vertices, vertexBuffer.handle, vertexBuffer.allocation);
+    CreateIndexBuffer(indices, indexBuffer.handle, indexBuffer.allocation);
+  }
+};
 
 static struct {
   vk::SwapchainKHR swapchain;
@@ -731,9 +775,12 @@ static struct {
 
       vk::DeviceSize offsets[] = {0};
       for (size_t j = 0; j < objects.size(); ++j) {
-        commandbuffers[i].bindVertexBuffers(0, 1, &objects[j].buffer, offsets);
-        commandbuffers[i].draw(static_cast<uint32_t>(g_vertices.size()), 1, 0,
-                               0);
+        commandbuffers[i].bindVertexBuffers(
+            0, 1, &objects[j].vertexBuffer.handle, offsets);
+        commandbuffers[i].bindIndexBuffer(objects[j].indexBuffer.handle, 0,
+                                          VULKAN_INDICES_TYPE);
+        commandbuffers[i].drawIndexed(static_cast<uint32_t>(g_indices.size()),
+                                      1, 0, 0, 0);
       }
 
       commandbuffers[i].endRenderPass();
@@ -752,7 +799,7 @@ static struct {
 
   void init_objects() {
     objects.resize(1);
-    CreateVertexBuffer(g_vertices, objects[0].buffer, objects[0].allocation);
+    objects[0].init(g_vertices, g_indices);
   }
 
   void init(bool initMemory = true) {

@@ -11,3 +11,5 @@ don't forget to check for vectorization errors
 check VK_PROTOTYPES usefulness
 
 Tagging + labels
+
+Store Vertex and Index in same vk::Buffer
