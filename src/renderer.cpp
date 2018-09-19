@@ -152,8 +152,6 @@ static vk::CommandPool g_commandPool;
 
 static vk::AllocationCallbacks *g_allocator = nullptr;
 
-static VmaAllocator g_vmaAllocator;
-
 static vk::DispatchLoaderDynamic g_dldy;
 
 static bool g_framebufferResized = false;
@@ -312,6 +310,44 @@ static const std::vector<Vertex> g_vertices = {
     {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
     {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
 
+//-----------------------------------------------------------------------------
+// MEMORY
+//-----------------------------------------------------------------------------
+
+static VmaAllocator g_vmaAllocator;
+
+static void CreateBuffer(VkDeviceSize size, vk::BufferUsageFlags usage,
+                         vk::MemoryPropertyFlags properties, vk::Buffer *buffer,
+                         VmaAllocation *allocation) {
+  VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bufferInfo.size = size;
+  bufferInfo.usage = (VkBufferUsageFlags)usage;
+  bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+  VmaAllocationCreateInfo allocInfo = {};
+  allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
+  allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
+
+  CHECK_VK_RESULT_FATAL(vmaCreateBuffer(g_vmaAllocator, &bufferInfo, &allocInfo,
+                                        (VkBuffer *)buffer, allocation,
+                                        nullptr),
+                        "Failed to create vertex buffer.");
+}
+
+static void CreateVertexBuffer(const std::vector<Vertex> &vertexBuffer,
+                               vk::Buffer &buffer, VmaAllocation &allocation) {
+  VkDeviceSize bufferSize = sizeof(Vertex) * vertexBuffer.size();
+  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer,
+               vk::MemoryPropertyFlagBits::eHostVisible |
+                   vk::MemoryPropertyFlagBits::eHostCoherent,
+               &buffer, &allocation);
+
+  void *data;
+  vmaMapMemory(g_vmaAllocator, allocation, &data);
+  memcpy(data, vertexBuffer.data(), (size_t)bufferSize);
+  vmaUnmapMemory(g_vmaAllocator, allocation);
+}
+
 struct Object {
   vk::Buffer vertexBuffer;
   VmaAllocation allocation;
@@ -319,23 +355,6 @@ struct Object {
   ~Object() {
     if (vertexBuffer)
       vmaDestroyBuffer(g_vmaAllocator, vertexBuffer, allocation);
-  }
-
-  void init(size_t dataSize) {
-    VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufferInfo.size = dataSize;
-    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
-    allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    CHECK_VK_RESULT_FATAL(vmaCreateBuffer(g_vmaAllocator, &bufferInfo,
-                                          &allocInfo, (VkBuffer *)&vertexBuffer,
-                                          &allocation, nullptr),
-                          "Failed to create vertex buffer.");
   }
 };
 
@@ -694,7 +713,8 @@ static struct {
     objects.resize(1);
 
     size_t bufferSize = sizeof(g_vertices[0]) * g_vertices.size();
-    objects[0].init(bufferSize);
+    CreateVertexBuffer(g_vertices, objects[0].vertexBuffer,
+                       objects[0].allocation);
 
     void *mappedData;
     vmaMapMemory(g_vmaAllocator, objects[0].allocation, &mappedData);
