@@ -127,12 +127,12 @@ static const std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{
 #undef DEBUG_CALLBACK_ARGUMENTS
 #undef DEBUG_CALLBACK_RETURN_TYPE
 
+#endif
+
 #define VERTEX_INDICES_TYPE uint16_t
 #define VULKAN_INDICES_TYPE                                                    \
   (sizeof(VERTEX_INDICES_TYPE) == sizeof(uint16_t) ? vk::IndexType::eUint16    \
                                                    : vk::IndexType::eUint32)
-
-#endif
 
 //-----------------------------------------------------------------------------
 // GLOBAL CONTEXT
