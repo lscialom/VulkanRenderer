@@ -444,7 +444,7 @@ CreateVIBuffer(const std::vector<Vertex> &vertexBuffer,
   VkDeviceSize offset = iBufferSize;
 
   Buffer stagingBuffer;
-  CreateBuffer(iBufferSize + vBufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
                vk::MemoryPropertyFlagBits::eHostVisible |
                    vk::MemoryPropertyFlagBits::eHostCoherent,
                &stagingBuffer.handle, &stagingBuffer.allocation);
@@ -787,7 +787,7 @@ static struct {
     vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
                           1);
 
-    const std::array<float, 4> clearColorArray = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    static constexpr const std::array<float, 4> clearColorArray = {{0.0f, 0.0f, 0.0f, 1.0f}};
     vk::ClearColorValue clearColorValue = clearColorArray;
 
     vk::ClearValue clearColor(clearColorValue);
