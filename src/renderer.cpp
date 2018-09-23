@@ -311,6 +311,12 @@ struct Vertex {
   }
 };
 
+struct UniformBufferObject {
+  Eigen::Matrix4f model;
+  Eigen::Matrix4f view;
+  Eigen::Matrix4f proj;
+};
+
 static const std::vector<Vertex> g_vertices = {
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
@@ -495,7 +501,7 @@ static struct {
   vk::Format requiredFormat;
   vk::Extent2D extent;
 
-  vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eFifo;
+  vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
 
   struct Pipeline {
     vk::RenderPass renderPass;
@@ -787,7 +793,8 @@ static struct {
     vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
                           1);
 
-    static constexpr const std::array<float, 4> clearColorArray = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    static constexpr const std::array<float, 4> clearColorArray = {
+        {0.0f, 0.0f, 0.0f, 1.0f}};
     vk::ClearColorValue clearColorValue = clearColorArray;
 
     vk::ClearValue clearColor(clearColorValue);
