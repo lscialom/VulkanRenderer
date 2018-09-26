@@ -145,6 +145,9 @@ static vk::Device g_device;
 
 static vk::SurfaceKHR g_surface;
 
+static vk::Format g_requiredFormat;
+static vk::Extent2D g_extent;
+
 struct Queue {
   int index = -1;
   vk::Queue handle = nullptr;
@@ -155,6 +158,8 @@ static Queue g_presentQueue;
 
 static vk::CommandPool g_commandPool;
 static vk::CommandPool g_stagingCommandPool;
+
+static vk::RenderPass g_renderPass;
 
 static vk::AllocationCallbacks *g_allocator = nullptr;
 
@@ -476,16 +481,127 @@ CreateVIBuffer(const std::vector<Vertex> &vertexBuffer,
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
 
+struct Shader {
+private:
+  void init_pipeline(const std::string &vertPath, const std::string &fragPath) {
+    auto vertShaderCode = ReadFile(vertPath);
+    auto fragShaderCode = ReadFile(fragPath);
+
+    vk::ShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+    vk::ShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo(
+        vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
+        vertShaderModule, "main");
+
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo(
+        vk::PipelineShaderStageCreateFlags(),
+        vk::ShaderStageFlagBits::eFragment, fragShaderModule, "main");
+
+    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
+                                                        fragShaderStageInfo};
+
+    auto bindingDescription = Vertex::get_binding_description();
+    auto attributeDescriptions = Vertex::get_attribute_descriptions();
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
+        vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
+        static_cast<uint32_t>(attributeDescriptions.size()),
+        attributeDescriptions.data());
+
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
+        vk::PipelineInputAssemblyStateCreateFlags(),
+        vk::PrimitiveTopology::eTriangleList, VK_FALSE);
+
+    vk::Viewport viewport(0, 0, (float)g_extent.width, (float)g_extent.height,
+                          0, 1);
+
+    vk::Rect2D scissor({0, 0}, g_extent);
+
+    vk::PipelineViewportStateCreateInfo viewportState(
+        vk::PipelineViewportStateCreateFlags(), 1, &viewport, 1, &scissor);
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer(
+        vk::PipelineRasterizationStateCreateFlags(), VK_FALSE, VK_FALSE,
+        vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack,
+        vk::FrontFace::eClockwise, VK_FALSE, 0, 0, 0, 1);
+
+    vk::PipelineMultisampleStateCreateInfo multisampling(
+        vk::PipelineMultisampleStateCreateFlags(), vk::SampleCountFlagBits::e1,
+        VK_FALSE, 1, nullptr, VK_FALSE, VK_FALSE);
+
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment(
+        VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha,
+        vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero,
+        vk::BlendOp::eAdd,
+        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending(
+        vk::PipelineColorBlendStateCreateFlags(), VK_FALSE, vk::LogicOp::eCopy,
+        1, &colorBlendAttachment);
+
+    vk::DynamicState dynamicState = vk::DynamicState::eViewport;
+    vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo(
+        vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
+
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
+        vk::PipelineLayoutCreateFlags(), 0, nullptr, 0, nullptr);
+
+    CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
+                                                        g_allocator,
+                                                        &pipelineLayout),
+                          "Failed to create pipeline layout.");
+
+    vk::GraphicsPipelineCreateInfo pipelineInfo(
+        vk::PipelineCreateFlags(), 2, shaderStages, &vertexInputInfo,
+        &inputAssembly, nullptr, &viewportState, &rasterizer, &multisampling,
+        nullptr, &colorBlending, &dynamicStateCreateInfo, pipelineLayout,
+        g_renderPass, 0, nullptr, -1);
+
+    CHECK_VK_RESULT_FATAL(
+        g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo, g_allocator,
+                                         &pipeline),
+        "Failed to create pipeline layout.");
+
+    g_device.destroyShaderModule(fragShaderModule, g_allocator);
+    g_device.destroyShaderModule(vertShaderModule, g_allocator);
+  }
+
+public:
+  vk::Pipeline pipeline;
+  vk::PipelineLayout pipelineLayout;
+
+  void init(const std::string &vertPath, const std::string &fragPath) {
+    init_pipeline(vertPath, fragPath);
+  }
+
+  void destroy() {
+    g_device.destroyPipeline(pipeline, g_allocator);
+    g_device.destroyPipelineLayout(pipelineLayout, g_allocator);
+  }
+};
+
+Shader g_baseShader;
+
 struct Object {
   Buffer buffer;
   vk::DeviceSize offset = 0;
 
-  // TODO record_draw_command
+  uint32_t nbIndices = 0;
 
   void init(const std::vector<Vertex> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {
     offset =
         CreateVIBuffer(vertices, indices, buffer.handle, buffer.allocation);
+
+    nbIndices = indices.size();
+  }
+
+  void record(const vk::CommandBuffer &commandbuffer) {
+    commandbuffer.bindIndexBuffer(buffer.handle, 0, VULKAN_INDICES_TYPE);
+    commandbuffer.bindVertexBuffers(0, 1, &buffer.handle, &offset);
+    commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
   }
 };
 
@@ -498,19 +614,7 @@ static struct {
   std::vector<vk::Framebuffer> framebuffers;
   std::vector<vk::CommandBuffer> commandbuffers;
 
-  vk::Format requiredFormat;
-  vk::Extent2D extent;
-
   vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
-
-  struct Pipeline {
-    vk::RenderPass renderPass;
-    vk::PipelineLayout pipelineLayout;
-
-    vk::Pipeline handle;
-  };
-
-  Pipeline graphicsPipeline;
 
   std::vector<Object> objects;
 
@@ -552,7 +656,7 @@ static struct {
 
     if (swapChainSupport.capabilities.currentExtent.width !=
         std::numeric_limits<uint32_t>::max()) {
-      extent = swapChainSupport.capabilities.currentExtent;
+      g_extent = swapChainSupport.capabilities.currentExtent;
     } else {
       int width, height;
       WindowHandler::GetFramebufferSize(&width, &height);
@@ -568,7 +672,7 @@ static struct {
                    std::min(swapChainSupport.capabilities.maxImageExtent.height,
                             actualExtent.height));
 
-      extent = actualExtent;
+      g_extent = actualExtent;
     }
 
     uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
@@ -590,8 +694,9 @@ static struct {
 
     vk::SwapchainCreateInfoKHR createInfo(
         vk::SwapchainCreateFlagsKHR(), g_surface, imageCount, format.format,
-        format.colorSpace, extent, 1, vk::ImageUsageFlagBits::eColorAttachment,
-        imageSharingMode, queueFamilyIndexCount, queueFamilyIndices,
+        format.colorSpace, g_extent, 1,
+        vk::ImageUsageFlagBits::eColorAttachment, imageSharingMode,
+        queueFamilyIndexCount, queueFamilyIndices,
         swapChainSupport.capabilities.currentTransform,
         vk::CompositeAlphaFlagBitsKHR::eOpaque, presentMode, VK_TRUE
         // swapchain
@@ -600,8 +705,7 @@ static struct {
     g_device.createSwapchainKHR(&createInfo, g_allocator, &swapchain);
 
     images = g_device.getSwapchainImagesKHR(swapchain);
-    requiredFormat = format.format;
-    extent = extent;
+    g_requiredFormat = format.format;
 
     vk::ImageSubresourceRange imageSubresourceRange(
         vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
@@ -610,7 +714,7 @@ static struct {
     for (size_t i = 0; i < images.size(); i++) {
       vk::ImageViewCreateInfo createInfo(
           vk::ImageViewCreateFlags(), images[i], vk::ImageViewType::e2D,
-          requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
+          g_requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
 
       CHECK_VK_RESULT_FATAL(
           g_device.createImageView(&createInfo, g_allocator, &imageViews[i]),
@@ -627,7 +731,7 @@ static struct {
 
   void init_render_pass() {
     vk::AttachmentDescription colorAttachment(
-        vk::AttachmentDescriptionFlags(), requiredFormat,
+        vk::AttachmentDescriptionFlags(), g_requiredFormat,
         vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eClear,
         vk::AttachmentStoreOp::eStore, vk::AttachmentLoadOp::eDontCare,
         vk::AttachmentStoreOp::eDontCare, vk::ImageLayout::eUndefined,
@@ -653,106 +757,20 @@ static struct {
                                             &dependency);
 
     CHECK_VK_RESULT_FATAL(
-        g_device.createRenderPass(&renderPassInfo, g_allocator,
-                                  &graphicsPipeline.renderPass),
+        g_device.createRenderPass(&renderPassInfo, g_allocator, &g_renderPass),
         "Failed to create render pass.");
   }
 
   void destroy_render_pass() {
-    g_device.destroyRenderPass(graphicsPipeline.renderPass, g_allocator);
+    g_device.destroyRenderPass(g_renderPass, g_allocator);
   }
 
-  void init_pipeline() {
-    auto vertShaderCode = ReadFile("../resources/shaders/spv/shader.vert.spv");
-    auto fragShaderCode = ReadFile("../resources/shaders/spv/shader.frag.spv");
-
-    vk::ShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-    vk::ShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
-
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo(
-        vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
-        vertShaderModule, "main");
-
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo(
-        vk::PipelineShaderStageCreateFlags(),
-        vk::ShaderStageFlagBits::eFragment, fragShaderModule, "main");
-
-    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
-                                                        fragShaderStageInfo};
-
-    auto bindingDescription = Vertex::get_binding_description();
-    auto attributeDescriptions = Vertex::get_attribute_descriptions();
-
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
-        vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
-        static_cast<uint32_t>(attributeDescriptions.size()),
-        attributeDescriptions.data());
-
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
-        vk::PipelineInputAssemblyStateCreateFlags(),
-        vk::PrimitiveTopology::eTriangleList, VK_FALSE);
-
-    vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
-                          1);
-
-    vk::Rect2D scissor({0, 0}, extent);
-
-    vk::PipelineViewportStateCreateInfo viewportState(
-        vk::PipelineViewportStateCreateFlags(), 1, &viewport, 1, &scissor);
-
-    vk::PipelineRasterizationStateCreateInfo rasterizer(
-        vk::PipelineRasterizationStateCreateFlags(), VK_FALSE, VK_FALSE,
-        vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack,
-        vk::FrontFace::eClockwise, VK_FALSE, 0, 0, 0, 1);
-
-    vk::PipelineMultisampleStateCreateInfo multisampling(
-        vk::PipelineMultisampleStateCreateFlags(), vk::SampleCountFlagBits::e1,
-        VK_FALSE, 1, nullptr, VK_FALSE, VK_FALSE);
-
-    vk::PipelineColorBlendAttachmentState colorBlendAttachment(
-        VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha,
-        vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero,
-        vk::BlendOp::eAdd,
-        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-
-    vk::PipelineColorBlendStateCreateInfo colorBlending(
-        vk::PipelineColorBlendStateCreateFlags(), VK_FALSE, vk::LogicOp::eCopy,
-        1, &colorBlendAttachment);
-
-    vk::DynamicState dynamicState = vk::DynamicState::eViewport;
-    vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo(
-        vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
-
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-        vk::PipelineLayoutCreateFlags(), 0, nullptr, 0, nullptr);
-
-    CHECK_VK_RESULT_FATAL(
-        g_device.createPipelineLayout(&pipelineLayoutInfo, g_allocator,
-                                      &graphicsPipeline.pipelineLayout),
-        "Failed to create pipeline layout.");
-
-    vk::GraphicsPipelineCreateInfo pipelineInfo(
-        vk::PipelineCreateFlags(), 2, shaderStages, &vertexInputInfo,
-        &inputAssembly, nullptr, &viewportState, &rasterizer, &multisampling,
-        nullptr, &colorBlending, &dynamicStateCreateInfo,
-        graphicsPipeline.pipelineLayout, graphicsPipeline.renderPass, 0,
-        nullptr, -1);
-
-    CHECK_VK_RESULT_FATAL(
-        g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo, g_allocator,
-                                         &graphicsPipeline.handle),
-        "Failed to create pipeline layout.");
-
-    g_device.destroyShaderModule(fragShaderModule, g_allocator);
-    g_device.destroyShaderModule(vertShaderModule, g_allocator);
+  void init_shaders() {
+    g_baseShader.init("../resources/shaders/spv/shader.vert.spv",
+                      "../resources/shaders/spv/shader.frag.spv");
   }
 
-  void destroy_pipeline() {
-    g_device.destroyPipeline(graphicsPipeline.handle, g_allocator);
-    g_device.destroyPipelineLayout(graphicsPipeline.pipelineLayout,
-                                   g_allocator);
-  }
+  void destroy_shaders() { g_baseShader.destroy(); }
 
   void init_framebuffers() {
     framebuffers.resize(imageViews.size());
@@ -761,8 +779,8 @@ static struct {
       vk::ImageView attachments[] = {imageViews[i]};
 
       vk::FramebufferCreateInfo framebufferInfo(
-          vk::FramebufferCreateFlags(), graphicsPipeline.renderPass, 1,
-          attachments, extent.width, extent.height, 1);
+          vk::FramebufferCreateFlags(), g_renderPass, 1, attachments,
+          g_extent.width, g_extent.height, 1);
 
       CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
                                                        g_allocator,
@@ -790,11 +808,12 @@ static struct {
     vk::CommandBufferBeginInfo beginInfo(
         vk::CommandBufferUsageFlagBits::eSimultaneousUse, nullptr);
 
-    vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
-                          1);
+    vk::Viewport viewport(0, 0, (float)g_extent.width, (float)g_extent.height,
+                          0, 1);
 
     static constexpr const std::array<float, 4> clearColorArray = {
         {0.0f, 0.0f, 0.0f, 1.0f}};
+
     vk::ClearColorValue clearColorValue = clearColorArray;
 
     vk::ClearValue clearColor(clearColorValue);
@@ -802,9 +821,8 @@ static struct {
       CHECK_VK_RESULT_FATAL(commandbuffers[i].begin(&beginInfo),
                             "Failed to begin recording command buffer.");
 
-      vk::RenderPassBeginInfo renderPassInfo(graphicsPipeline.renderPass,
-                                             framebuffers[i], {{0, 0}, extent},
-                                             1, &clearColor);
+      vk::RenderPassBeginInfo renderPassInfo(
+          g_renderPass, framebuffers[i], {{0, 0}, g_extent}, 1, &clearColor);
 
       commandbuffers[i].setViewport(
           0, 1,
@@ -812,17 +830,12 @@ static struct {
 
       commandbuffers[i].beginRenderPass(&renderPassInfo,
                                         vk::SubpassContents::eInline);
-      commandbuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics,
-                                     graphicsPipeline.handle);
+      commandbuffers[i].bindPipeline(
+          vk::PipelineBindPoint::eGraphics,
+          g_baseShader.pipeline); // TODO Sort objects by shader/pipeline used
 
       for (size_t j = 0; j < objects.size(); ++j) {
-        // TODO record_draw_command
-        commandbuffers[i].bindIndexBuffer(objects[j].buffer.handle, 0,
-                                          VULKAN_INDICES_TYPE);
-        commandbuffers[i].bindVertexBuffers(0, 1, &objects[j].buffer.handle,
-                                            &objects[j].offset);
-        commandbuffers[i].drawIndexed(static_cast<uint32_t>(g_indices.size()),
-                                      1, 0, 0, 0);
+        objects[j].record(commandbuffers[i]);
       }
 
       commandbuffers[i].endRenderPass();
@@ -848,7 +861,7 @@ static struct {
     init_swapchain();
 
     init_render_pass();
-    init_pipeline();
+    init_shaders();
 
     init_framebuffers();
 
@@ -863,8 +876,8 @@ static struct {
     destroy_framebuffers();
     destroy_commandbuffers();
 
-    destroy_pipeline();
     destroy_render_pass();
+    destroy_shaders();
 
     destroy_swapchain();
   }
