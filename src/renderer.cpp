@@ -609,7 +609,7 @@ struct Object {
   Buffer buffer;
   vk::DeviceSize offset = 0;
 
-  uint32_t nbIndices = 0;
+  uint64_t nbIndices = 0;
 
   void init(const std::vector<Vertex> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {

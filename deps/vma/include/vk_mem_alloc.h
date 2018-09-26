@@ -12134,7 +12134,8 @@ VkResult VmaAllocator_T::CreatePool(const VmaPoolCreateInfo* pCreateInfo, VmaPoo
 {
 	VMA_DEBUG_LOG("  CreatePool: MemoryTypeIndex=%u, flags=%u", pCreateInfo->memoryTypeIndex, pCreateInfo->flags);
 
-	const bool isLinearAlgorithm = (pCreateInfo->flags & VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT) != 0;
+	const bool isLinearAlgorithm = (pCreateInfo->flags & VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT) != 0; //TODO Seems to be unused
+	(void)isLinearAlgorithm;
 
 	VmaPoolCreateInfo newCreateInfo = *pCreateInfo;
 
