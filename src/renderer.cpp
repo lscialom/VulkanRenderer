@@ -13,6 +13,7 @@
 
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 //-----------------------------------------------------------------------------
@@ -340,9 +341,29 @@ struct Buffer {
   vk::Buffer handle;
   VmaAllocation allocation;
 
+  Buffer() = default;
+
+  Buffer(const Buffer &other) = delete;
+  Buffer(Buffer &&other) {
+    handle = other.handle;
+    other.handle = nullptr;
+
+    allocation = std::move(other.allocation);
+  }
+
   ~Buffer() {
     if (handle)
       vmaDestroyBuffer(g_vmaAllocator, handle, allocation);
+  }
+
+  Buffer &operator=(const Buffer &o) = delete;
+  Buffer &operator=(Buffer &&other) {
+    handle = other.handle;
+    other.handle = nullptr;
+
+    allocation = std::move(other.allocation);
+
+    return *this;
   }
 };
 
@@ -598,7 +619,7 @@ struct Object {
     nbIndices = indices.size();
   }
 
-  void record(const vk::CommandBuffer &commandbuffer) {
+  void record(const vk::CommandBuffer &commandbuffer) const {
     commandbuffer.bindIndexBuffer(buffer.handle, 0, VULKAN_INDICES_TYPE);
     commandbuffer.bindVertexBuffers(0, 1, &buffer.handle, &offset);
     commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
@@ -616,7 +637,7 @@ static struct {
 
   vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
 
-  std::vector<Object> objects;
+  std::unordered_map<Shader *, std::vector<Object>> objects;
 
   void init_swapchain() {
     SwapChainSupportDetails swapChainSupport =
@@ -830,12 +851,15 @@ static struct {
 
       commandbuffers[i].beginRenderPass(&renderPassInfo,
                                         vk::SubpassContents::eInline);
-      commandbuffers[i].bindPipeline(
-          vk::PipelineBindPoint::eGraphics,
-          g_baseShader.pipeline); // TODO Sort objects by shader/pipeline used
 
-      for (size_t j = 0; j < objects.size(); ++j) {
-        objects[j].record(commandbuffers[i]);
+      for (const auto &pair : objects) {
+        commandbuffers[i].bindPipeline(
+            vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
+            pair.first->pipeline); // TODO Sort objects by shader/pipeline used
+
+        for (size_t j = 0; j < objects.size(); ++j) {
+          pair.second[j].record(commandbuffers[i]);
+        }
       }
 
       commandbuffers[i].endRenderPass();
@@ -853,8 +877,10 @@ static struct {
   }
 
   void init_objects() {
-    objects.resize(1);
-    objects[0].init(g_vertices, g_indices);
+    Object object;
+    object.init(g_vertices, g_indices);
+
+    objects[&g_baseShader].emplace_back(std::move(object));
   }
 
   void init(bool initMemory = true) {
