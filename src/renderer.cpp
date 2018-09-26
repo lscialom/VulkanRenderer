@@ -852,12 +852,13 @@ static struct {
       commandbuffers[i].beginRenderPass(&renderPassInfo,
                                         vk::SubpassContents::eInline);
 
+	  //TODO mt record commands
       for (const auto &pair : objects) {
         commandbuffers[i].bindPipeline(
             vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
             pair.first->pipeline); // TODO Sort objects by shader/pipeline used
 
-        for (size_t j = 0; j < objects.size(); ++j) {
+        for (size_t j = 0; j < pair.second.size(); ++j) {
           pair.second[j].record(commandbuffers[i]);
         }
       }
