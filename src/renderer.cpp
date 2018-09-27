@@ -856,7 +856,7 @@ static struct {
       for (const auto &pair : objects) {
         commandbuffers[i].bindPipeline(
             vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
-            pair.first->pipeline); // TODO Sort objects by shader/pipeline used
+            pair.first->pipeline);
 
         for (size_t j = 0; j < pair.second.size(); ++j) {
           pair.second[j].record(commandbuffers[i]);
