@@ -317,7 +317,7 @@ struct Vertex {
   }
 };
 
-struct UniformBufferObject {
+struct UniformMVP {
   Eigen::Matrix4f model;
   Eigen::Matrix4f view;
   Eigen::Matrix4f proj;
@@ -502,8 +502,47 @@ CreateVIBuffer(const std::vector<Vertex> &vertexBuffer,
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
 
+static std::array<vk::DescriptorSetLayoutBinding, 1> g_globalDSLInfos{
+    {{0, vk::DescriptorType::eUniformBufferDynamic, 1,
+      vk::ShaderStageFlagBits::eVertex, nullptr}}};
+
+static std::array<vk::DescriptorSetLayout, g_globalDSLInfos.size()> g_globalDSL;
+
+template<typename T>
+struct UniformBufferInfo
+{
+	static constexpr const uint64_t size = sizeof(T);
+	static constexpr const vk::DescriptorType descriptorType = vk::DescriptorType::eUniformBuffer;
+	static const vk::ShaderStageFlags shaderStage;
+
+	uint32_t binding;
+	uint32_t arraySize = 1;
+	vk::Sampler* immutableSamplers = nullptr;
+};
+
+template<> constexpr const vk::DescriptorType UniformBufferInfo<UniformMVP>::descriptorType = vk::DescriptorType::eUniformBufferDynamic;
+template<> const vk::ShaderStageFlags UniformBufferInfo<UniformMVP>::shaderStage = vk::ShaderStageFlagBits::eVertex;
+
+static UniformBufferInfo<UniformMVP> info{
+	.binding = 0,
+};
+
 struct Shader {
 private:
+  // TODO
+  // void init_descriptor_set_layout() {
+  // vk::DescriptorSetLayoutBinding uboLayoutBinding(
+  //    0, vk::DescriptorType::eUniformBufferDynamic, 1,
+  //    vk::ShaderStageFlagBits::eVertex, nullptr);
+
+  // vk::DescriptorSetLayoutCreateInfo layoutInfo(
+  //    vk::DescriptorSetLayoutCreateFlags(), 1, &uboLayoutBinding);
+
+  // CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
+  //                          &layoutInfo, g_allocator, &descriptorSetLayout),
+  //                      "Failed to create descriptor set layout.");
+  //}
+
   void init_pipeline(const std::string &vertPath, const std::string &fragPath) {
     auto vertShaderCode = ReadFile(vertPath);
     auto fragShaderCode = ReadFile(fragPath);
@@ -567,7 +606,8 @@ private:
         vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-        vk::PipelineLayoutCreateFlags(), 0, nullptr, 0, nullptr);
+        vk::PipelineLayoutCreateFlags(), g_globalDSL.size(), g_globalDSL.data(),
+        0, nullptr); // TODO add custom shader ubos
 
     CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
                                                         g_allocator,
@@ -590,16 +630,21 @@ private:
   }
 
 public:
+  // vk::DescriptorSetLayout descriptorSetLayout;
+
   vk::Pipeline pipeline;
   vk::PipelineLayout pipelineLayout;
 
   void init(const std::string &vertPath, const std::string &fragPath) {
+    // init_descriptor_set_layout();
     init_pipeline(vertPath, fragPath);
   }
 
   void destroy() {
     g_device.destroyPipeline(pipeline, g_allocator);
     g_device.destroyPipelineLayout(pipelineLayout, g_allocator);
+
+    // g_device.destroyDescriptorSetLayout(descriptorSetLayout, nullptr);
   }
 };
 
@@ -852,7 +897,7 @@ static struct {
       commandbuffers[i].beginRenderPass(&renderPassInfo,
                                         vk::SubpassContents::eInline);
 
-	  //TODO mt record commands
+      // TODO mt record commands
       for (const auto &pair : objects) {
         commandbuffers[i].bindPipeline(
             vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
@@ -903,8 +948,8 @@ static struct {
     destroy_framebuffers();
     destroy_commandbuffers();
 
-    destroy_render_pass();
     destroy_shaders();
+    destroy_render_pass();
 
     destroy_swapchain();
   }
@@ -1272,6 +1317,17 @@ static void InitVMA() {
   vmaCreateAllocator(&allocatorInfo, &g_vmaAllocator);
 }
 
+void InitGlobalUBOs() {
+  for (size_t i = 0; i < g_globalDSLInfos.size(); ++i) {
+    vk::DescriptorSetLayoutCreateInfo layoutInfo(
+        vk::DescriptorSetLayoutCreateFlags(), 1, &g_globalDSLInfos[i]);
+
+    CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
+                              &layoutInfo, g_allocator, &g_globalDSL[i]),
+                          "Failed to create global descriptor set layout.");
+  }
+}
+
 static void InitSyncBarriers() {
   vk::SemaphoreCreateInfo semaphoreInfo = {};
 
@@ -1304,6 +1360,8 @@ static void InitVulkan() {
 
   InitCommandPools();
   InitVMA();
+
+  InitGlobalUBOs();
 
   g_renderContext.init();
 
@@ -1348,6 +1406,9 @@ void Shutdown() {
 
       g_renderContext.destroy();
       g_renderContext.objects.clear();
+
+      for (size_t i = 0; i < g_globalDSL.size(); ++i)
+          g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
 
       vmaDestroyAllocator(g_vmaAllocator);
 
