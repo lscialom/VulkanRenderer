@@ -526,12 +526,21 @@ public:
 //-----------------------------------------------------------------------------
 
 static struct {
+private:
   vk::SwapchainKHR handle;
 
   std::vector<vk::Image> images;
   std::vector<vk::ImageView> imageViews;
 
+public:
   vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
+
+  const vk::SwapchainKHR &get_handle() const { return handle; }
+
+  size_t image_count() const { return images.size(); }
+  const vk::ImageView get_image_view(size_t index) const {
+    return imageViews[index];
+  }
 
   void init() {
     SwapChainSupportDetails swapChainSupport =
@@ -872,10 +881,10 @@ static struct {
   void destroy_shaders() { g_baseShader.destroy(); }
 
   void init_framebuffers() {
-    framebuffers.resize(g_swapchain.imageViews.size());
+    framebuffers.resize(g_swapchain.image_count());
 
-    for (size_t i = 0; i < g_swapchain.imageViews.size(); i++) {
-      vk::ImageView attachments[] = {g_swapchain.imageViews[i]};
+    for (size_t i = 0; i < framebuffers.size(); i++) {
+      vk::ImageView attachments[] = {g_swapchain.get_image_view(i)};
 
       vk::FramebufferCreateInfo framebufferInfo(
           vk::FramebufferCreateFlags(), g_renderPass, 1, attachments,
@@ -1136,7 +1145,7 @@ static void SetMainObjectsDebugNames() {
 
   g_device.setDebugUtilsObjectNameEXT(
       {vk::ObjectType::eSwapchainKHR,
-       (uint64_t)((VkSwapchainKHR)g_swapchain.handle), "Swapchain"},
+       (uint64_t)((VkSwapchainKHR)g_swapchain.get_handle()), "Swapchain"},
       g_dldy);
 
   for (size_t i = 0; i < g_debugMessengers.size(); ++i)
@@ -1167,7 +1176,7 @@ static void Draw() {
 
   uint32_t imageIndex;
   vk::Result result = g_device.acquireNextImageKHR(
-      g_swapchain.handle, std::numeric_limits<uint64_t>::max(),
+      g_swapchain.get_handle(), std::numeric_limits<uint64_t>::max(),
       g_imageAvailableSemaphores[g_currentFrame], nullptr, &imageIndex);
 
   if (result == vk::Result::eErrorOutOfDateKHR) {
@@ -1198,7 +1207,7 @@ static void Draw() {
                         "Failed to submit draw command buffer.");
 
   vk::PresentInfoKHR presentInfo(1, &g_renderFinishedSemaphores[g_currentFrame],
-                                 1, &g_swapchain.handle, &imageIndex,
+                                 1, &g_swapchain.get_handle(), &imageIndex,
                                  nullptr);
 
   result = g_presentQueue.handle.presentKHR(&presentInfo);
