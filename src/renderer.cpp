@@ -784,7 +784,7 @@ public:
 
 Shader g_baseShader;
 
-struct Object {
+struct ObjectTemplate {
 private:
   Buffer viBuffer;
   vk::DeviceSize vOffset = 0;
@@ -841,7 +841,7 @@ static struct {
   std::vector<vk::Framebuffer> framebuffers;
   std::vector<vk::CommandBuffer> commandbuffers;
 
-  std::unordered_map<Shader *, std::vector<Object>> objects;
+  std::unordered_map<Shader *, std::vector<ObjectTemplate>> objectTemplates;
 
   void init_render_pass() {
     vk::AttachmentDescription colorAttachment(
@@ -946,7 +946,7 @@ static struct {
                                         vk::SubpassContents::eInline);
 
       // TODO mt record commands
-      for (const auto &pair : objects) {
+      for (const auto &pair : objectTemplates) {
         pair.first->bind_pipeline(commandbuffers[i]);
 
         for (size_t j = 0; j < pair.second.size(); ++j) {
@@ -969,10 +969,10 @@ static struct {
   }
 
   void init_objects() {
-    Object object;
-    object.init(g_vertices, g_indices);
+    ObjectTemplate objectTemplate;
+    objectTemplate.init(g_vertices, g_indices);
 
-    objects[&g_baseShader].emplace_back(std::move(object));
+    objectTemplates[&g_baseShader].emplace_back(std::move(objectTemplate));
   }
 
   void init(bool initMemory = true) {
@@ -1451,7 +1451,7 @@ void Shutdown() {
       }
 
       g_renderContext.destroy();
-      g_renderContext.objects.clear();
+      g_renderContext.objectTemplates.clear();
 
       // for (size_t i = 0; i < g_globalDSL.size(); ++i)
       //    g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
