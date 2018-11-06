@@ -317,12 +317,6 @@ struct Vertex {
   }
 };
 
-struct UniformMVP {
-  Eigen::Matrix4f model;
-  Eigen::Matrix4f view;
-  Eigen::Matrix4f proj;
-};
-
 static const std::vector<Vertex> g_vertices = {
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
@@ -330,6 +324,45 @@ static const std::vector<Vertex> g_vertices = {
     {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
 
 static const std::vector<VERTEX_INDICES_TYPE> g_indices = {0, 1, 2, 2, 3, 0};
+
+template <typename T> struct UniformBufferInfo {
+  static constexpr const uint64_t size = sizeof(T);
+  static constexpr const vk::DescriptorType descriptorType =
+      vk::DescriptorType::eUniformBuffer;
+  static const vk::ShaderStageFlags shaderStage;
+
+  uint32_t binding;
+  uint32_t arraySize = 1;
+  vk::Sampler *immutableSamplers = nullptr;
+
+  vk::DescriptorSetLayoutBinding make_descriptor_set_layout_binding() {
+    return vk::DescriptorSetLayoutBinding(binding, descriptorType, arraySize,
+                                          shaderStage, immutableSamplers);
+  }
+};
+
+#define DEFINE_UBO(type, descType, shaderStageFlags)                           \
+  template <>                                                                  \
+  constexpr const vk::DescriptorType UniformBufferInfo<type>::descriptorType = \
+      descType;                                                                \
+                                                                               \
+  template <>                                                                  \
+  const vk::ShaderStageFlags UniformBufferInfo<type>::shaderStage =            \
+      shaderStageFlags;
+
+// UNIFORMBUFFERINFO SPECIALIZATIONS
+
+// UniformMVP
+struct UniformMVP {
+  Eigen::Matrix4f model;
+  Eigen::Matrix4f view;
+  Eigen::Matrix4f proj;
+};
+
+DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBufferDynamic,
+           vk::ShaderStageFlagBits::eVertex)
+
+#undef DEFINE_UBO
 
 //-----------------------------------------------------------------------------
 // MEMORY
@@ -502,46 +535,22 @@ CreateVIBuffer(const std::vector<Vertex> &vertexBuffer,
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
 
-static std::array<vk::DescriptorSetLayoutBinding, 1> g_globalDSLInfos{
-    {{0, vk::DescriptorType::eUniformBufferDynamic, 1,
-      vk::ShaderStageFlagBits::eVertex, nullptr}}};
-
-static std::array<vk::DescriptorSetLayout, g_globalDSLInfos.size()> g_globalDSL;
-
-template<typename T>
-struct UniformBufferInfo
-{
-	static constexpr const uint64_t size = sizeof(T);
-	static constexpr const vk::DescriptorType descriptorType = vk::DescriptorType::eUniformBuffer;
-	static const vk::ShaderStageFlags shaderStage;
-
-	uint32_t binding;
-	uint32_t arraySize = 1;
-	vk::Sampler* immutableSamplers = nullptr;
-};
-
-template<> constexpr const vk::DescriptorType UniformBufferInfo<UniformMVP>::descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-template<> const vk::ShaderStageFlags UniformBufferInfo<UniformMVP>::shaderStage = vk::ShaderStageFlagBits::eVertex;
-
-static UniformBufferInfo<UniformMVP> info{
-	.binding = 0,
-};
-
 struct Shader {
 private:
-  // TODO
-  // void init_descriptor_set_layout() {
-  // vk::DescriptorSetLayoutBinding uboLayoutBinding(
-  //    0, vk::DescriptorType::eUniformBufferDynamic, 1,
-  //    vk::ShaderStageFlagBits::eVertex, nullptr);
+  // TODO Separate shaders
+  void init_descriptor_set_layout() {
+    UniformBufferInfo<UniformMVP> info{.binding = 0};
 
-  // vk::DescriptorSetLayoutCreateInfo layoutInfo(
-  //    vk::DescriptorSetLayoutCreateFlags(), 1, &uboLayoutBinding);
+    vk::DescriptorSetLayoutBinding layoutBinding =
+        info.make_descriptor_set_layout_binding();
 
-  // CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
-  //                          &layoutInfo, g_allocator, &descriptorSetLayout),
-  //                      "Failed to create descriptor set layout.");
-  //}
+    vk::DescriptorSetLayoutCreateInfo layoutInfo(
+        vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
+
+    CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
+                              &layoutInfo, g_allocator, &descriptorSetLayout),
+                          "Failed to create descriptor set layout.");
+  }
 
   void init_pipeline(const std::string &vertPath, const std::string &fragPath) {
     auto vertShaderCode = ReadFile(vertPath);
@@ -606,8 +615,8 @@ private:
         vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-        vk::PipelineLayoutCreateFlags(), g_globalDSL.size(), g_globalDSL.data(),
-        0, nullptr); // TODO add custom shader ubos
+        vk::PipelineLayoutCreateFlags(), 1, &descriptorSetLayout, 0,
+        nullptr); // TODO add custom shader ubos
 
     CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
                                                         g_allocator,
@@ -630,13 +639,13 @@ private:
   }
 
 public:
-  // vk::DescriptorSetLayout descriptorSetLayout;
+  vk::DescriptorSetLayout descriptorSetLayout;
 
   vk::Pipeline pipeline;
   vk::PipelineLayout pipelineLayout;
 
   void init(const std::string &vertPath, const std::string &fragPath) {
-    // init_descriptor_set_layout();
+    init_descriptor_set_layout();
     init_pipeline(vertPath, fragPath);
   }
 
@@ -644,29 +653,29 @@ public:
     g_device.destroyPipeline(pipeline, g_allocator);
     g_device.destroyPipelineLayout(pipelineLayout, g_allocator);
 
-    // g_device.destroyDescriptorSetLayout(descriptorSetLayout, nullptr);
+    g_device.destroyDescriptorSetLayout(descriptorSetLayout, nullptr);
   }
 };
 
 Shader g_baseShader;
 
 struct Object {
-  Buffer buffer;
-  vk::DeviceSize offset = 0;
+  Buffer viBuffer;
+  vk::DeviceSize vOffset = 0;
 
   uint64_t nbIndices = 0;
 
   void init(const std::vector<Vertex> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {
-    offset =
-        CreateVIBuffer(vertices, indices, buffer.handle, buffer.allocation);
+    vOffset =
+        CreateVIBuffer(vertices, indices, viBuffer.handle, viBuffer.allocation);
 
     nbIndices = indices.size();
   }
 
   void record(const vk::CommandBuffer &commandbuffer) const {
-    commandbuffer.bindIndexBuffer(buffer.handle, 0, VULKAN_INDICES_TYPE);
-    commandbuffer.bindVertexBuffers(0, 1, &buffer.handle, &offset);
+    commandbuffer.bindIndexBuffer(viBuffer.handle, 0, VULKAN_INDICES_TYPE);
+    commandbuffer.bindVertexBuffers(0, 1, &viBuffer.handle, &vOffset);
     commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
   }
 };
@@ -1317,16 +1326,16 @@ static void InitVMA() {
   vmaCreateAllocator(&allocatorInfo, &g_vmaAllocator);
 }
 
-void InitGlobalUBOs() {
-  for (size_t i = 0; i < g_globalDSLInfos.size(); ++i) {
-    vk::DescriptorSetLayoutCreateInfo layoutInfo(
-        vk::DescriptorSetLayoutCreateFlags(), 1, &g_globalDSLInfos[i]);
-
-    CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
-                              &layoutInfo, g_allocator, &g_globalDSL[i]),
-                          "Failed to create global descriptor set layout.");
-  }
-}
+// void InitGlobalUBOs() {
+//  for (size_t i = 0; i < g_globalDSLInfos.size(); ++i) {
+//    vk::DescriptorSetLayoutCreateInfo layoutInfo(
+//        vk::DescriptorSetLayoutCreateFlags(), 1, &g_globalDSLInfos[i]);
+//
+//    CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
+//                              &layoutInfo, g_allocator, &g_globalDSL[i]),
+//                          "Failed to create global descriptor set layout.");
+//  }
+//}
 
 static void InitSyncBarriers() {
   vk::SemaphoreCreateInfo semaphoreInfo = {};
@@ -1361,7 +1370,7 @@ static void InitVulkan() {
   InitCommandPools();
   InitVMA();
 
-  InitGlobalUBOs();
+  // InitGlobalUBOs();
 
   g_renderContext.init();
 
@@ -1407,8 +1416,8 @@ void Shutdown() {
       g_renderContext.destroy();
       g_renderContext.objects.clear();
 
-      for (size_t i = 0; i < g_globalDSL.size(); ++i)
-          g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
+      // for (size_t i = 0; i < g_globalDSL.size(); ++i)
+      //    g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
 
       vmaDestroyAllocator(g_vmaAllocator);
 
