@@ -784,6 +784,7 @@ public:
 
 Shader g_baseShader;
 
+//TODO pointer to shader ? Or automatically sort in a container according to shader ? Or both ?
 struct ObjectTemplate {
 private:
   Buffer viBuffer;
