@@ -371,9 +371,12 @@ DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBufferDynamic,
 static VmaAllocator g_vmaAllocator;
 
 struct Buffer {
+private:
   vk::Buffer handle;
   VmaAllocation allocation;
+  size_t size = 0;
 
+public:
   Buffer() = default;
 
   Buffer(const Buffer &other) = delete;
@@ -389,6 +392,85 @@ struct Buffer {
       vmaDestroyBuffer(g_vmaAllocator, handle, allocation);
   }
 
+  const vk::Buffer &get_handle() const { return handle; }
+
+  void allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
+                vk::MemoryPropertyFlags properties) {
+#ifndef NDEBUG
+    if (handle)
+      printf("[WARNING] Allocating already allocated buffer. This probably "
+             "means memory leaks. (Adress = %p)",
+             (VkBuffer)handle);
+#endif
+
+    size = allocationSize;
+
+    VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufferInfo.size = size;
+    bufferInfo.usage = (VkBufferUsageFlags)usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
+    allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
+
+    CHECK_VK_RESULT_FATAL(vmaCreateBuffer(g_vmaAllocator, &bufferInfo,
+                                          &allocInfo, (VkBuffer *)&handle,
+                                          &allocation, nullptr),
+                          "Failed to create vertex buffer.");
+  }
+
+  void copy_to(Buffer &dstBuffer, VkDeviceSize copySize) const {
+    vk::CommandBufferAllocateInfo allocInfo(
+        g_stagingCommandPool, vk::CommandBufferLevel::ePrimary, 1);
+
+    vk::CommandBuffer commandBuffer;
+    g_device.allocateCommandBuffers(&allocInfo, &commandBuffer);
+
+    vk::CommandBufferBeginInfo beginInfo(
+        vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+    commandBuffer.begin(&beginInfo);
+
+    vk::BufferCopy copyRegion(0, // TODO src offset
+                              0, // TODO dst offset
+                              copySize);
+
+    commandBuffer.copyBuffer(handle, dstBuffer.handle, 1, &copyRegion);
+
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo = {};
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    g_graphicsQueue.handle.submit(1, &submitInfo, nullptr);
+    g_graphicsQueue.handle.waitIdle();
+
+    g_device.freeCommandBuffers(g_stagingCommandPool, 1, &commandBuffer);
+  }
+
+  void write(const void *data, VkDeviceSize writeSize,
+             VkDeviceSize offset = 0) const {
+
+    if (writeSize + offset > size) {
+#ifndef NDEBUG
+      printf("[WARNING] Specified write to buffer out of allocation bounds. "
+             "Data might be corrupted. (Adress = %p)",
+             (VkBuffer)handle);
+#endif
+      if (offset > size)
+        return;
+
+      writeSize = size - offset;
+    }
+
+    void *mappedMemory;
+    vmaMapMemory(g_vmaAllocator, allocation, &mappedMemory);
+    memcpy((char *)mappedMemory + offset, data, (size_t)writeSize);
+    vmaUnmapMemory(g_vmaAllocator, allocation);
+  }
+
   Buffer &operator=(const Buffer &o) = delete;
   Buffer &operator=(Buffer &&other) {
     handle = other.handle;
@@ -400,140 +482,168 @@ struct Buffer {
   }
 };
 
-static void CreateBuffer(VkDeviceSize size, vk::BufferUsageFlags usage,
-                         vk::MemoryPropertyFlags properties, vk::Buffer *buffer,
-                         VmaAllocation *allocation) {
-  VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-  bufferInfo.size = size;
-  bufferInfo.usage = (VkBufferUsageFlags)usage;
-  bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-  VmaAllocationCreateInfo allocInfo = {};
-  allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
-  allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
-
-  CHECK_VK_RESULT_FATAL(vmaCreateBuffer(g_vmaAllocator, &bufferInfo, &allocInfo,
-                                        (VkBuffer *)buffer, allocation,
-                                        nullptr),
-                        "Failed to create vertex buffer.");
-}
-
-static void CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer,
-                       VkDeviceSize size) {
-  vk::CommandBufferAllocateInfo allocInfo(g_stagingCommandPool,
-                                          vk::CommandBufferLevel::ePrimary, 1);
-
-  vk::CommandBuffer commandBuffer;
-  g_device.allocateCommandBuffers(&allocInfo, &commandBuffer);
-
-  vk::CommandBufferBeginInfo beginInfo(
-      vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-  commandBuffer.begin(&beginInfo);
-
-  vk::BufferCopy copyRegion(0, // TODO src offset
-                            0, // TODO dst offset
-                            size);
-
-  commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
-
-  commandBuffer.end();
-
-  vk::SubmitInfo submitInfo = {};
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &commandBuffer;
-
-  g_graphicsQueue.handle.submit(1, &submitInfo, nullptr);
-  g_graphicsQueue.handle.waitIdle();
-
-  g_device.freeCommandBuffers(g_stagingCommandPool, 1, &commandBuffer);
-}
-
-static void CreateVertexBuffer(const std::vector<Vertex> &vertexBuffer,
-                               vk::Buffer &buffer, VmaAllocation &allocation) {
-  VkDeviceSize bufferSize = sizeof(Vertex) * vertexBuffer.size();
-
-  Buffer stagingBuffer;
-
-  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-               vk::MemoryPropertyFlagBits::eHostVisible |
-                   vk::MemoryPropertyFlagBits::eHostCoherent,
-               &stagingBuffer.handle, &stagingBuffer.allocation);
-
-  void *data;
-  vmaMapMemory(g_vmaAllocator, stagingBuffer.allocation, &data);
-  memcpy(data, vertexBuffer.data(), (size_t)bufferSize);
-  vmaUnmapMemory(g_vmaAllocator, stagingBuffer.allocation);
-
-  CreateBuffer(bufferSize,
-               vk::BufferUsageFlagBits::eTransferDst |
-                   vk::BufferUsageFlagBits::eVertexBuffer,
-               vk::MemoryPropertyFlagBits::eDeviceLocal, &buffer, &allocation);
-
-  CopyBuffer(stagingBuffer.handle, buffer, bufferSize);
-}
-
-static void
-CreateIndexBuffer(const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
-                  vk::Buffer &buffer, VmaAllocation &allocation) {
-  VkDeviceSize bufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
-
-  Buffer stagingBuffer;
-
-  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-               vk::MemoryPropertyFlagBits::eHostVisible |
-                   vk::MemoryPropertyFlagBits::eHostCoherent,
-               &stagingBuffer.handle, &stagingBuffer.allocation);
-
-  void *data;
-  vmaMapMemory(g_vmaAllocator, stagingBuffer.allocation, &data);
-  memcpy(data, indexBuffer.data(), (size_t)bufferSize);
-  vmaUnmapMemory(g_vmaAllocator, stagingBuffer.allocation);
-
-  CreateBuffer(bufferSize,
-               vk::BufferUsageFlagBits::eTransferDst |
-                   vk::BufferUsageFlagBits::eIndexBuffer,
-               vk::MemoryPropertyFlagBits::eDeviceLocal, &buffer, &allocation);
-
-  CopyBuffer(stagingBuffer.handle, buffer, bufferSize);
-}
-
-static vk::DeviceSize
-CreateVIBuffer(const std::vector<Vertex> &vertexBuffer,
-               const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
-               vk::Buffer &buffer, VmaAllocation &allocation) {
-  VkDeviceSize iBufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
-  VkDeviceSize vBufferSize = sizeof(Vertex) * vertexBuffer.size();
-
-  VkDeviceSize bufferSize = iBufferSize + vBufferSize;
-  VkDeviceSize offset = iBufferSize;
-
-  Buffer stagingBuffer;
-  CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-               vk::MemoryPropertyFlagBits::eHostVisible |
-                   vk::MemoryPropertyFlagBits::eHostCoherent,
-               &stagingBuffer.handle, &stagingBuffer.allocation);
-
-  void *data;
-  vmaMapMemory(g_vmaAllocator, stagingBuffer.allocation, &data);
-  memcpy(data, indexBuffer.data(), (size_t)iBufferSize);
-  memcpy((char *)data + offset, vertexBuffer.data(), (size_t)vBufferSize);
-  vmaUnmapMemory(g_vmaAllocator, stagingBuffer.allocation);
-
-  CreateBuffer(bufferSize,
-               vk::BufferUsageFlagBits::eTransferDst |
-                   vk::BufferUsageFlagBits::eVertexBuffer |
-                   vk::BufferUsageFlagBits::eIndexBuffer,
-               vk::MemoryPropertyFlagBits::eDeviceLocal, &buffer, &allocation);
-
-  CopyBuffer(stagingBuffer.handle, buffer, bufferSize);
-
-  return offset;
-}
+// static void CreateVertexBuffer(const std::vector<Vertex> &vertexBuffer,
+//                               Buffer &buffer) {
+//  VkDeviceSize bufferSize = sizeof(Vertex) * vertexBuffer.size();
+//
+//  Buffer stagingBuffer;
+//  stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+//                         vk::MemoryPropertyFlagBits::eHostVisible |
+//                             vk::MemoryPropertyFlagBits::eHostCoherent);
+//
+//  stagingBuffer.write(vertexBuffer.data(), bufferSize);
+//
+//  buffer.allocate(bufferSize,
+//                  vk::BufferUsageFlagBits::eTransferDst |
+//                      vk::BufferUsageFlagBits::eVertexBuffer,
+//                  vk::MemoryPropertyFlagBits::eDeviceLocal);
+//
+//  stagingBuffer.copy_to(buffer, bufferSize);
+//}
+//
+// static void
+// CreateIndexBuffer(const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
+//                  Buffer &buffer) {
+//  VkDeviceSize bufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
+//
+//  Buffer stagingBuffer;
+//  stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+//                         vk::MemoryPropertyFlagBits::eHostVisible |
+//                             vk::MemoryPropertyFlagBits::eHostCoherent);
+//
+//  stagingBuffer.write(indexBuffer.data(), bufferSize);
+//
+//  buffer.allocate(bufferSize,
+//                  vk::BufferUsageFlagBits::eTransferDst |
+//                      vk::BufferUsageFlagBits::eIndexBuffer,
+//                  vk::MemoryPropertyFlagBits::eDeviceLocal);
+//
+//  stagingBuffer.copy_to(buffer, bufferSize);
+//}
 
 //-----------------------------------------------------------------------------
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
+
+static struct {
+  vk::SwapchainKHR handle;
+
+  std::vector<vk::Image> images;
+  std::vector<vk::ImageView> imageViews;
+
+  vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
+
+  void init() {
+    SwapChainSupportDetails swapChainSupport =
+        QuerySwapChainSupport(g_physicalDevice);
+
+    vk::SurfaceFormatKHR format =
+        swapChainSupport.formats[0]; // safe since it has been checked that
+                                     // there are available formats
+    if (swapChainSupport.formats.size() == 1 &&
+        swapChainSupport.formats[0].format == vk::Format::eUndefined)
+      format = {vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear};
+    else {
+      for (const auto &availableFormat : swapChainSupport.formats) {
+        if (availableFormat.format == vk::Format::eB8G8R8A8Unorm &&
+            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+          format = availableFormat;
+      }
+    }
+
+    vk::PresentModeKHR presentMode =
+        vk::PresentModeKHR::eFifo; // Fifo mode's availability is guaranteed
+    if (requiredPresentMode != vk::PresentModeKHR::eFifo) {
+      for (const auto &availablePresentMode : swapChainSupport.presentModes) {
+        if (availablePresentMode == requiredPresentMode) {
+          presentMode = availablePresentMode;
+          break;
+        }
+      }
+
+      if (presentMode == vk::PresentModeKHR::eFifo) {
+        requiredPresentMode = vk::PresentModeKHR::eFifo;
+        std::cout << vk::to_string(requiredPresentMode)
+                  << " not supported. Using FIFO V-Sync mode instead."
+                  << std::endl;
+      }
+    }
+
+    if (swapChainSupport.capabilities.currentExtent.width !=
+        std::numeric_limits<uint32_t>::max()) {
+      g_extent = swapChainSupport.capabilities.currentExtent;
+    } else {
+      int width, height;
+      WindowHandler::GetFramebufferSize(&width, &height);
+
+      VkExtent2D actualExtent = {width, height};
+
+      actualExtent.width =
+          std::max(swapChainSupport.capabilities.minImageExtent.width,
+                   std::min(swapChainSupport.capabilities.maxImageExtent.width,
+                            actualExtent.width));
+      actualExtent.height =
+          std::max(swapChainSupport.capabilities.minImageExtent.height,
+                   std::min(swapChainSupport.capabilities.maxImageExtent.height,
+                            actualExtent.height));
+
+      g_extent = actualExtent;
+    }
+
+    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+    if (swapChainSupport.capabilities.maxImageCount > 0 &&
+        imageCount > swapChainSupport.capabilities.maxImageCount)
+      imageCount = swapChainSupport.capabilities.maxImageCount;
+
+    QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
+    uint32_t queueFamilyIndices[] = {(uint32_t)indices.graphicsFamily,
+                                     (uint32_t)indices.presentFamily};
+
+    vk::SharingMode imageSharingMode = vk::SharingMode::eExclusive;
+    uint32_t queueFamilyIndexCount = 0;
+
+    if (indices.graphicsFamily != indices.presentFamily) {
+      imageSharingMode = vk::SharingMode::eConcurrent;
+      queueFamilyIndexCount = sizeof(queueFamilyIndices) / sizeof(uint32_t);
+    }
+
+    vk::SwapchainCreateInfoKHR createInfo(
+        vk::SwapchainCreateFlagsKHR(), g_surface, imageCount, format.format,
+        format.colorSpace, g_extent, 1,
+        vk::ImageUsageFlagBits::eColorAttachment, imageSharingMode,
+        queueFamilyIndexCount, queueFamilyIndices,
+        swapChainSupport.capabilities.currentTransform,
+        vk::CompositeAlphaFlagBitsKHR::eOpaque, presentMode, VK_TRUE
+        // swapchain
+    );
+
+    g_device.createSwapchainKHR(&createInfo, g_allocator, &handle);
+
+    images = g_device.getSwapchainImagesKHR(handle);
+    g_requiredFormat = format.format;
+
+    vk::ImageSubresourceRange imageSubresourceRange(
+        vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+
+    imageViews.resize(images.size());
+    for (size_t i = 0; i < images.size(); i++) {
+      vk::ImageViewCreateInfo createInfo(
+          vk::ImageViewCreateFlags(), images[i], vk::ImageViewType::e2D,
+          g_requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createImageView(&createInfo, g_allocator, &imageViews[i]),
+          "Failed to create image views");
+    }
+  }
+
+  void destroy() {
+    for (auto imageView : imageViews)
+      g_device.destroyImageView(imageView, g_allocator);
+
+    g_device.destroySwapchainKHR(handle, g_allocator);
+  }
+} g_swapchain;
 
 struct Shader {
 private:
@@ -660,149 +770,63 @@ public:
 Shader g_baseShader;
 
 struct Object {
+private:
   Buffer viBuffer;
   vk::DeviceSize vOffset = 0;
 
   uint64_t nbIndices = 0;
 
+  std::vector<Buffer> uBuffers;
+
+  vk::DeviceSize
+  init_vi_buffer(const std::vector<Vertex> &vertexBuffer,
+                 const std::vector<VERTEX_INDICES_TYPE> &indexBuffer) {
+    VkDeviceSize iBufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
+    VkDeviceSize vBufferSize = sizeof(Vertex) * vertexBuffer.size();
+
+    VkDeviceSize bufferSize = iBufferSize + vBufferSize;
+    VkDeviceSize offset = iBufferSize;
+
+    Buffer stagingBuffer;
+    stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    stagingBuffer.write(indexBuffer.data(), iBufferSize);
+    stagingBuffer.write(vertexBuffer.data(), vBufferSize, offset);
+
+    viBuffer.allocate(bufferSize,
+                      vk::BufferUsageFlagBits::eTransferDst |
+                          vk::BufferUsageFlagBits::eVertexBuffer |
+                          vk::BufferUsageFlagBits::eIndexBuffer,
+                      vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    stagingBuffer.copy_to(viBuffer, bufferSize);
+
+    return offset;
+  }
+
+public:
   void init(const std::vector<Vertex> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {
-    vOffset =
-        CreateVIBuffer(vertices, indices, viBuffer.handle, viBuffer.allocation);
+    vOffset = init_vi_buffer(vertices, indices);
 
     nbIndices = indices.size();
   }
 
   void record(const vk::CommandBuffer &commandbuffer) const {
-    commandbuffer.bindIndexBuffer(viBuffer.handle, 0, VULKAN_INDICES_TYPE);
-    commandbuffer.bindVertexBuffers(0, 1, &viBuffer.handle, &vOffset);
+    commandbuffer.bindIndexBuffer(viBuffer.get_handle(), 0,
+                                  VULKAN_INDICES_TYPE);
+    commandbuffer.bindVertexBuffers(0, 1, &viBuffer.get_handle(), &vOffset);
     commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
   }
 };
 
 static struct {
-  vk::SwapchainKHR swapchain;
-
-  std::vector<vk::Image> images;
-  std::vector<vk::ImageView> imageViews;
-
   std::vector<vk::Framebuffer> framebuffers;
   std::vector<vk::CommandBuffer> commandbuffers;
 
-  vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
-
   std::unordered_map<Shader *, std::vector<Object>> objects;
-
-  void init_swapchain() {
-    SwapChainSupportDetails swapChainSupport =
-        QuerySwapChainSupport(g_physicalDevice);
-
-    vk::SurfaceFormatKHR format =
-        swapChainSupport.formats[0]; // safe since it has been checked that
-                                     // there are available formats
-    if (swapChainSupport.formats.size() == 1 &&
-        swapChainSupport.formats[0].format == vk::Format::eUndefined)
-      format = {vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear};
-    else {
-      for (const auto &availableFormat : swapChainSupport.formats) {
-        if (availableFormat.format == vk::Format::eB8G8R8A8Unorm &&
-            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-          format = availableFormat;
-      }
-    }
-
-    vk::PresentModeKHR presentMode =
-        vk::PresentModeKHR::eFifo; // Fifo mode's availability is guaranteed
-    if (requiredPresentMode != vk::PresentModeKHR::eFifo) {
-      for (const auto &availablePresentMode : swapChainSupport.presentModes) {
-        if (availablePresentMode == requiredPresentMode) {
-          presentMode = availablePresentMode;
-          break;
-        }
-      }
-
-      if (presentMode == vk::PresentModeKHR::eFifo) {
-        requiredPresentMode = vk::PresentModeKHR::eFifo;
-        std::cout << vk::to_string(requiredPresentMode)
-                  << " not supported. Using FIFO V-Sync mode instead."
-                  << std::endl;
-      }
-    }
-
-    if (swapChainSupport.capabilities.currentExtent.width !=
-        std::numeric_limits<uint32_t>::max()) {
-      g_extent = swapChainSupport.capabilities.currentExtent;
-    } else {
-      int width, height;
-      WindowHandler::GetFramebufferSize(&width, &height);
-
-      VkExtent2D actualExtent = {width, height};
-
-      actualExtent.width =
-          std::max(swapChainSupport.capabilities.minImageExtent.width,
-                   std::min(swapChainSupport.capabilities.maxImageExtent.width,
-                            actualExtent.width));
-      actualExtent.height =
-          std::max(swapChainSupport.capabilities.minImageExtent.height,
-                   std::min(swapChainSupport.capabilities.maxImageExtent.height,
-                            actualExtent.height));
-
-      g_extent = actualExtent;
-    }
-
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    if (swapChainSupport.capabilities.maxImageCount > 0 &&
-        imageCount > swapChainSupport.capabilities.maxImageCount)
-      imageCount = swapChainSupport.capabilities.maxImageCount;
-
-    QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
-    uint32_t queueFamilyIndices[] = {(uint32_t)indices.graphicsFamily,
-                                     (uint32_t)indices.presentFamily};
-
-    vk::SharingMode imageSharingMode = vk::SharingMode::eExclusive;
-    uint32_t queueFamilyIndexCount = 0;
-
-    if (indices.graphicsFamily != indices.presentFamily) {
-      imageSharingMode = vk::SharingMode::eConcurrent;
-      queueFamilyIndexCount = sizeof(queueFamilyIndices) / sizeof(uint32_t);
-    }
-
-    vk::SwapchainCreateInfoKHR createInfo(
-        vk::SwapchainCreateFlagsKHR(), g_surface, imageCount, format.format,
-        format.colorSpace, g_extent, 1,
-        vk::ImageUsageFlagBits::eColorAttachment, imageSharingMode,
-        queueFamilyIndexCount, queueFamilyIndices,
-        swapChainSupport.capabilities.currentTransform,
-        vk::CompositeAlphaFlagBitsKHR::eOpaque, presentMode, VK_TRUE
-        // swapchain
-    );
-
-    g_device.createSwapchainKHR(&createInfo, g_allocator, &swapchain);
-
-    images = g_device.getSwapchainImagesKHR(swapchain);
-    g_requiredFormat = format.format;
-
-    vk::ImageSubresourceRange imageSubresourceRange(
-        vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
-
-    imageViews.resize(images.size());
-    for (size_t i = 0; i < images.size(); i++) {
-      vk::ImageViewCreateInfo createInfo(
-          vk::ImageViewCreateFlags(), images[i], vk::ImageViewType::e2D,
-          g_requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createImageView(&createInfo, g_allocator, &imageViews[i]),
-          "Failed to create image views");
-    }
-  }
-
-  void destroy_swapchain() {
-    for (auto imageView : imageViews)
-      g_device.destroyImageView(imageView, g_allocator);
-
-    g_device.destroySwapchainKHR(swapchain, g_allocator);
-  }
 
   void init_render_pass() {
     vk::AttachmentDescription colorAttachment(
@@ -848,10 +872,10 @@ static struct {
   void destroy_shaders() { g_baseShader.destroy(); }
 
   void init_framebuffers() {
-    framebuffers.resize(imageViews.size());
+    framebuffers.resize(g_swapchain.imageViews.size());
 
-    for (size_t i = 0; i < imageViews.size(); i++) {
-      vk::ImageView attachments[] = {imageViews[i]};
+    for (size_t i = 0; i < g_swapchain.imageViews.size(); i++) {
+      vk::ImageView attachments[] = {g_swapchain.imageViews[i]};
 
       vk::FramebufferCreateInfo framebufferInfo(
           vk::FramebufferCreateFlags(), g_renderPass, 1, attachments,
@@ -939,7 +963,7 @@ static struct {
   }
 
   void init(bool initMemory = true) {
-    init_swapchain();
+    g_swapchain.init();
 
     init_render_pass();
     init_shaders();
@@ -960,7 +984,7 @@ static struct {
     destroy_shaders();
     destroy_render_pass();
 
-    destroy_swapchain();
+    g_swapchain.destroy();
   }
 
   void refresh() {
@@ -1112,7 +1136,7 @@ static void SetMainObjectsDebugNames() {
 
   g_device.setDebugUtilsObjectNameEXT(
       {vk::ObjectType::eSwapchainKHR,
-       (uint64_t)((VkSwapchainKHR)g_renderContext.swapchain), "Swapchain"},
+       (uint64_t)((VkSwapchainKHR)g_swapchain.handle), "Swapchain"},
       g_dldy);
 
   for (size_t i = 0; i < g_debugMessengers.size(); ++i)
@@ -1143,7 +1167,7 @@ static void Draw() {
 
   uint32_t imageIndex;
   vk::Result result = g_device.acquireNextImageKHR(
-      g_renderContext.swapchain, std::numeric_limits<uint64_t>::max(),
+      g_swapchain.handle, std::numeric_limits<uint64_t>::max(),
       g_imageAvailableSemaphores[g_currentFrame], nullptr, &imageIndex);
 
   if (result == vk::Result::eErrorOutOfDateKHR) {
@@ -1174,7 +1198,7 @@ static void Draw() {
                         "Failed to submit draw command buffer.");
 
   vk::PresentInfoKHR presentInfo(1, &g_renderFinishedSemaphores[g_currentFrame],
-                                 1, &g_renderContext.swapchain, &imageIndex,
+                                 1, &g_swapchain.handle, &imageIndex,
                                  nullptr);
 
   result = g_presentQueue.handle.presentKHR(&presentInfo);
@@ -1449,7 +1473,7 @@ void Run(unsigned int width, unsigned int height) {
 }
 
 void SetPresentMode(PresentMode presentMode) {
-  g_renderContext.requiredPresentMode =
+  g_swapchain.requiredPresentMode =
       static_cast<vk::PresentModeKHR>(presentMode);
   g_renderContext.refresh();
 }
