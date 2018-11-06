@@ -17,7 +17,7 @@
 #include <vector>
 
 //-----------------------------------------------------------------------------
-// MACROS
+// GENERAL MACROS
 //-----------------------------------------------------------------------------
 
 // Redundant pattern
@@ -656,6 +656,11 @@ public:
 
 struct Shader {
 private:
+  vk::DescriptorSetLayout descriptorSetLayout;
+
+  vk::Pipeline pipeline;
+  vk::PipelineLayout pipelineLayout;
+
   // TODO Separate shaders
   void init_descriptor_set_layout() {
     UniformBufferInfo<UniformMVP> info{.binding = 0};
@@ -758,10 +763,11 @@ private:
   }
 
 public:
-  vk::DescriptorSetLayout descriptorSetLayout;
-
-  vk::Pipeline pipeline;
-  vk::PipelineLayout pipelineLayout;
+  void bind_pipeline(const vk::CommandBuffer &commandbuffer) const {
+    commandbuffer.bindPipeline(
+        vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
+        pipeline);
+  }
 
   void init(const std::string &vertPath, const std::string &fragPath) {
     init_descriptor_set_layout();
@@ -941,9 +947,7 @@ static struct {
 
       // TODO mt record commands
       for (const auto &pair : objects) {
-        commandbuffers[i].bindPipeline(
-            vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
-            pair.first->pipeline);
+        pair.first->bind_pipeline(commandbuffers[i]);
 
         for (size_t j = 0; j < pair.second.size(); ++j) {
           pair.second[j].record(commandbuffers[i]);
