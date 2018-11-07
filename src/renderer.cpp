@@ -1,6 +1,6 @@
 #include "renderer.hpp"
 
-#include "configuration_constants.hpp"
+#include "configuration_helper.hpp"
 #include "maths.hpp"
 #include "window_handler.hpp"
 
@@ -10,7 +10,6 @@
 #include <fstream>
 
 #include <map>
-#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -54,110 +53,6 @@ static bool g_framebufferResized = false;
 #ifndef NDEBUG
 static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
 #endif
-
-//-----------------------------------------------------------------------------
-// CONFIGURATION HELPERS
-//-----------------------------------------------------------------------------
-
-struct QueueFamilyIndices {
-  int graphicsFamily = -1;
-  int presentFamily = -1;
-
-  bool isComplete() { return graphicsFamily >= 0 && presentFamily >= 0; }
-};
-
-static QueueFamilyIndices GetQueueFamilies(vk::PhysicalDevice device) {
-  std::vector<vk::QueueFamilyProperties> queueFamilies =
-      device.getQueueFamilyProperties();
-  QueueFamilyIndices indices;
-
-  int i = 0;
-  for (const auto &queueFamily : queueFamilies) {
-    if (queueFamily.queueCount > 0) {
-      if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
-        indices.graphicsFamily = i;
-
-      if (device.getSurfaceSupportKHR(i, g_surface))
-        indices.presentFamily = i;
-    }
-
-    if (indices.isComplete())
-      break;
-
-    i++;
-  }
-
-  return indices;
-}
-
-struct SwapChainSupportDetails {
-  vk::SurfaceCapabilitiesKHR capabilities;
-  std::vector<vk::SurfaceFormatKHR> formats;
-  std::vector<vk::PresentModeKHR> presentModes;
-};
-
-static SwapChainSupportDetails
-QuerySwapChainSupport(vk::PhysicalDevice device) {
-  SwapChainSupportDetails details;
-
-  details.capabilities = device.getSurfaceCapabilitiesKHR(g_surface);
-  details.formats = device.getSurfaceFormatsKHR(g_surface);
-  details.presentModes = device.getSurfacePresentModesKHR(g_surface);
-
-  return details;
-}
-
-static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) {
-  const std::vector<vk::ExtensionProperties> availableExtensions =
-      device.enumerateDeviceExtensionProperties();
-
-  std::set<std::string> requiredExtensions(g_deviceExtensions.begin(),
-                                           g_deviceExtensions.end());
-
-  for (const auto &extension : availableExtensions)
-    requiredExtensions.erase(extension.extensionName);
-
-  return requiredExtensions.empty();
-}
-
-static int RateDeviceSuitability(vk::PhysicalDevice device) {
-  if (!GetQueueFamilies(device).isComplete() ||
-      !CheckDeviceExtensionSupport(device))
-    return 0;
-
-  // Done separately since we need to check for the swapchain extension support
-  // first
-  SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(device);
-  if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
-    return 0;
-
-  vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
-  // vk::PhysicalDeviceFeatures deviceFeatures = device.getFeatures();
-
-  int score = 0;
-
-  // Discrete GPUs have a significant performance advantage
-  if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
-    score += 1000;
-
-  // Maximum possible size of textures affects graphics quality
-  score += deviceProperties.limits.maxImageDimension2D;
-
-  return score;
-}
-
-static vk::ShaderModule CreateShaderModule(const std::vector<char> &code) {
-  vk::ShaderModuleCreateInfo createInfo(
-      vk::ShaderModuleCreateFlags(), code.size(),
-      reinterpret_cast<const uint32_t *>(code.data()));
-
-  vk::ShaderModule shaderModule;
-  CHECK_VK_RESULT_FATAL(
-      g_device.createShaderModule(&createInfo, g_allocator, &shaderModule),
-      "Failed to create shader module");
-
-  return shaderModule;
-}
 
 //-----------------------------------------------------------------------------
 // FILE UTILS
@@ -431,7 +326,7 @@ public:
 
   void init() {
     SwapChainSupportDetails swapChainSupport =
-        QuerySwapChainSupport(g_physicalDevice);
+        QuerySwapChainSupport(g_physicalDevice, g_surface);
 
     vk::SurfaceFormatKHR format =
         swapChainSupport.formats[0]; // safe since it has been checked that
@@ -491,7 +386,7 @@ public:
         imageCount > swapChainSupport.capabilities.maxImageCount)
       imageCount = swapChainSupport.capabilities.maxImageCount;
 
-    QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
+    QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice, g_surface);
     uint32_t queueFamilyIndices[] = {(uint32_t)indices.graphicsFamily,
                                      (uint32_t)indices.presentFamily};
 
@@ -548,12 +443,26 @@ private:
   vk::Pipeline pipeline;
   vk::PipelineLayout pipelineLayout;
 
+  static vk::ShaderModule createShaderModule(const std::vector<char> &code)
+  {
+	  vk::ShaderModuleCreateInfo createInfo(
+		  vk::ShaderModuleCreateFlags(), code.size(),
+		  reinterpret_cast<const uint32_t *>(code.data()));
+
+	  vk::ShaderModule shaderModule;
+	  CHECK_VK_RESULT_FATAL(
+		  g_device.createShaderModule(&createInfo, g_allocator, &shaderModule),
+		  "Failed to create shader module");
+
+	  return shaderModule;
+  }
+
   void init_pipeline(const std::string &vertPath, const std::string &fragPath) {
     auto vertShaderCode = ReadFile(vertPath);
     auto fragShaderCode = ReadFile(fragPath);
 
-    vk::ShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-    vk::ShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+    vk::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+    vk::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo(
         vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
@@ -1165,7 +1074,7 @@ static void InitDevice() {
     std::multimap<int, vk::PhysicalDevice> candidates;
 
     for (const auto &device : devices) {
-      int score = RateDeviceSuitability(device);
+      int score = RateDeviceSuitability(device, g_surface);
       candidates.insert(std::make_pair(score, device));
     }
 
@@ -1177,7 +1086,7 @@ static void InitDevice() {
   }
 
   std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
-  const QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice);
+  const QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice, g_surface);
   const std::set<int> uniqueQueueFamilies = {indices.graphicsFamily,
                                              indices.presentFamily};
 
@@ -1219,7 +1128,7 @@ static void InitDevice() {
 }
 
 static void InitCommandPools() {
-  QueueFamilyIndices queueFamilyIndices = GetQueueFamilies(g_physicalDevice);
+  QueueFamilyIndices queueFamilyIndices = GetQueueFamilies(g_physicalDevice, g_surface);
 
   vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlags(),
                                      queueFamilyIndices.graphicsFamily);

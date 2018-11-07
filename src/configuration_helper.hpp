@@ -1,5 +1,7 @@
 #include "debug_tools.hpp"
 
+#include <set>
+
 //-----------------------------------------------------------------------------
 // MAX VALUES
 //-----------------------------------------------------------------------------
@@ -92,3 +94,97 @@ static const std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{
 #undef DEBUG_CALLBACK_RETURN_TYPE
 
 #endif
+
+//-----------------------------------------------------------------------------
+// CONFIGURATION HELPERS
+//-----------------------------------------------------------------------------
+
+struct QueueFamilyIndices {
+  int graphicsFamily = -1;
+  int presentFamily = -1;
+
+  bool isComplete() { return graphicsFamily >= 0 && presentFamily >= 0; }
+};
+
+static QueueFamilyIndices GetQueueFamilies(vk::PhysicalDevice device,
+                                           vk::SurfaceKHR surface) {
+  std::vector<vk::QueueFamilyProperties> queueFamilies =
+      device.getQueueFamilyProperties();
+  QueueFamilyIndices indices;
+
+  int i = 0;
+  for (const auto &queueFamily : queueFamilies) {
+    if (queueFamily.queueCount > 0) {
+      if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
+        indices.graphicsFamily = i;
+
+      if (device.getSurfaceSupportKHR(i, surface))
+        indices.presentFamily = i;
+    }
+
+    if (indices.isComplete())
+      break;
+
+    i++;
+  }
+
+  return indices;
+}
+
+struct SwapChainSupportDetails {
+  vk::SurfaceCapabilitiesKHR capabilities;
+  std::vector<vk::SurfaceFormatKHR> formats;
+  std::vector<vk::PresentModeKHR> presentModes;
+};
+
+static SwapChainSupportDetails QuerySwapChainSupport(vk::PhysicalDevice device,
+                                                     vk::SurfaceKHR surface) {
+  SwapChainSupportDetails details;
+
+  details.capabilities = device.getSurfaceCapabilitiesKHR(surface);
+  details.formats = device.getSurfaceFormatsKHR(surface);
+  details.presentModes = device.getSurfacePresentModesKHR(surface);
+
+  return details;
+}
+
+static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) {
+  const std::vector<vk::ExtensionProperties> availableExtensions =
+      device.enumerateDeviceExtensionProperties();
+
+  std::set<std::string> requiredExtensions(g_deviceExtensions.begin(),
+                                           g_deviceExtensions.end());
+
+  for (const auto &extension : availableExtensions)
+    requiredExtensions.erase(extension.extensionName);
+
+  return requiredExtensions.empty();
+}
+
+static int RateDeviceSuitability(vk::PhysicalDevice device,
+                                 vk::SurfaceKHR surface) {
+  if (!GetQueueFamilies(device, surface).isComplete() ||
+      !CheckDeviceExtensionSupport(device))
+    return 0;
+
+  // Done separately since we need to check for the swapchain extension support
+  // first
+  SwapChainSupportDetails swapChainSupport =
+      QuerySwapChainSupport(device, surface);
+  if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
+    return 0;
+
+  vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
+  // vk::PhysicalDeviceFeatures deviceFeatures = device.getFeatures();
+
+  int score = 0;
+
+  // Discrete GPUs have a significant performance advantage
+  if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
+    score += 1000;
+
+  // Maximum possible size of textures affects graphics quality
+  score += deviceProperties.limits.maxImageDimension2D;
+
+  return score;
+}
