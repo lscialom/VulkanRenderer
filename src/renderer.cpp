@@ -2,12 +2,9 @@
 
 #include "configuration_helper.hpp"
 #include "maths.hpp"
+#include "data_structures.hpp"
 #include "window_handler.hpp"
-
-#define VMA_IMPLEMENTATION
-#include "vk_mem_alloc.h"
-
-#include <fstream>
+#include "memory.hpp"
 
 #include <map>
 #include <unordered_map>
@@ -37,7 +34,6 @@ static Queue g_graphicsQueue;
 static Queue g_presentQueue;
 
 static vk::CommandPool g_commandPool;
-static vk::CommandPool g_stagingCommandPool;
 
 static vk::DescriptorPool g_descriptorPool;
 static vk::DescriptorSetLayout g_mvpDescriptorSetLayout;
@@ -53,255 +49,6 @@ static bool g_framebufferResized = false;
 #ifndef NDEBUG
 static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
 #endif
-
-//-----------------------------------------------------------------------------
-// FILE UTILS
-//-----------------------------------------------------------------------------
-
-static std::vector<char> ReadFile(const std::string &filename) {
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-  if (!file.is_open()) {
-    std::cerr << "[ERROR] "
-              << "Could not open file " << filename << std::endl;
-    return {};
-  }
-
-  size_t fileSize = (size_t)file.tellg();
-  std::vector<char> buffer(fileSize);
-
-  file.seekg(0);
-  file.read(buffer.data(), fileSize);
-
-  file.close();
-
-  return buffer;
-}
-
-//-----------------------------------------------------------------------------
-// RENDER DATA STRUCTURES
-//-----------------------------------------------------------------------------
-
-struct Vertex {
-  Eigen::Vector2f pos;
-  Eigen::Vector3f color;
-
-  static vk::VertexInputBindingDescription get_binding_description() {
-    return vk::VertexInputBindingDescription(0, sizeof(Vertex),
-                                             vk::VertexInputRate::eVertex);
-  }
-
-  static std::array<vk::VertexInputAttributeDescription, 2>
-  get_attribute_descriptions() {
-    return std::array<vk::VertexInputAttributeDescription, 2>{
-        {{0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)},
-         {1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)}}};
-  }
-};
-
-static const std::vector<Vertex> g_vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
-
-static const std::vector<VERTEX_INDICES_TYPE> g_indices = {0, 1, 2, 2, 3, 0};
-
-template <typename T> struct UniformBufferInfo {
-  static constexpr const uint64_t size = sizeof(T);
-  static constexpr const vk::DescriptorType descriptorType =
-      vk::DescriptorType::eUniformBuffer;
-  static const vk::ShaderStageFlags shaderStage;
-
-  uint32_t binding;
-  uint32_t arraySize = 1;
-  vk::Sampler *immutableSamplers = nullptr;
-
-  vk::DescriptorSetLayoutBinding make_descriptor_set_layout_binding() {
-    return vk::DescriptorSetLayoutBinding(binding, descriptorType, arraySize,
-                                          shaderStage, immutableSamplers);
-  }
-};
-
-#define DEFINE_UBO(type, descType, shaderStageFlags)                           \
-  template <>                                                                  \
-  constexpr const vk::DescriptorType UniformBufferInfo<type>::descriptorType = \
-      descType;                                                                \
-                                                                               \
-  template <>                                                                  \
-  const vk::ShaderStageFlags UniformBufferInfo<type>::shaderStage =            \
-      shaderStageFlags;
-
-// UNIFORMBUFFERINFO SPECIALIZATIONS
-
-// UniformMVP
-struct UniformMVP {
-  Eigen::Matrix4f model;
-  Eigen::Matrix4f view;
-  Eigen::Matrix4f proj;
-};
-
-DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBuffer, // Dynamic ubo ?
-           vk::ShaderStageFlagBits::eVertex)
-
-#undef DEFINE_UBO
-
-//-----------------------------------------------------------------------------
-// MEMORY
-//-----------------------------------------------------------------------------
-
-static VmaAllocator g_vmaAllocator;
-
-struct Buffer {
-private:
-  vk::Buffer handle;
-  VmaAllocation allocation;
-  size_t size = 0;
-
-public:
-  Buffer() = default;
-
-  Buffer(const Buffer &other) = delete;
-  Buffer(Buffer &&other) {
-    handle = other.handle;
-    other.handle = nullptr;
-
-    allocation = std::move(other.allocation);
-  }
-
-  ~Buffer() {
-    if (handle)
-      vmaDestroyBuffer(g_vmaAllocator, handle, allocation);
-  }
-
-  const vk::Buffer &get_handle() const { return handle; }
-
-  void allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
-                vk::MemoryPropertyFlags properties) {
-#ifndef NDEBUG
-    if (handle)
-      printf("[WARNING] Allocating already allocated buffer. This probably "
-             "means memory leaks. (Adress = %p)",
-             (VkBuffer)handle);
-#endif
-
-    size = allocationSize;
-
-    VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufferInfo.size = size;
-    bufferInfo.usage = (VkBufferUsageFlags)usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
-    allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
-
-    CHECK_VK_RESULT_FATAL(vmaCreateBuffer(g_vmaAllocator, &bufferInfo,
-                                          &allocInfo, (VkBuffer *)&handle,
-                                          &allocation, nullptr),
-                          "Failed to create vertex buffer.");
-  }
-
-  void copy_to(Buffer &dstBuffer, VkDeviceSize copySize) const {
-    vk::CommandBufferAllocateInfo allocInfo(
-        g_stagingCommandPool, vk::CommandBufferLevel::ePrimary, 1);
-
-    vk::CommandBuffer commandBuffer;
-    g_device.allocateCommandBuffers(&allocInfo, &commandBuffer);
-
-    vk::CommandBufferBeginInfo beginInfo(
-        vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-    commandBuffer.begin(&beginInfo);
-
-    vk::BufferCopy copyRegion(0, // TODO src offset
-                              0, // TODO dst offset
-                              copySize);
-
-    commandBuffer.copyBuffer(handle, dstBuffer.handle, 1, &copyRegion);
-
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo = {};
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    g_graphicsQueue.handle.submit(1, &submitInfo, nullptr);
-    g_graphicsQueue.handle.waitIdle();
-
-    g_device.freeCommandBuffers(g_stagingCommandPool, 1, &commandBuffer);
-  }
-
-  void write(const void *data, VkDeviceSize writeSize,
-             VkDeviceSize offset = 0) const {
-
-    if (writeSize + offset > size) {
-#ifndef NDEBUG
-      printf("[WARNING] Specified write to buffer out of allocation bounds. "
-             "Data might be corrupted. (Adress = %p)",
-             (VkBuffer)handle);
-#endif
-      if (offset > size)
-        return;
-
-      writeSize = size - offset;
-    }
-
-    void *mappedMemory;
-    vmaMapMemory(g_vmaAllocator, allocation, &mappedMemory);
-    memcpy((char *)mappedMemory + offset, data, (size_t)writeSize);
-    vmaUnmapMemory(g_vmaAllocator, allocation);
-  }
-
-  Buffer &operator=(const Buffer &o) = delete;
-  Buffer &operator=(Buffer &&other) {
-    handle = other.handle;
-    other.handle = nullptr;
-
-    allocation = std::move(other.allocation);
-
-    return *this;
-  }
-};
-
-// static void CreateVertexBuffer(const std::vector<Vertex> &vertexBuffer,
-//                               Buffer &buffer) {
-//  VkDeviceSize bufferSize = sizeof(Vertex) * vertexBuffer.size();
-//
-//  Buffer stagingBuffer;
-//  stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-//                         vk::MemoryPropertyFlagBits::eHostVisible |
-//                             vk::MemoryPropertyFlagBits::eHostCoherent);
-//
-//  stagingBuffer.write(vertexBuffer.data(), bufferSize);
-//
-//  buffer.allocate(bufferSize,
-//                  vk::BufferUsageFlagBits::eTransferDst |
-//                      vk::BufferUsageFlagBits::eVertexBuffer,
-//                  vk::MemoryPropertyFlagBits::eDeviceLocal);
-//
-//  stagingBuffer.copy_to(buffer, bufferSize);
-//}
-//
-// static void
-// CreateIndexBuffer(const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
-//                  Buffer &buffer) {
-//  VkDeviceSize bufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
-//
-//  Buffer stagingBuffer;
-//  stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-//                         vk::MemoryPropertyFlagBits::eHostVisible |
-//                             vk::MemoryPropertyFlagBits::eHostCoherent);
-//
-//  stagingBuffer.write(indexBuffer.data(), bufferSize);
-//
-//  buffer.allocate(bufferSize,
-//                  vk::BufferUsageFlagBits::eTransferDst |
-//                      vk::BufferUsageFlagBits::eIndexBuffer,
-//                  vk::MemoryPropertyFlagBits::eDeviceLocal);
-//
-//  stagingBuffer.copy_to(buffer, bufferSize);
-//}
 
 //-----------------------------------------------------------------------------
 // RENDER CONTEXT
@@ -443,7 +190,7 @@ private:
   vk::Pipeline pipeline;
   vk::PipelineLayout pipelineLayout;
 
-  static vk::ShaderModule createShaderModule(const std::vector<char> &code)
+  static vk::ShaderModule CreateShaderModule(const std::vector<char> &code)
   {
 	  vk::ShaderModuleCreateInfo createInfo(
 		  vk::ShaderModuleCreateFlags(), code.size(),
@@ -461,8 +208,8 @@ private:
     auto vertShaderCode = ReadFile(vertPath);
     auto fragShaderCode = ReadFile(fragPath);
 
-    vk::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-    vk::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+    vk::ShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+    vk::ShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
 
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo(
         vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
@@ -475,8 +222,8 @@ private:
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
                                                         fragShaderStageInfo};
 
-    auto bindingDescription = Vertex::get_binding_description();
-    auto attributeDescriptions = Vertex::get_attribute_descriptions();
+    auto bindingDescription = Vertex::GetBindingDescription();
+    auto attributeDescriptions = Vertex::GetAttributeDescription();
 
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
         vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
@@ -601,7 +348,7 @@ private:
                           vk::BufferUsageFlagBits::eIndexBuffer,
                       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    stagingBuffer.copy_to(viBuffer, bufferSize);
+    stagingBuffer.copy_to(viBuffer, bufferSize, g_device, g_graphicsQueue.handle);
 
     return offset;
   }
