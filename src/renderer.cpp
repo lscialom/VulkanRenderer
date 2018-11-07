@@ -1,141 +1,20 @@
 #include "renderer.hpp"
 
+#include "configuration_constants.hpp"
 #include "maths.hpp"
 #include "window_handler.hpp"
-
-#include <vulkan/vulkan.hpp>
 
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 
 #include <fstream>
-#include <iostream>
 
 #include <map>
 #include <set>
 #include <unordered_map>
 #include <vector>
 
-//-----------------------------------------------------------------------------
-// GENERAL MACROS
-//-----------------------------------------------------------------------------
-
-// Redundant pattern
-#define CHECK_VK_RESULT_FATAL(vk_function, msg)                                \
-  {                                                                            \
-    vk::Result res;                                                            \
-    if ((res = (vk::Result)vk_function) != vk::Result::eSuccess) {             \
-      std::string err = "[FATAL]";                                             \
-      err += msg;                                                              \
-      err += " : ";                                                            \
-      err += vk::to_string(res);                                               \
-      throw std::runtime_error(err.c_str());                                   \
-    }                                                                          \
-  }
-
-// For visibility's sake
-#define TRY_CATCH_BLOCK(msg, code)                                             \
-  try {                                                                        \
-    code                                                                       \
-  } catch (const std::exception &e) {                                          \
-    std::cerr << e.what() << "\n"                                              \
-              << "[FATAL]" << msg << std::endl;                                \
-    abort();                                                                   \
-  }
-
 namespace Renderer {
-//-----------------------------------------------------------------------------
-// FORWARD DEFINITIONS
-//-----------------------------------------------------------------------------
-
-#ifndef NDEBUG
-static std::string GetFullFormattedDebugMessage(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT *callbackData);
-#endif
-
-//-----------------------------------------------------------------------------
-// CONFIGURATION CONSTANTS
-//-----------------------------------------------------------------------------
-
-static constexpr const uint8_t MAX_IN_FLIGHT_FRAMES = 2;
-static constexpr const uint8_t MAX_OBJECT_INSTANCES_PER_TEMPLATE = 100;
-
-static constexpr const std::array<const char *, 1> g_deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
-#ifndef NDEBUG
-static constexpr const uint8_t INSTANCE_DEBUG_EXTENSION_COUNT = 1;
-#else
-static constexpr const uint8_t INSTANCE_DEBUG_EXTENSION_COUNT = 0;
-#endif
-
-static constexpr const uint8_t INSTANCE_EXTENSION_COUNT =
-    0 + INSTANCE_DEBUG_EXTENSION_COUNT;
-static constexpr const std::array<const char *, INSTANCE_EXTENSION_COUNT>
-    g_instanceExtensions = {
-#ifndef NDEBUG
-        VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-#endif
-};
-
-#ifndef NDEBUG
-static constexpr const std::array<const char *, 2> g_validationLayers = {
-    "VK_LAYER_LUNARG_standard_validation", "VK_LAYER_LUNARG_monitor"};
-
-#define DEBUG_CALLBACK_RETURN_TYPE VkBool32
-
-#define DEBUG_CALLBACK_ARGUMENTS                                               \
-  VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,                      \
-      VkDebugUtilsMessageTypeFlagsEXT messageType,                             \
-      const VkDebugUtilsMessengerCallbackDataEXT *callbackData, void *userData
-
-struct DebugMessengerInfo {
-  using DebugCallbackfn = DEBUG_CALLBACK_RETURN_TYPE(VKAPI_CALL *)(
-      DEBUG_CALLBACK_ARGUMENTS) VKAPI_ATTR;
-
-  const char *name;
-
-  vk::DebugUtilsMessageSeverityFlagsEXT severityFlags;
-  vk::DebugUtilsMessageTypeFlagsEXT typeFlags;
-
-  DebugCallbackfn callback;
-  void *userData = nullptr;
-
-  vk::DebugUtilsMessengerCreateInfoEXT MakeCreateInfo() const {
-    return vk::DebugUtilsMessengerCreateInfoEXT(
-        vk::DebugUtilsMessengerCreateFlagsEXT(), severityFlags, typeFlags,
-        callback, userData);
-  }
-};
-
-static const std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{
-    {{"Debug Messenger",
-      vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-          vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-          vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
-      vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-          vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-          vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-      [](DEBUG_CALLBACK_ARGUMENTS) -> DEBUG_CALLBACK_RETURN_TYPE {
-        std::cout << GetFullFormattedDebugMessage(messageSeverity, messageType,
-                                                  callbackData)
-                  << std::endl;
-        return VK_FALSE;
-      },
-      nullptr}}};
-
-#undef DEBUG_CALLBACK_ARGUMENTS
-#undef DEBUG_CALLBACK_RETURN_TYPE
-
-#endif
-
-#define VERTEX_INDICES_TYPE uint16_t
-#define VULKAN_INDICES_TYPE                                                    \
-  (sizeof(VERTEX_INDICES_TYPE) == sizeof(uint16_t) ? vk::IndexType::eUint16    \
-                                                   : vk::IndexType::eUint32)
-
 //-----------------------------------------------------------------------------
 // GLOBAL CONTEXT
 //-----------------------------------------------------------------------------
@@ -171,6 +50,10 @@ static vk::AllocationCallbacks *g_allocator = nullptr;
 static vk::DispatchLoaderDynamic g_dldy;
 
 static bool g_framebufferResized = false;
+
+#ifndef NDEBUG
+static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
+#endif
 
 //-----------------------------------------------------------------------------
 // CONFIGURATION HELPERS
@@ -1109,100 +992,8 @@ static struct {
 // DEBUG UTILS
 //-----------------------------------------------------------------------------
 
+//TODO Replace with sth more convenient
 #ifndef NDEBUG
-static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
-
-static std::string
-GetDebugMessagePrefix(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                      VkDebugUtilsMessageTypeFlagsEXT messageType) {
-  std::string prefix = vk::to_string(
-      static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(messageSeverity));
-
-  prefix += " : ";
-  prefix += vk::to_string(
-      static_cast<vk::DebugUtilsMessageTypeFlagsEXT>(messageType));
-
-  std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::toupper);
-
-  return prefix;
-}
-
-static std::string
-FormatDebugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                   VkDebugUtilsMessageTypeFlagsEXT messageType,
-                   const VkDebugUtilsMessengerCallbackDataEXT *callbackData) {
-  char *buf = (char *)malloc(strlen(callbackData->pMessage) + 500);
-
-  sprintf(buf, "%s - Message ID Number %d, Message ID Name : %s\n\t%s",
-          GetDebugMessagePrefix(messageSeverity, messageType).c_str(),
-          callbackData->messageIdNumber, callbackData->pMessageIdName,
-          callbackData->pMessage);
-
-  std::string message = buf;
-  free(buf);
-
-  return message;
-}
-
-static std::string StringifyDebugMessageObjects(
-    const VkDebugUtilsMessengerCallbackDataEXT *callbackData) {
-  if (callbackData->objectCount == 0)
-    return std::string();
-
-  char tmp[500];
-  sprintf(tmp, "\n\n\t Objects - %d\n", callbackData->objectCount);
-
-  std::string message(tmp);
-  for (uint32_t object = 0; object < callbackData->objectCount; ++object) {
-    char tmp_message[500];
-    sprintf(
-        tmp_message, "\t\t Object[%d] - Type %s, Value %p, Name \"%s\"\n",
-        object,
-        vk::to_string((vk::ObjectType)callbackData->pObjects[object].objectType)
-            .c_str(),
-        (void *)(callbackData->pObjects[object].objectHandle),
-        callbackData->pObjects[object].pObjectName);
-
-    message += tmp_message;
-  }
-
-  return message;
-}
-
-static std::string StringifyDebugMessageLabels(
-    const VkDebugUtilsMessengerCallbackDataEXT *callbackData) {
-  if (callbackData->cmdBufLabelCount == 0)
-    return std::string();
-
-  char tmp[500];
-  sprintf(tmp, "\n\n\t Command Buffer Labels - %d\n",
-          callbackData->cmdBufLabelCount);
-
-  std::string message(tmp);
-  for (uint32_t label = 0; label < callbackData->cmdBufLabelCount; ++label) {
-    char tmp_message[500];
-    sprintf(tmp_message, "\t\t Label[%d] - %s { %f, %f, %f, %f}\n", label,
-            callbackData->pCmdBufLabels[label].pLabelName,
-            callbackData->pCmdBufLabels[label].color[0],
-            callbackData->pCmdBufLabels[label].color[1],
-            callbackData->pCmdBufLabels[label].color[2],
-            callbackData->pCmdBufLabels[label].color[3]);
-
-    message += tmp_message;
-  }
-
-  return message;
-}
-
-static std::string GetFullFormattedDebugMessage(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT *callbackData) {
-  return FormatDebugMessage(messageSeverity, messageType, callbackData) +
-         StringifyDebugMessageObjects(callbackData) +
-         StringifyDebugMessageLabels(callbackData);
-}
-
 static void SetMainObjectsDebugNames() {
   g_device.setDebugUtilsObjectNameEXT({vk::ObjectType::eInstance,
                                        (uint64_t)((VkInstance)g_instance),
