@@ -69,7 +69,7 @@ struct UniformMVP {
   Eigen::Matrix4f proj;
 };
 
-DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBuffer, // Dynamic ubo ?
+DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBufferDynamic,
            vk::ShaderStageFlagBits::eVertex)
 
 #undef DEFINE_UBO

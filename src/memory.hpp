@@ -97,10 +97,10 @@ public:
     if (writeSize + offset > size) {
 #ifndef NDEBUG
       printf("[WARNING] Specified write to buffer out of allocation bounds. "
-             "Data might be corrupted. (Adress = %p)",
+             "Data might be corrupted. (Address = %p)",
              (VkBuffer)handle);
 #endif
-      if (offset > size)
+      if (offset >= size)
         return;
 
       writeSize = size - offset;
