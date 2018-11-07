@@ -1,9 +1,9 @@
 #include "renderer.hpp"
+
+#include "maths.hpp"
 #include "window_handler.hpp"
 
 #include <vulkan/vulkan.hpp>
-
-#include <Eigen/Dense>
 
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
@@ -60,6 +60,7 @@ static std::string GetFullFormattedDebugMessage(
 //-----------------------------------------------------------------------------
 
 static constexpr const uint8_t MAX_IN_FLIGHT_FRAMES = 2;
+static constexpr const uint8_t MAX_OBJECT_INSTANCES_PER_TEMPLATE = 100;
 
 static constexpr const std::array<const char *, 1> g_deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -159,6 +160,9 @@ static Queue g_presentQueue;
 
 static vk::CommandPool g_commandPool;
 static vk::CommandPool g_stagingCommandPool;
+
+static vk::DescriptorPool g_descriptorPool;
+static vk::DescriptorSetLayout g_mvpDescriptorSetLayout;
 
 static vk::RenderPass g_renderPass;
 
@@ -359,7 +363,7 @@ struct UniformMVP {
   Eigen::Matrix4f proj;
 };
 
-DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBufferDynamic,
+DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBuffer, // Dynamic ubo ?
            vk::ShaderStageFlagBits::eVertex)
 
 #undef DEFINE_UBO
@@ -656,25 +660,10 @@ public:
 
 struct Shader {
 private:
-  vk::DescriptorSetLayout descriptorSetLayout;
+  // vk::DescriptorSetLayout descriptorSetLayout;
 
   vk::Pipeline pipeline;
   vk::PipelineLayout pipelineLayout;
-
-  // TODO Separate shaders
-  void init_descriptor_set_layout() {
-    UniformBufferInfo<UniformMVP> info{.binding = 0};
-
-    vk::DescriptorSetLayoutBinding layoutBinding =
-        info.make_descriptor_set_layout_binding();
-
-    vk::DescriptorSetLayoutCreateInfo layoutInfo(
-        vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
-
-    CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
-                              &layoutInfo, g_allocator, &descriptorSetLayout),
-                          "Failed to create descriptor set layout.");
-  }
 
   void init_pipeline(const std::string &vertPath, const std::string &fragPath) {
     auto vertShaderCode = ReadFile(vertPath);
@@ -717,7 +706,7 @@ private:
     vk::PipelineRasterizationStateCreateInfo rasterizer(
         vk::PipelineRasterizationStateCreateFlags(), VK_FALSE, VK_FALSE,
         vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack,
-        vk::FrontFace::eClockwise, VK_FALSE, 0, 0, 0, 1);
+        vk::FrontFace::eCounterClockwise, VK_FALSE, 0, 0, 0, 1);
 
     vk::PipelineMultisampleStateCreateInfo multisampling(
         vk::PipelineMultisampleStateCreateFlags(), vk::SampleCountFlagBits::e1,
@@ -739,7 +728,7 @@ private:
         vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-        vk::PipelineLayoutCreateFlags(), 1, &descriptorSetLayout, 0,
+        vk::PipelineLayoutCreateFlags(), 1, &g_mvpDescriptorSetLayout, 0,
         nullptr); // TODO add custom shader ubos
 
     CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
@@ -763,6 +752,10 @@ private:
   }
 
 public:
+  const vk::PipelineLayout get_pipeline_layout() const {
+    return pipelineLayout;
+  }
+
   void bind_pipeline(const vk::CommandBuffer &commandbuffer) const {
     commandbuffer.bindPipeline(
         vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
@@ -770,21 +763,19 @@ public:
   }
 
   void init(const std::string &vertPath, const std::string &fragPath) {
-    init_descriptor_set_layout();
     init_pipeline(vertPath, fragPath);
   }
 
   void destroy() {
     g_device.destroyPipeline(pipeline, g_allocator);
     g_device.destroyPipelineLayout(pipelineLayout, g_allocator);
-
-    g_device.destroyDescriptorSetLayout(descriptorSetLayout, nullptr);
   }
 };
 
 Shader g_baseShader;
 
-//TODO pointer to shader ? Or automatically sort in a container according to shader ? Or both ?
+// TODO pointer to shader ? Or automatically sort in a container according to
+// shader ? Or both ?
 struct ObjectTemplate {
 private:
   Buffer viBuffer;
@@ -792,7 +783,8 @@ private:
 
   uint64_t nbIndices = 0;
 
-  std::vector<Buffer> uBuffers;
+  std::vector<Buffer> uMVPBuffers;
+  std::vector<vk::DescriptorSet> descriptorSets;
 
   vk::DeviceSize
   init_vi_buffer(const std::vector<Vertex> &vertexBuffer,
@@ -822,21 +814,108 @@ private:
     return offset;
   }
 
+  void init_mvp_buffer() {
+    uMVPBuffers.resize(g_swapchain.image_count());
+    for (size_t i = 0; i < uMVPBuffers.size(); ++i)
+      uMVPBuffers[i].allocate(UniformBufferInfo<UniformMVP>::size *
+                                  MAX_OBJECT_INSTANCES_PER_TEMPLATE,
+                              vk::BufferUsageFlagBits::eUniformBuffer,
+                              vk::MemoryPropertyFlagBits::eHostCoherent |
+                                  vk::MemoryPropertyFlagBits::eHostVisible);
+  }
+
+  void init_descriptor_sets() {
+    std::vector<vk::DescriptorSetLayout> layouts(g_swapchain.image_count(),
+                                                 g_mvpDescriptorSetLayout);
+
+    vk::DescriptorSetAllocateInfo allocInfo{
+        g_descriptorPool, static_cast<uint32_t>(g_swapchain.image_count()),
+        layouts.data()};
+
+    descriptorSets.resize(g_swapchain.image_count());
+    CHECK_VK_RESULT_FATAL(
+        g_device.allocateDescriptorSets(&allocInfo, descriptorSets.data()),
+        "Failed to allocate descriptor sets.");
+
+    for (size_t i = 0; i < descriptorSets.size(); ++i) {
+      vk::DescriptorBufferInfo bufferInfo{uMVPBuffers[i].get_handle(), 0,
+                                          UniformBufferInfo<UniformMVP>::size};
+
+      vk::WriteDescriptorSet descriptorWrite{descriptorSets[i],
+                                             0,
+                                             0,
+                                             1,
+                                             vk::DescriptorType::eUniformBuffer,
+                                             nullptr,
+                                             &bufferInfo,
+                                             nullptr};
+
+      g_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    }
+  }
+
 public:
   void init(const std::vector<Vertex> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {
     vOffset = init_vi_buffer(vertices, indices);
-
     nbIndices = indices.size();
+
+    init_mvp_buffer();
+    init_descriptor_sets();
   }
 
-  void record(const vk::CommandBuffer &commandbuffer) const {
+  void record(const vk::CommandBuffer &commandbuffer, Shader *shader,
+              size_t index) const {
     commandbuffer.bindIndexBuffer(viBuffer.get_handle(), 0,
                                   VULKAN_INDICES_TYPE);
     commandbuffer.bindVertexBuffers(0, 1, &viBuffer.get_handle(), &vOffset);
+
+    commandbuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                     shader->get_pipeline_layout(), 0, 1,
+                                     &descriptorSets[index], 0, nullptr);
     commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
   }
+
+  // TODO Copy each object instance's transform here.
+  void update_mvp(uint32_t currentImageIndex) const {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(
+                     currentTime - startTime)
+                     .count();
+
+    UniformMVP mvp;
+    Eigen::Affine3f rot(
+        Eigen::AngleAxisf(time * EIGEN_PI / 2.f, Eigen::Vector3f::UnitZ()));
+    Eigen::Affine3f translation(Eigen::Translation3f(Eigen::Vector3f(0, 0, 0)));
+
+    mvp.model = (translation * rot).matrix();
+
+    mvp.view = Maths::LookAt(Eigen::Vector3f(2.f, 2.f, 2.f),
+                             Eigen::Vector3f::Zero(), Eigen::Vector3f::UnitZ());
+    mvp.proj = Maths::Perspective(45.f, g_extent.width / (float)g_extent.height,
+                                  0.1f, 10.f);
+    mvp.proj(1, 1) *= -1;
+
+    uMVPBuffers[currentImageIndex].write(&mvp,
+                                         UniformBufferInfo<UniformMVP>::size);
+  }
 };
+
+static void InitDescriptorPool() {
+  vk::DescriptorPoolSize poolSize{
+      vk::DescriptorType::eUniformBuffer,
+      static_cast<uint32_t>(g_swapchain.image_count())};
+
+  vk::DescriptorPoolCreateInfo poolInfo{
+      vk::DescriptorPoolCreateFlags(),
+      static_cast<uint32_t>(g_swapchain.image_count()), 1, &poolSize};
+
+  CHECK_VK_RESULT_FATAL(
+      g_device.createDescriptorPool(&poolInfo, g_allocator, &g_descriptorPool),
+      "Failed to create descriptor pool.");
+}
 
 static struct {
   std::vector<vk::Framebuffer> framebuffers;
@@ -951,7 +1030,7 @@ static struct {
         pair.first->bind_pipeline(commandbuffers[i]);
 
         for (size_t j = 0; j < pair.second.size(); ++j) {
-          pair.second[j].record(commandbuffers[i]);
+          pair.second[j].record(commandbuffers[i], pair.first, i);
         }
       }
 
@@ -985,6 +1064,8 @@ static struct {
     init_framebuffers();
 
     if (initMemory) {
+      InitDescriptorPool();
+
       init_objects();
     }
 
@@ -1012,6 +1093,14 @@ static struct {
 
     destroy();
     init(false);
+  }
+
+  void update_transforms(uint32_t imageIndex) {
+    for (const auto &pair : objectTemplates) {
+      for (size_t j = 0; j < pair.second.size(); ++j) {
+        pair.second[j].update_mvp(imageIndex);
+      }
+    }
   }
 
 } g_renderContext;
@@ -1200,6 +1289,8 @@ static void Draw() {
   vk::PipelineStageFlags waitStage =
       vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
+  g_renderContext.update_transforms(imageIndex);
+
   vk::SubmitInfo submitInfo(1, &g_imageAvailableSemaphores[g_currentFrame],
                             &waitStage, 1,
                             &g_renderContext.commandbuffers[imageIndex], 1,
@@ -1375,6 +1466,21 @@ static void InitVMA() {
 //  }
 //}
 
+static void InitUsualDescriptorSetLayouts() {
+  UniformBufferInfo<UniformMVP> info{.binding = 0};
+
+  vk::DescriptorSetLayoutBinding layoutBinding =
+      info.make_descriptor_set_layout_binding();
+
+  vk::DescriptorSetLayoutCreateInfo layoutInfo(
+      vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
+
+  CHECK_VK_RESULT_FATAL(
+      g_device.createDescriptorSetLayout(&layoutInfo, g_allocator,
+                                         &g_mvpDescriptorSetLayout),
+      "Failed to create descriptor set layout.");
+}
+
 static void InitSyncBarriers() {
   vk::SemaphoreCreateInfo semaphoreInfo = {};
 
@@ -1409,6 +1515,9 @@ static void InitVulkan() {
   InitVMA();
 
   // InitGlobalUBOs();
+
+  // InitDescriptorPool();
+  InitUsualDescriptorSetLayouts();
 
   g_renderContext.init();
 
@@ -1453,6 +1562,10 @@ void Shutdown() {
 
       g_renderContext.destroy();
       g_renderContext.objectTemplates.clear();
+
+      g_device.destroyDescriptorSetLayout(g_mvpDescriptorSetLayout,
+                                          g_allocator);
+      g_device.destroyDescriptorPool(g_descriptorPool, g_allocator);
 
       // for (size_t i = 0; i < g_globalDSL.size(); ++i)
       //    g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
