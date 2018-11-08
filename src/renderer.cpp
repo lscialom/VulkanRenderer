@@ -221,13 +221,13 @@ private:
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
                                                         fragShaderStageInfo};
 
-    auto bindingDescription = Vertex::GetBindingDescription();
+    vk::VertexInputBindingDescription bindingDescription = Vertex::GetBindingDescription();
     auto attributeDescriptions = Vertex::GetAttributeDescription();
 
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
         vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
         static_cast<uint32_t>(attributeDescriptions.size()),
-        attributeDescriptions.data());
+        reinterpret_cast<vk::VertexInputAttributeDescription*>(attributeDescriptions.data()));
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
         vk::PipelineInputAssemblyStateCreateFlags(),

@@ -1,24 +1,27 @@
-#include <Eigen/Dense>
+#include <Eigen/Core>
 #include <vulkan/vulkan.hpp>
 
 //-----------------------------------------------------------------------------
-// VERTEX RELATED
+// VERTEX INPUT DESCRIPTION
 //-----------------------------------------------------------------------------
 
 struct Vertex {
   Eigen::Vector2f pos;
   Eigen::Vector3f color;
 
-  static vk::VertexInputBindingDescription GetBindingDescription() {
-    return vk::VertexInputBindingDescription(0, sizeof(Vertex),
-                                             vk::VertexInputRate::eVertex);
+  // Not using wrapped types here since it would prevent the function to be
+  // compile time
+  static constexpr VkVertexInputBindingDescription GetBindingDescription() {
+    return {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
   }
 
-  static std::array<vk::VertexInputAttributeDescription, 2>
+  // Not using wrapped types here since it would prevent the function to be
+  // compile time
+  static constexpr std::array<VkVertexInputAttributeDescription, 2>
   GetAttributeDescription() {
-    return std::array<vk::VertexInputAttributeDescription, 2>{
-        {{0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)},
-         {1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)}}};
+    return std::array<VkVertexInputAttributeDescription, 2>{
+        {{0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, pos)},
+         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color)}}};
   }
 };
 
@@ -29,7 +32,8 @@ static const std::vector<Vertex> g_vertices = {
     {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
     {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
 
-static const std::vector<VERTEX_INDICES_TYPE> g_indices = {0, 1, 2, 2, 3, 0};
+static constexpr const std::vector<VERTEX_INDICES_TYPE> g_indices = {0, 1, 2,
+                                                                     2, 3, 0};
 
 //-----------------------------------------------------------------------------
 // UBO RELATED
