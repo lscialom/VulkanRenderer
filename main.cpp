@@ -1,7 +1,5 @@
 #include <renderer.hpp>
 
-#include <cstdlib>
-
 #define WIDTH 800
 #define HEIGHT 600
 

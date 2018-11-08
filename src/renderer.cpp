@@ -329,16 +329,16 @@ public:
   template <typename T>
   void init(vk::DescriptorSetLayout layout,
             size_t nbElements = MAX_OBJECT_INSTANCES_PER_TEMPLATE) {
-    if (T::descriptorType == vk::DescriptorType::eUniformBufferDynamic) {
+    if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic) {
       size_t minUboAlignment = g_physicalDevice.getProperties()
                                    .limits.minUniformBufferOffsetAlignment;
-      alignment = sizeof(T::size);
+      alignment = sizeof(T::Size);
 
       if (minUboAlignment > 0) {
         alignment = (alignment + minUboAlignment - 1) & ~(minUboAlignment - 1);
       }
     } else
-      alignment = T::size;
+      alignment = T::Size;
 
     size_t nbBuffers = g_swapchain.image_count();
 
@@ -360,11 +360,11 @@ public:
         "Failed to allocate descriptor sets.");
 
     for (size_t i = 0; i < descriptorSets.size(); ++i) {
-      vk::DescriptorBufferInfo bufferInfo{buffers[i].get_handle(), 0, T::size};
+      vk::DescriptorBufferInfo bufferInfo{buffers[i].get_handle(), 0, T::Size};
 
       vk::WriteDescriptorSet descriptorWrite{
           descriptorSets[i], 0,       0,           1,
-          T::descriptorType, nullptr, &bufferInfo, nullptr};
+          T::DescriptorType, nullptr, &bufferInfo, nullptr};
 
       g_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
     }
@@ -376,7 +376,7 @@ public:
   }
 };
 
-struct ObjectTemplate {
+struct Model {
 private:
   Buffer viBuffer;
   vk::DeviceSize vOffset = 0;
@@ -470,7 +470,7 @@ public:
           Eigen::Vector3f(0, 0, (float)i / nbInstances - 0.5f)));
       mvp.model = (translation * rot).matrix();
 
-      uboMVP.write(currentImageIndex, &mvp, UniformBufferInfo<UniformMVP>::size,
+      uboMVP.write(currentImageIndex, &mvp, UniformBufferInfo<UniformMVP>::Size,
                    i);
     }
   }
@@ -494,7 +494,7 @@ static struct {
   std::vector<vk::Framebuffer> framebuffers;
   std::vector<vk::CommandBuffer> commandbuffers;
 
-  std::unordered_map<Shader *, std::vector<ObjectTemplate>> objectTemplates;
+  std::unordered_map<Shader *, std::vector<Model>> models;
 
   void init_render_pass() {
     vk::AttachmentDescription colorAttachment(
@@ -599,7 +599,7 @@ static struct {
                                         vk::SubpassContents::eInline);
 
       // TODO mt record commands
-      for (const auto &pair : objectTemplates) {
+      for (const auto &pair : models) {
         pair.first->bind_pipeline(commandbuffers[i]);
 
         for (size_t j = 0; j < pair.second.size(); ++j) {
@@ -622,10 +622,10 @@ static struct {
   }
 
   void init_objects() {
-    ObjectTemplate objectTemplate;
-    objectTemplate.init(g_vertices, g_indices);
+    Model model;
+	model.init(g_vertices, g_indices);
 
-    objectTemplates[&g_baseShader].emplace_back(std::move(objectTemplate));
+	models[&g_baseShader].emplace_back(std::move(model));
   }
 
   void init(bool initMemory = true) {
@@ -669,7 +669,7 @@ static struct {
   }
 
   void update_transforms(uint32_t imageIndex) {
-    for (const auto &pair : objectTemplates) {
+    for (const auto &pair : models) {
       for (size_t j = 0; j < pair.second.size(); ++j) {
         pair.second[j].update_mvp(imageIndex);
       }
@@ -1044,7 +1044,7 @@ void Shutdown() {
       }
 
       g_renderContext.destroy();
-      g_renderContext.objectTemplates.clear();
+      g_renderContext.models.clear();
 
       g_device.destroyDescriptorSetLayout(g_mvpDescriptorSetLayout,
                                           g_allocator);

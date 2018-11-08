@@ -36,28 +36,28 @@ static const std::vector<VERTEX_INDICES_TYPE> g_indices = {0, 1, 2, 2, 3, 0};
 //-----------------------------------------------------------------------------
 
 template <typename T> struct UniformBufferInfo {
-  static constexpr const uint64_t size = sizeof(T);
-  static constexpr const vk::DescriptorType descriptorType =
+  static constexpr const uint64_t Size = sizeof(T);
+  static constexpr const vk::DescriptorType DescriptorType =
       vk::DescriptorType::eUniformBuffer;
-  static const vk::ShaderStageFlags shaderStage;
+  static const vk::ShaderStageFlags ShaderStage;
 
   uint32_t binding;
   uint32_t arraySize = 1;
   vk::Sampler *immutableSamplers = nullptr;
 
   vk::DescriptorSetLayoutBinding make_descriptor_set_layout_binding() {
-    return vk::DescriptorSetLayoutBinding(binding, descriptorType, arraySize,
-                                          shaderStage, immutableSamplers);
+    return vk::DescriptorSetLayoutBinding(binding, DescriptorType, arraySize,
+                                          ShaderStage, immutableSamplers);
   }
 };
 
 #define DEFINE_UBO(type, descType, shaderStageFlags)                           \
   template <>                                                                  \
-  constexpr const vk::DescriptorType UniformBufferInfo<type>::descriptorType = \
+  constexpr const vk::DescriptorType UniformBufferInfo<type>::DescriptorType = \
       descType;                                                                \
                                                                                \
   template <>                                                                  \
-  const vk::ShaderStageFlags UniformBufferInfo<type>::shaderStage =            \
+  const vk::ShaderStageFlags UniformBufferInfo<type>::ShaderStage =            \
       shaderStageFlags;
 
 // UNIFORMBUFFERINFO SPECIALIZATIONS
