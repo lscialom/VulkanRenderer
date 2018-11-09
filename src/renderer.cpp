@@ -36,7 +36,7 @@ static Queue g_presentQueue;
 static vk::CommandPool g_commandPool;
 
 static vk::DescriptorPool g_descriptorPool;
-static vk::DescriptorSetLayout g_mvpDescriptorSetLayout;
+static vk::DescriptorSetLayout g_baseDescriptorSetLayout;
 
 static vk::RenderPass g_renderPass;
 
@@ -268,10 +268,11 @@ private:
         vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
 
     vk::PushConstantRange pushConstantRange{vk::ShaderStageFlagBits::eVertex, 0,
-                                            sizeof(Vertex<3>) + sizeof(Eigen::Matrix4f)};
+                                            sizeof(Vertex<3>) +
+                                                sizeof(Eigen::Matrix4f)};
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-        vk::PipelineLayoutCreateFlags(), 1, &g_mvpDescriptorSetLayout, 1,
+        vk::PipelineLayoutCreateFlags(), 1, &g_baseDescriptorSetLayout, 1,
         &pushConstantRange); // TODO add custom shader ubos
 
     CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
@@ -388,7 +389,7 @@ private:
 
   uint64_t nbIndices = 0;
 
-  UniformBufferObject uboMVP;
+  UniformBufferObject uboModelMat;
   uint64_t nbInstances = 1; // TODO change this value to 0, only
                             // here temporarily
 
@@ -429,7 +430,7 @@ public:
     vOffset = init_vi_buffer(vertices, indices);
     nbIndices = indices.size();
 
-    uboMVP.init<UniformBufferInfo<UniformMVP>>(g_mvpDescriptorSetLayout);
+	uboModelMat.init<UniformBufferInfo<UniformModelMat>>(g_baseDescriptorSetLayout);
   }
 
   template <typename Prim> void init_from_primitive() {
@@ -442,32 +443,32 @@ public:
                                   VULKAN_INDICES_TYPE);
     commandbuffer.bindVertexBuffers(0, 1, &viBuffer.get_handle(), &vOffset);
 
-    uint64_t dynamicAlignment = uboMVP.get_alignment();
+    uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
-	Eigen::Matrix4f view =
-		Maths::LookAt(Eigen::Vector3f(2.f, 2.f, 2.f), Eigen::Vector3f::Zero(),
-			Eigen::Vector3f::UnitZ());
+    Eigen::Matrix4f view =
+        Maths::LookAt(Eigen::Vector3f(2.f, 2.f, 2.f), Eigen::Vector3f::Zero(),
+                      Eigen::Vector3f::UnitZ());
 
-	Eigen::Matrix4f proj = Maths::Perspective(
-		90.f, g_extent.width / (float)g_extent.height, 0.1f, 10.f);
-	proj(1, 1) *= -1;
+    Eigen::Matrix4f proj = Maths::Perspective(
+        90.f, g_extent.width / (float)g_extent.height, 0.1f, 10.f);
+    proj(1, 1) *= -1;
 
-	Eigen::Matrix4f vp = proj * view;
-	commandbuffer.pushConstants(shader->get_pipeline_layout(),
-		vk::ShaderStageFlagBits::eVertex, 0,
-		sizeof(Eigen::Matrix4f), &vp);
+    Eigen::Matrix4f vp = proj * view;
+    commandbuffer.pushConstants(shader->get_pipeline_layout(),
+                                vk::ShaderStageFlagBits::eVertex, 0,
+                                sizeof(Eigen::Matrix4f), &vp);
 
     Eigen::Vector3f color = {0, 0, 1};
-    commandbuffer.pushConstants(shader->get_pipeline_layout(),
-                                vk::ShaderStageFlagBits::eVertex, sizeof(Eigen::Matrix4f),
-                                sizeof(Eigen::Vector3f), &color);
+    commandbuffer.pushConstants(
+        shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
+        sizeof(Eigen::Matrix4f), sizeof(Eigen::Vector3f), &color);
 
     for (uint64_t i = 0; i < nbInstances; ++i) {
       uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);
 
       commandbuffer.bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics, shader->get_pipeline_layout(), 0, 1,
-          &uboMVP.get_descriptor_set(index), 1, &dynamicOffset);
+          &uboModelMat.get_descriptor_set(index), 1, &dynamicOffset);
       commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
     }
   }
@@ -481,7 +482,7 @@ public:
                      currentTime - startTime)
                      .count();
 
-    UniformMVP mvp;
+	UniformModelMat mvp;
     Eigen::Affine3f rot(
         Eigen::AngleAxisf(time * EIGEN_PI / 2.f, Eigen::Vector3f::UnitZ()));
     Eigen::Affine3f translation;
@@ -491,7 +492,7 @@ public:
           Eigen::Vector3f(0, 0, (float)i / nbInstances - 0.5f)));
       mvp.model = (translation * rot).matrix();
 
-      uboMVP.write(currentImageIndex, &mvp, UniformBufferInfo<UniformMVP>::Size,
+	  uboModelMat.write(currentImageIndex, &mvp, UniformBufferInfo<UniformModelMat>::Size,
                    i);
     }
   }
@@ -971,7 +972,7 @@ static void InitVMA() {
 //}
 
 static void InitUsualDescriptorSetLayouts() {
-  UniformBufferInfo<UniformMVP> info{.binding = 0};
+  UniformBufferInfo<UniformModelMat> info{.binding = 0};
 
   vk::DescriptorSetLayoutBinding layoutBinding =
       info.make_descriptor_set_layout_binding();
@@ -981,7 +982,7 @@ static void InitUsualDescriptorSetLayouts() {
 
   CHECK_VK_RESULT_FATAL(
       g_device.createDescriptorSetLayout(&layoutInfo, g_allocator,
-                                         &g_mvpDescriptorSetLayout),
+                                         &g_baseDescriptorSetLayout),
       "Failed to create descriptor set layout.");
 }
 
@@ -1067,7 +1068,7 @@ void Shutdown() {
       g_renderContext.destroy();
       g_renderContext.models.clear();
 
-      g_device.destroyDescriptorSetLayout(g_mvpDescriptorSetLayout,
+      g_device.destroyDescriptorSetLayout(g_baseDescriptorSetLayout,
                                           g_allocator);
       g_device.destroyDescriptorPool(g_descriptorPool, g_allocator);
 

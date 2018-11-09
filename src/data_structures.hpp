@@ -122,11 +122,11 @@ template <typename T> struct UniformBufferInfo {
 // UNIFORMBUFFERINFO SPECIALIZATIONS
 
 // UniformMVP
-struct UniformMVP {
+struct UniformModelMat {
   Eigen::Matrix4f model;
 };
 
-DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBufferDynamic,
+DEFINE_UBO(UniformModelMat, vk::DescriptorType::eUniformBufferDynamic,
            vk::ShaderStageFlagBits::eVertex)
 
 #undef DEFINE_UBO
