@@ -64,12 +64,12 @@ template <size_t vNum, size_t iNum> struct Primitive {
   template <> PrimType::IType PrimType::Indices = __VA_ARGS__;
 
 // SQUARE
-DECLARE_PRIMITIVE(Square, 4, 6)
+DECLARE_PRIMITIVE(Plane, 4, 6)
 SET_PRIMITIVE_VERTICES(
-    Square,
+    Plane,
     {{{-0.5f, -0.5f, 0}, {0.5f, -0.5f, 0}, {0.5f, 0.5f, 0}, {-0.5f, 0.5f, 0}}})
 
-SET_PRIMITIVE_INDICES(Square, {0, 1, 2, 2, 3, 0})
+SET_PRIMITIVE_INDICES(Plane, {0, 1, 2, 2, 3, 0})
 
 // CUBE
 DECLARE_PRIMITIVE(Cube, 8, 36)

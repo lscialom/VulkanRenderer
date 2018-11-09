@@ -1209,8 +1209,8 @@ void SetPresentMode(PresentMode presentMode) {
 uint64_t CreateModel(EPrimitive primitive) {
   Model *model = new Model();
   switch (primitive) {
-  case EPrimitive::Square:
-    model->init_from_primitive<Square>();
+  case EPrimitive::Plane:
+    model->init_from_primitive<Plane>();
     break;
   case EPrimitive::Cube:
     model->init_from_primitive<Cube>();

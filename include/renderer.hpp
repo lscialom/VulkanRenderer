@@ -63,7 +63,7 @@ public:
   uint64_t get_model_id() const { return modelID; }
 };
 
-enum class EPrimitive { Square, Cube };
+enum class EPrimitive { Plane, Cube };
 
 VULKAN_RENDERER_EXPORTS uint64_t CreateModel(EPrimitive primitive);
 

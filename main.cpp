@@ -19,7 +19,7 @@ int main() {
   Renderer::ModelInstance *inst2 =
       Renderer::Spawn(cubeId, {-4.f, 0.f, 0.f}, baseRot);
 
-  uint64_t planeId = Renderer::CreateModel(Renderer::EPrimitive::Square);
+  uint64_t planeId = Renderer::CreateModel(Renderer::EPrimitive::Plane);
   Renderer::ModelInstance *plane = Renderer::Spawn(
       planeId, {0.f, -4.f, 0.f}, Renderer::Vec3::Zero(), {10.f, 10.f, 10.f});
 
