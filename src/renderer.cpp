@@ -221,13 +221,15 @@ private:
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
                                                         fragShaderStageInfo};
 
-    vk::VertexInputBindingDescription bindingDescription = Vertex::GetBindingDescription();
-    auto attributeDescriptions = Vertex::GetAttributeDescription();
+    vk::VertexInputBindingDescription bindingDescription =
+        Vertex<3>::GetBindingDescription();
+    auto attributeDescriptions = Vertex<3>::GetAttributeDescription();
 
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
         vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
         static_cast<uint32_t>(attributeDescriptions.size()),
-        reinterpret_cast<vk::VertexInputAttributeDescription*>(attributeDescriptions.data()));
+        reinterpret_cast<vk::VertexInputAttributeDescription *>(
+            attributeDescriptions.data()));
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
         vk::PipelineInputAssemblyStateCreateFlags(),
@@ -384,18 +386,18 @@ private:
   uint64_t nbIndices = 0;
 
   UniformBufferObject uboMVP;
-  uint64_t nbInstances =
-      MAX_OBJECT_INSTANCES_PER_TEMPLATE; // TODO change this value to 0, only
-                                         // here temporarily
+  uint64_t nbInstances = 1; // TODO change this value to 0, only
+                            // here temporarily
 
+  template <typename T, size_t N, size_t O>
   vk::DeviceSize
-  init_vi_buffer(const std::vector<Vertex> &vertexBuffer,
-                 const std::vector<VERTEX_INDICES_TYPE> &indexBuffer) {
-    VkDeviceSize iBufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
-    VkDeviceSize vBufferSize = sizeof(Vertex) * vertexBuffer.size();
+  init_vi_buffer(const std::array<T, N> &vertexBuffer,
+                 const std::array<VERTEX_INDICES_TYPE, O> &indexBuffer) {
+    constexpr const VkDeviceSize iBufferSize = sizeof(VERTEX_INDICES_TYPE) * O;
+    constexpr const VkDeviceSize vBufferSize = sizeof(T) * N;
 
-    VkDeviceSize bufferSize = iBufferSize + vBufferSize;
-    VkDeviceSize offset = iBufferSize;
+    constexpr const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
+    constexpr const VkDeviceSize offset = iBufferSize;
 
     Buffer stagingBuffer;
     stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
@@ -418,12 +420,17 @@ private:
   }
 
 public:
-  void init(const std::vector<Vertex> &vertices,
-            const std::vector<VERTEX_INDICES_TYPE> &indices) {
+  template <typename T, size_t N, size_t O>
+  void init(const std::array<T, N> &vertices,
+            const std::array<VERTEX_INDICES_TYPE, O> &indices) {
     vOffset = init_vi_buffer(vertices, indices);
     nbIndices = indices.size();
 
     uboMVP.init<UniformBufferInfo<UniformMVP>>(g_mvpDescriptorSetLayout);
+  }
+
+  template <typename Prim> void init_from_primitive() {
+    init(Prim::Vertices, Prim::Indices);
   }
 
   void record(const vk::CommandBuffer &commandbuffer, Shader *shader,
@@ -461,7 +468,7 @@ public:
     // TODO Move view/proj to a pushConstant (maybe model too ?)
     mvp.view = Maths::LookAt(Eigen::Vector3f(2.f, 2.f, 2.f),
                              Eigen::Vector3f::Zero(), Eigen::Vector3f::UnitZ());
-    mvp.proj = Maths::Perspective(45.f, g_extent.width / (float)g_extent.height,
+    mvp.proj = Maths::Perspective(90.f, g_extent.width / (float)g_extent.height,
                                   0.1f, 10.f);
     mvp.proj(1, 1) *= -1;
 
@@ -623,9 +630,9 @@ static struct {
 
   void init_objects() {
     Model model;
-	model.init(g_vertices, g_indices);
+    model.init_from_primitive<Cube>();
 
-	models[&g_baseShader].emplace_back(std::move(model));
+    models[&g_baseShader].emplace_back(std::move(model));
   }
 
   void init(bool initMemory = true) {
