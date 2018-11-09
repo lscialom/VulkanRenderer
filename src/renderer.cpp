@@ -520,7 +520,7 @@ public:
                                 Vec3 rot = Vec3::Zero(),
                                 Vec3 scale = {1, 1, 1}) {
     ModelInstance *inst = new ModelInstance(pos, rot, scale);
-    inst->modelID = id;
+    inst->modelID = uintptr_t(this);
 
     modelInstances.push_back(inst);
 
@@ -570,7 +570,7 @@ static struct {
   std::vector<vk::Framebuffer> framebuffers;
   std::vector<vk::CommandBuffer> commandbuffers;
 
-  std::unordered_map<Shader *, std::vector<Model>> models;
+  std::unordered_map<Shader *, std::vector<Model *>> models;
 
   void init_render_pass() {
     vk::AttachmentDescription colorAttachment(
@@ -668,7 +668,7 @@ static struct {
       pair.first->bind_pipeline(commandbuffers[index]);
 
       for (size_t j = 0; j < pair.second.size(); ++j) {
-        pair.second[j].record(commandbuffers[index], pair.first, index);
+        pair.second[j]->record(commandbuffers[index], pair.first, index);
       }
     }
 
@@ -716,6 +716,12 @@ static struct {
     destroy_render_pass();
 
     g_swapchain.destroy();
+
+    for (auto &pair : models)
+      for (size_t j = 0; j < pair.second.size(); ++j)
+        delete pair.second[j];
+
+    models.clear();
   }
 
   void refresh() {
@@ -734,7 +740,7 @@ static struct {
   void update_transforms(uint32_t imageIndex) {
     for (const auto &pair : models) {
       for (size_t j = 0; j < pair.second.size(); ++j) {
-        pair.second[j].update_mvp(imageIndex);
+        pair.second[j]->update_mvp(imageIndex);
       }
     }
   }
@@ -1109,7 +1115,6 @@ void Shutdown() {
       }
 
       g_renderContext.destroy();
-      g_renderContext.models.clear();
 
       g_device.destroyDescriptorSetLayout(g_baseDescriptorSetLayout,
                                           g_allocator);
@@ -1152,43 +1157,29 @@ void SetPresentMode(PresentMode presentMode) {
 }
 
 uint64_t CreateModel(EPrimitive primitive) {
-  Model model;
+  Model *model = new Model();
   switch (primitive) {
   case EPrimitive::Square:
-    model.init_from_primitive<Square>();
+    model->init_from_primitive<Square>();
     break;
   case EPrimitive::Cube:
-    model.init_from_primitive<Cube>();
+    model->init_from_primitive<Cube>();
     break;
   }
 
   // TODO Set different shaders
-  g_renderContext.models[&g_baseShader].emplace_back(std::move(model));
+  g_renderContext.models[&g_baseShader].push_back(model);
 
-  return g_renderContext.models[&g_baseShader].back().get_id();
+  return uintptr_t(g_renderContext.models[&g_baseShader].back());
 }
 
 ModelInstance *Spawn(uint64_t modelId, Vec3 pos, Vec3 rot, Vec3 scale) {
-  for (auto &pair : g_renderContext.models) {
-    for (size_t j = 0; j < pair.second.size(); ++j) {
-      if (pair.second[j].get_id() == modelId)
-        return pair.second[j].spawn_instance(pos, rot, scale);
-    }
-  }
-
-  return nullptr;
+  return reinterpret_cast<Model *>(modelId)->spawn_instance(pos, rot, scale);
 }
 
 void Destroy(ModelInstance *instance) {
-  uint64_t modelId = instance->get_model_id();
-  for (auto &pair : g_renderContext.models) {
-    for (size_t j = 0; j < pair.second.size(); ++j) {
-      if (pair.second[j].get_id() == modelId) {
-        pair.second[j].destroy_instance(instance);
-        return;
-      }
-    }
-  }
+  reinterpret_cast<Model *>(instance->get_model_id())
+      ->destroy_instance(instance);
 }
 
 } // namespace Renderer

@@ -33,7 +33,7 @@ int main() {
 
     inst0->rot.x = time * M_PI / 2.f;
     inst1->rot.x = baseRot.x + time * M_PI / 2.f;
-    inst2->rot.x = -baseRot.x + time * M_PI / 2.f;
+    inst2->rot.x = -(baseRot.x + time * M_PI / 2.f);
   }
 
   Renderer::Shutdown();
