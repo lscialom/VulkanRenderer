@@ -390,8 +390,10 @@ private:
   uint64_t nbIndices = 0;
 
   UniformBufferObject uboModelMat;
-  uint64_t nbInstances = 1; // TODO change this value to 0, only
-                            // here temporarily
+  // uint64_t nbInstances = 1; // TODO change this value to 0, only
+  // here temporarily
+
+  std::vector<ModelInstance *> modelInstances;
 
   template <typename T, size_t N, size_t O>
   vk::DeviceSize
@@ -424,13 +426,21 @@ private:
   }
 
 public:
+  Model() = default;
+  Model(Model &&other) = default;
+  ~Model() {
+    for (size_t i = 0; i < modelInstances.size(); ++i)
+      delete modelInstances[i];
+  }
+
   template <typename T, size_t N, size_t O>
   void init(const std::array<T, N> &vertices,
             const std::array<VERTEX_INDICES_TYPE, O> &indices) {
     vOffset = init_vi_buffer(vertices, indices);
     nbIndices = indices.size();
 
-	uboModelMat.init<UniformBufferInfo<UniformModelMat>>(g_baseDescriptorSetLayout);
+    uboModelMat.init<UniformBufferInfo<UniformModelMat>>(
+        g_baseDescriptorSetLayout);
   }
 
   template <typename Prim> void init_from_primitive() {
@@ -446,7 +456,7 @@ public:
     uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
     Eigen::Matrix4f view =
-        Maths::LookAt(Eigen::Vector3f(2.f, 2.f, 2.f), Eigen::Vector3f::Zero(),
+        Maths::LookAt(Eigen::Vector3f(8.f, 0.f, 2.f), Eigen::Vector3f::Zero(),
                       Eigen::Vector3f::UnitZ());
 
     Eigen::Matrix4f proj = Maths::Perspective(
@@ -463,7 +473,7 @@ public:
         shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
         sizeof(Eigen::Matrix4f), sizeof(Eigen::Vector3f), &color);
 
-    for (uint64_t i = 0; i < nbInstances; ++i) {
+    for (uint64_t i = 0; i < modelInstances.size(); ++i) {
       uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);
 
       commandbuffer.bindDescriptorSets(
@@ -473,27 +483,62 @@ public:
     }
   }
 
+  void spawn_instance(Vec3 pos = Vec3::Zero(), Vec3 rot = Vec3::Zero(),
+                      Vec3 scale = {1, 1, 1}) {
+    ModelInstance *inst = new ModelInstance(pos, rot, scale);
+    modelInstances.push_back(inst);
+  }
+
+  void destroy_instance(ModelInstance *inst) {
+    for (size_t i = 0; i < modelInstances.size(); ++i) {
+      if (modelInstances[i] == inst) {
+        delete inst;
+        modelInstances.erase(modelInstances.begin() + i);
+      }
+    }
+  }
+
   // TODO Copy each object instance's transform here.
   void update_mvp(uint32_t currentImageIndex) const {
-    static auto startTime = std::chrono::high_resolution_clock::now();
+    // static auto startTime = std::chrono::high_resolution_clock::now();
 
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(
-                     currentTime - startTime)
-                     .count();
+    // auto currentTime = std::chrono::high_resolution_clock::now();
+    // float time = std::chrono::duration<float, std::chrono::seconds::period>(
+    //                 currentTime - startTime)
+    //                 .count();
 
-	UniformModelMat mvp;
-    Eigen::Affine3f rot(
-        Eigen::AngleAxisf(time * EIGEN_PI / 2.f, Eigen::Vector3f::UnitZ()));
+    // UniformModelMat mvp;
+    // Eigen::Affine3f rot(
+    //    Eigen::AngleAxisf(time * EIGEN_PI / 2.f, Eigen::Vector3f::UnitZ()));
+    // Eigen::Affine3f translation;
+
+    // for (size_t i = 0; i < modelInstances.size(); ++i) {
+    //  translation = (Eigen::Translation3f(
+    //      Eigen::Vector3f(0, 0, (float)i / modelInstances.size() - 0.5f)));
+    //  mvp.model = (translation * rot).matrix();
+
+    //  uboModelMat.write(currentImageIndex, &mvp,
+    //                    UniformBufferInfo<UniformModelMat>::Size, i);
+    //}
+
+    UniformModelMat modelMat;
+    Eigen::Affine3f rotX, rotY, rotZ;
     Eigen::Affine3f translation;
+    for (size_t i = 0; i < modelInstances.size(); ++i) {
+      rotX =
+          Eigen::AngleAxisf(modelInstances[i]->rot.z, Eigen::Vector3f::UnitX());
+      rotY =
+          Eigen::AngleAxisf(modelInstances[i]->rot.y, Eigen::Vector3f::UnitY());
+      rotZ =
+          Eigen::AngleAxisf(modelInstances[i]->rot.x, Eigen::Vector3f::UnitZ());
 
-    for (size_t i = 0; i < nbInstances; ++i) {
-      translation = (Eigen::Translation3f(
-          Eigen::Vector3f(0, 0, (float)i / nbInstances - 0.5f)));
-      mvp.model = (translation * rot).matrix();
+      translation = Eigen::Translation3f(
+          Eigen::Vector3f(modelInstances[i]->pos.x, modelInstances[i]->pos.y,
+                          modelInstances[i]->pos.z));
 
-	  uboModelMat.write(currentImageIndex, &mvp, UniformBufferInfo<UniformModelMat>::Size,
-                   i);
+      modelMat.model = (translation * (rotX * rotZ * rotY)).matrix();
+      uboModelMat.write(currentImageIndex, &modelMat,
+                        UniformBufferInfo<UniformModelMat>::Size, i);
     }
   }
 };
@@ -583,17 +628,7 @@ static struct {
       g_device.destroyFramebuffer(framebuffer, g_allocator);
   }
 
-  void init_commandbuffers() {
-    commandbuffers.resize(framebuffers.size());
-
-    vk::CommandBufferAllocateInfo allocInfo(g_commandPool,
-                                            vk::CommandBufferLevel::ePrimary,
-                                            (uint32_t)commandbuffers.size());
-
-    CHECK_VK_RESULT_FATAL(
-        g_device.allocateCommandBuffers(&allocInfo, commandbuffers.data()),
-        "Failed to allocate command buffers.");
-
+  void update_commandbuffer(size_t index) const {
     vk::CommandBufferBeginInfo beginInfo(
         vk::CommandBufferUsageFlagBits::eSimultaneousUse, nullptr);
 
@@ -606,35 +641,45 @@ static struct {
     vk::ClearColorValue clearColorValue = clearColorArray;
 
     vk::ClearValue clearColor(clearColorValue);
-    for (size_t i = 0; i < commandbuffers.size(); i++) {
-      CHECK_VK_RESULT_FATAL(commandbuffers[i].begin(&beginInfo),
-                            "Failed to begin recording command buffer.");
+    CHECK_VK_RESULT_FATAL(commandbuffers[index].begin(&beginInfo),
+                          "Failed to begin recording command buffer.");
 
-      vk::RenderPassBeginInfo renderPassInfo(
-          g_renderPass, framebuffers[i], {{0, 0}, g_extent}, 1, &clearColor);
+    vk::RenderPassBeginInfo renderPassInfo(g_renderPass, framebuffers[index],
+                                           {{0, 0}, g_extent}, 1, &clearColor);
 
-      commandbuffers[i].setViewport(
-          0, 1,
-          &viewport); // TODO buffers are recorded once so can't change viewport
+    commandbuffers[index].setViewport(
+        0, 1,
+        &viewport); // TODO buffers are recorded once so can't change viewport
 
-      commandbuffers[i].beginRenderPass(&renderPassInfo,
-                                        vk::SubpassContents::eInline);
+    commandbuffers[index].beginRenderPass(&renderPassInfo,
+                                          vk::SubpassContents::eInline);
 
-      // TODO mt record commands
-      for (const auto &pair : models) {
-        pair.first->bind_pipeline(commandbuffers[i]);
+    // TODO mt record commands
+    for (const auto &pair : models) {
+      pair.first->bind_pipeline(commandbuffers[index]);
 
-        for (size_t j = 0; j < pair.second.size(); ++j) {
-          pair.second[j].record(commandbuffers[i], pair.first, i);
-        }
+      for (size_t j = 0; j < pair.second.size(); ++j) {
+        pair.second[j].record(commandbuffers[index], pair.first, index);
       }
-
-      commandbuffers[i].endRenderPass();
-
-      commandbuffers[i]
-          .end(); // Strangely, it does returns void instead of vk::Result so no
-                  // error checking is possible here
     }
+
+    commandbuffers[index].endRenderPass();
+
+    commandbuffers[index]
+        .end(); // Strangely, it does returns void instead of vk::Result so no
+                // error checking is possible here
+  }
+
+  void init_commandbuffers() {
+    commandbuffers.resize(framebuffers.size());
+
+    vk::CommandBufferAllocateInfo allocInfo(g_commandPool,
+                                            vk::CommandBufferLevel::ePrimary,
+                                            (uint32_t)commandbuffers.size());
+
+    CHECK_VK_RESULT_FATAL(
+        g_device.allocateCommandBuffers(&allocInfo, commandbuffers.data()),
+        "Failed to allocate command buffers.");
   }
 
   void destroy_commandbuffers() {
@@ -646,6 +691,8 @@ static struct {
   void init_objects() {
     Model model;
     model.init_from_primitive<Cube>();
+    model.spawn_instance();
+    model.spawn_instance({0.f, 4.f, 0.f}, {EIGEN_PI / 4.f, 0, 0});
 
     models[&g_baseShader].emplace_back(std::move(model));
   }
@@ -793,6 +840,7 @@ static void Draw() {
       vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
   g_renderContext.update_transforms(imageIndex);
+  g_renderContext.update_commandbuffer(imageIndex);
 
   vk::SubmitInfo submitInfo(1, &g_imageAvailableSemaphores[g_currentFrame],
                             &waitStage, 1,
@@ -935,8 +983,9 @@ static void InitCommandPools() {
   QueueFamilyIndices queueFamilyIndices =
       GetQueueFamilies(g_physicalDevice, g_surface);
 
-  vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlags(),
-                                     queueFamilyIndices.graphicsFamily);
+  vk::CommandPoolCreateInfo poolInfo(
+      vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+      queueFamilyIndices.graphicsFamily);
 
   vk::CommandPoolCreateInfo stagingPoolInfo(
       vk::CommandPoolCreateFlagBits::eTransient,
