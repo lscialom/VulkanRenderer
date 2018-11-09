@@ -414,6 +414,37 @@ public:
   }
 };
 
+struct ModelInstanceInternal : ModelInstance {
+private:
+  Eigen::Matrix4f matrix;
+
+  ModelInstanceInternal(Vec3 _pos = Vec3::Zero(), Vec3 _rot = Vec3::Zero(),
+                        Vec3 _scale = {1, 1, 1})
+      : ModelInstance(_pos, _rot, _scale) {}
+
+  void update_matrix() {
+    if (upToDate)
+      return;
+
+    Eigen::Affine3f rotX, rotY, rotZ;
+    Eigen::Affine3f translation;
+
+    rotX = Eigen::AngleAxisf(rot.z, Eigen::Vector3f::UnitX());
+    rotY = Eigen::AngleAxisf(rot.y, Eigen::Vector3f::UnitY());
+    rotZ = Eigen::AngleAxisf(rot.x, Eigen::Vector3f::UnitZ());
+
+    translation = Eigen::Translation3f(Eigen::Vector3f(pos.z, pos.x, pos.y));
+
+    matrix = (translation * (rotX * rotZ * rotY) *
+              Eigen::Scaling(scale.z, scale.x, scale.y))
+                 .matrix();
+
+    upToDate = true;
+  }
+
+  friend struct Model;
+};
+
 struct Model {
 private:
   Buffer viBuffer;
@@ -423,7 +454,7 @@ private:
 
   // UniformBufferObject uboModelMat;
 
-  std::vector<ModelInstance *> modelInstances;
+  std::vector<ModelInstanceInternal *> modelInstances;
 
   uint64_t id;
 
@@ -505,7 +536,6 @@ public:
                                 vk::ShaderStageFlagBits::eVertex, 0,
                                 sizeof(Eigen::Matrix4f), &vp);
 
-    Eigen::Matrix4f modelMat;
     for (uint64_t i = 0; i < modelInstances.size(); ++i) {
       // uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);
 
@@ -513,7 +543,7 @@ public:
       //    vk::PipelineBindPoint::eGraphics, shader->get_pipeline_layout(), 0,
       //    1, &uboModelMat.get_descriptor_set(index), 1, &dynamicOffset);
 
-      modelMat = update_mvp(i);
+      modelInstances[i]->update_matrix();
 
       commandbuffer.pushConstants(
           shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
@@ -522,7 +552,7 @@ public:
 
       commandbuffer.pushConstants(
           shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
-          sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f), &modelMat);
+          sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f), &modelInstances[i]->matrix);
 
       commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
     }
@@ -531,7 +561,7 @@ public:
   ModelInstance *spawn_instance(Vec3 pos = Vec3::Zero(),
                                 Vec3 rot = Vec3::Zero(),
                                 Vec3 scale = {1, 1, 1}) {
-    ModelInstance *inst = new ModelInstance(pos, rot, scale);
+    ModelInstanceInternal *inst = new ModelInstanceInternal(pos, rot, scale);
     inst->modelID = uintptr_t(this);
 
     modelInstances.push_back(inst);
@@ -548,64 +578,42 @@ public:
     }
   }
 
-  // TODO Copy each object instance's transform here.
-  Eigen::Matrix4f update_mvp(uint32_t modelInstanceIndex) const {
-    // UniformModelMat modelMat;
+  // Eigen::Matrix4f update_mvp(uint32_t modelInstanceIndex) const {
+  // UniformModelMat modelMat;
 
-    // Eigen::Affine3f rotX, rotY, rotZ;
-    // Eigen::Affine3f translation;
+  // Eigen::Affine3f rotX, rotY, rotZ;
+  // Eigen::Affine3f translation;
 
-    // for (size_t i = 0; i < modelInstances.size(); ++i) {
-    //  rotX =
-    //      Eigen::AngleAxisf(modelInstances[i]->rot.z,
-    //      Eigen::Vector3f::UnitX());
-    //  rotY =
-    //      Eigen::AngleAxisf(modelInstances[i]->rot.y,
-    //      Eigen::Vector3f::UnitY());
-    //  rotZ =
-    //      Eigen::AngleAxisf(modelInstances[i]->rot.x,
-    //      Eigen::Vector3f::UnitZ());
+  // for (size_t i = 0; i < modelInstances.size(); ++i) {
+  //  rotX =
+  //      Eigen::AngleAxisf(modelInstances[i]->rot.z,
+  //      Eigen::Vector3f::UnitX());
+  //  rotY =
+  //      Eigen::AngleAxisf(modelInstances[i]->rot.y,
+  //      Eigen::Vector3f::UnitY());
+  //  rotZ =
+  //      Eigen::AngleAxisf(modelInstances[i]->rot.x,
+  //      Eigen::Vector3f::UnitZ());
 
-    //  translation = Eigen::Translation3f(
-    //      Eigen::Vector3f(modelInstances[i]->pos.z, modelInstances[i]->pos.x,
-    //                      modelInstances[i]->pos.y));
+  //  translation = Eigen::Translation3f(
+  //      Eigen::Vector3f(modelInstances[i]->pos.z, modelInstances[i]->pos.x,
+  //                      modelInstances[i]->pos.y));
 
-    // modelMat.model = (translation * (rotX * rotZ * rotY) *
-    //                  Eigen::Scaling(modelInstances[i]->scale.z,
-    //                                 modelInstances[i]->scale.x,
-    //                                 modelInstances[i]->scale.y))
-    //                     .matrix();
-    // uboModelMat.write(currentImageIndex, &modelMat,
-    //                  UniformBufferInfo<UniformModelMat>::Size, i);
+  // modelMat.model = (translation * (rotX * rotZ * rotY) *
+  //                  Eigen::Scaling(modelInstances[i]->scale.z,
+  //                                 modelInstances[i]->scale.x,
+  //                                 modelInstances[i]->scale.y))
+  //                     .matrix();
+  // uboModelMat.write(currentImageIndex, &modelMat,
+  //                  UniformBufferInfo<UniformModelMat>::Size, i);
 
-    // modelInstances[i]->mat = (translation * (rotX * rotZ * rotY) *
-    //                          Eigen::Scaling(modelInstances[i]->scale.z,
-    //                                         modelInstances[i]->scale.x,
-    //                                         modelInstances[i]->scale.y))
-    //                             .matrix();
-    //}
-
-    Eigen::Affine3f rotX, rotY, rotZ;
-    Eigen::Affine3f translation;
-
-    rotX = Eigen::AngleAxisf(modelInstances[modelInstanceIndex]->rot.z,
-                             Eigen::Vector3f::UnitX());
-    rotY = Eigen::AngleAxisf(modelInstances[modelInstanceIndex]->rot.y,
-                             Eigen::Vector3f::UnitY());
-    rotZ = Eigen::AngleAxisf(modelInstances[modelInstanceIndex]->rot.x,
-                             Eigen::Vector3f::UnitZ());
-
-    translation = Eigen::Translation3f(
-        Eigen::Vector3f(modelInstances[modelInstanceIndex]->pos.z,
-                        modelInstances[modelInstanceIndex]->pos.x,
-                        modelInstances[modelInstanceIndex]->pos.y));
-
-    return (translation * (rotX * rotZ * rotY) *
-            Eigen::Scaling(modelInstances[modelInstanceIndex]->scale.z,
-                           modelInstances[modelInstanceIndex]->scale.x,
-                           modelInstances[modelInstanceIndex]->scale.y))
-        .matrix();
-  }
+  // modelInstances[i]->mat = (translation * (rotX * rotZ * rotY) *
+  //                          Eigen::Scaling(modelInstances[i]->scale.z,
+  //                                         modelInstances[i]->scale.x,
+  //                                         modelInstances[i]->scale.y))
+  //                             .matrix();
+  //}
+  //}
 };
 
 static struct {

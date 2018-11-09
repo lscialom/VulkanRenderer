@@ -27,26 +27,40 @@ struct Vec3 {
 };
 
 struct ModelInstance {
-private:
+protected:
   uint64_t modelID;
+  bool upToDate = false;
 
-public:
   Vec3 pos;
   Vec3 rot;
   Vec3 scale;
 
-  Vec3 color = {0.66f, 0.66f, 0.66f};
-
   ModelInstance(Vec3 _pos = Vec3::Zero(), Vec3 _rot = Vec3::Zero(),
-                Vec3 _scale = {0, 0, 0}) {
+                Vec3 _scale = {1, 1, 1}) {
     pos = _pos;
     rot = _rot;
     scale = _scale;
   }
 
-  uint64_t get_model_id() const { return modelID; }
+public:
+  Vec3 color = {0.66f, 0.66f, 0.66f};
 
-  friend struct Model;
+  void SetPosition(Vec3 position) {
+    pos = position;
+    upToDate = false;
+  }
+
+  void SetRotation(Vec3 rotation) {
+    rot = rotation;
+    upToDate = false;
+  }
+
+  void SetScale(Vec3 newScale) {
+    scale = newScale;
+    upToDate = false;
+  }
+
+  uint64_t get_model_id() const { return modelID; }
 };
 
 enum class EPrimitive { Square, Cube };

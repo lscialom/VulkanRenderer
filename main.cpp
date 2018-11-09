@@ -26,7 +26,7 @@ int main() {
   inst1->color = {1.f, 0.f, 0.f};
   inst2->color = {0.f, 0.f, 1.f};
 
-  plane->color = { 1, 1, 1 };
+  plane->color = {1, 1, 1};
 
   auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -36,9 +36,9 @@ int main() {
                      currentTime - startTime)
                      .count();
 
-    inst0->rot.x = time * M_PI / 2.f;
-    inst1->rot.x = baseRot.x + time * M_PI / 2.f;
-    inst2->rot.x = -(baseRot.x + time * M_PI / 2.f);
+    inst0->SetRotation({time * M_PI / 2.f, 0, 0});
+    inst1->SetRotation({baseRot.x + time * M_PI / 2.f, 0, 0});
+    inst2->SetRotation({-(baseRot.x + time * M_PI / 2.f), 0, 0});
   }
 
   Renderer::Shutdown();
