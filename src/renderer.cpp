@@ -552,7 +552,8 @@ public:
 
       commandbuffer.pushConstants(
           shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
-          sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f), &modelInstances[i]->matrix);
+          sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f),
+          &modelInstances[i]->matrix);
 
       commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
     }
@@ -1119,7 +1120,7 @@ static void InitVulkan() {
   InitVMA();
 
   // InitGlobalUBOs();
-  InitUsualDescriptorSetLayouts();
+  InitUsualDescriptorSetLayouts(); // TODO Does nothing for now
 
   g_renderContext.init();
 

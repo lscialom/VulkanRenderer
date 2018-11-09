@@ -15,8 +15,7 @@ struct LiteralVertex {
 template <size_t N> struct Vertex {
   Eigen::Matrix<float, N, 1> pos;
 
-  // Not using wrapped types here since it would prevent the function to be
-  // compile time
+  // Non-wrapped type for constexpr qualifier
   static constexpr VkVertexInputBindingDescription GetBindingDescription() {
     return {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
   }
@@ -32,14 +31,13 @@ template <size_t N> struct Vertex {
     }
   }
 
-  // Not using wrapped types here since it would prevent the function to be
-  // compile time
+  // Non-wrapped type for constexpr qualifier
   static constexpr auto GetAttributeDescription() {
     return std::array<VkVertexInputAttributeDescription, 1>{
         {{0, 0, GetFormatFromDimension(), offsetof(Vertex, pos)}}};
   }
 
-  static_assert(N != 0);
+  static_assert(N >= 2 && N <= 4);
 };
 
 //-----------------------------------------------------------------------------
@@ -98,7 +96,9 @@ template <typename T> struct UniformBufferInfo {
   static constexpr const uint64_t Size = sizeof(T);
   static constexpr const vk::DescriptorType DescriptorType =
       vk::DescriptorType::eUniformBuffer;
-  static const vk::ShaderStageFlags ShaderStage;
+
+  // Non-wrapped type for constexpr qualifier
+  static constexpr const VkShaderStageFlags ShaderStage = 0;
 
   uint32_t binding;
   uint32_t arraySize = 1;
@@ -106,7 +106,8 @@ template <typename T> struct UniformBufferInfo {
 
   vk::DescriptorSetLayoutBinding make_descriptor_set_layout_binding() {
     return vk::DescriptorSetLayoutBinding(binding, DescriptorType, arraySize,
-                                          ShaderStage, immutableSamplers);
+                                          vk::ShaderStageFlags(ShaderStage),
+                                          immutableSamplers);
   }
 };
 
@@ -116,8 +117,8 @@ template <typename T> struct UniformBufferInfo {
       descType;                                                                \
                                                                                \
   template <>                                                                  \
-  const vk::ShaderStageFlags UniformBufferInfo<type>::ShaderStage =            \
-      shaderStageFlags;
+  constexpr const VkShaderStageFlags UniformBufferInfo<type>::ShaderStage =    \
+      (VkShaderStageFlags)shaderStageFlags;
 
 // UNIFORMBUFFERINFO SPECIALIZATIONS
 
