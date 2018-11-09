@@ -418,10 +418,10 @@ private:
   uint64_t nbIndices = 0;
 
   UniformBufferObject uboModelMat;
-  // uint64_t nbInstances = 1; // TODO change this value to 0, only
-  // here temporarily
 
   std::vector<ModelInstance *> modelInstances;
+
+  uint64_t id;
 
   template <typename T, size_t N, size_t O>
   vk::DeviceSize
@@ -454,12 +454,17 @@ private:
   }
 
 public:
-  Model() = default;
+  Model() {
+    static uint64_t idCounter = 0;
+    id = idCounter++;
+  }
   Model(Model &&other) = default;
   ~Model() {
     for (size_t i = 0; i < modelInstances.size(); ++i)
       delete modelInstances[i];
   }
+
+  uint64_t get_id() const { return id; }
 
   template <typename T, size_t N, size_t O>
   void init(const std::array<T, N> &vertices,
@@ -511,10 +516,15 @@ public:
     }
   }
 
-  void spawn_instance(Vec3 pos = Vec3::Zero(), Vec3 rot = Vec3::Zero(),
-                      Vec3 scale = {1, 1, 1}) {
+  ModelInstance *spawn_instance(Vec3 pos = Vec3::Zero(),
+                                Vec3 rot = Vec3::Zero(),
+                                Vec3 scale = {1, 1, 1}) {
     ModelInstance *inst = new ModelInstance(pos, rot, scale);
+    inst->modelID = id;
+
     modelInstances.push_back(inst);
+
+    return modelInstances.back();
   }
 
   void destroy_instance(ModelInstance *inst) {
@@ -528,30 +538,11 @@ public:
 
   // TODO Copy each object instance's transform here.
   void update_mvp(uint32_t currentImageIndex) const {
-    // static auto startTime = std::chrono::high_resolution_clock::now();
-
-    // auto currentTime = std::chrono::high_resolution_clock::now();
-    // float time = std::chrono::duration<float, std::chrono::seconds::period>(
-    //                 currentTime - startTime)
-    //                 .count();
-
-    // UniformModelMat mvp;
-    // Eigen::Affine3f rot(
-    //    Eigen::AngleAxisf(time * EIGEN_PI / 2.f, Eigen::Vector3f::UnitZ()));
-    // Eigen::Affine3f translation;
-
-    // for (size_t i = 0; i < modelInstances.size(); ++i) {
-    //  translation = (Eigen::Translation3f(
-    //      Eigen::Vector3f(0, 0, (float)i / modelInstances.size() - 0.5f)));
-    //  mvp.model = (translation * rot).matrix();
-
-    //  uboModelMat.write(currentImageIndex, &mvp,
-    //                    UniformBufferInfo<UniformModelMat>::Size, i);
-    //}
-
     UniformModelMat modelMat;
+
     Eigen::Affine3f rotX, rotY, rotZ;
     Eigen::Affine3f translation;
+
     for (size_t i = 0; i < modelInstances.size(); ++i) {
       rotX =
           Eigen::AngleAxisf(modelInstances[i]->rot.z, Eigen::Vector3f::UnitX());
@@ -561,10 +552,14 @@ public:
           Eigen::AngleAxisf(modelInstances[i]->rot.x, Eigen::Vector3f::UnitZ());
 
       translation = Eigen::Translation3f(
-          Eigen::Vector3f(modelInstances[i]->pos.x, modelInstances[i]->pos.y,
-                          modelInstances[i]->pos.z));
+          Eigen::Vector3f(modelInstances[i]->pos.z, modelInstances[i]->pos.x,
+                          modelInstances[i]->pos.y));
 
-      modelMat.model = (translation * (rotX * rotZ * rotY)).matrix();
+      modelMat.model = (translation * (rotX * rotZ * rotY) *
+                        Eigen::Scaling(modelInstances[i]->scale.z,
+                                       modelInstances[i]->scale.x,
+                                       modelInstances[i]->scale.y))
+                           .matrix();
       uboModelMat.write(currentImageIndex, &modelMat,
                         UniformBufferInfo<UniformModelMat>::Size, i);
     }
@@ -702,26 +697,13 @@ static struct {
                                 commandbuffers.data());
   }
 
-  void init_objects() {
-    Model model;
-    model.init_from_primitive<Cube>();
-    model.spawn_instance();
-    model.spawn_instance({0.f, 4.f, 0.f}, {EIGEN_PI / 4.f, 0, 0});
-
-    models[&g_baseShader].emplace_back(std::move(model));
-  }
-
-  void init(bool initMemory = true) {
+  void init() {
     g_swapchain.init();
 
     init_render_pass();
     init_shaders();
 
     init_framebuffers();
-
-    if (initMemory) {
-      init_objects();
-    }
 
     init_commandbuffers();
   }
@@ -746,7 +728,7 @@ static struct {
     g_device.waitIdle();
 
     destroy();
-    init(false);
+    init();
   }
 
   void update_transforms(uint32_t imageIndex) {
@@ -1115,6 +1097,8 @@ bool Update() {
 }
 
 void Shutdown() {
+  g_device.waitIdle();
+
   TRY_CATCH_BLOCK(
       "Failed to shutdown renderer",
       for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
@@ -1157,7 +1141,6 @@ void Run(unsigned int width, unsigned int height) {
 
   while (Update())
     ;
-  g_device.waitIdle();
 
   Shutdown();
 }
@@ -1167,4 +1150,45 @@ void SetPresentMode(PresentMode presentMode) {
       static_cast<vk::PresentModeKHR>(presentMode);
   g_renderContext.refresh();
 }
+
+uint64_t CreateModel(EPrimitive primitive) {
+  Model model;
+  switch (primitive) {
+  case EPrimitive::Square:
+    model.init_from_primitive<Square>();
+    break;
+  case EPrimitive::Cube:
+    model.init_from_primitive<Cube>();
+    break;
+  }
+
+  // TODO Set different shaders
+  g_renderContext.models[&g_baseShader].emplace_back(std::move(model));
+
+  return g_renderContext.models[&g_baseShader].back().get_id();
+}
+
+ModelInstance *Spawn(uint64_t modelId, Vec3 pos, Vec3 rot, Vec3 scale) {
+  for (auto &pair : g_renderContext.models) {
+    for (size_t j = 0; j < pair.second.size(); ++j) {
+      if (pair.second[j].get_id() == modelId)
+        return pair.second[j].spawn_instance(pos, rot, scale);
+    }
+  }
+
+  return nullptr;
+}
+
+void Destroy(ModelInstance *instance) {
+  uint64_t modelId = instance->get_model_id();
+  for (auto &pair : g_renderContext.models) {
+    for (size_t j = 0; j < pair.second.size(); ++j) {
+      if (pair.second[j].get_id() == modelId) {
+        pair.second[j].destroy_instance(instance);
+        return;
+      }
+    }
+  }
+}
+
 } // namespace Renderer
