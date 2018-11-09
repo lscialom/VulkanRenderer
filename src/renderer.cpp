@@ -35,7 +35,6 @@ static Queue g_presentQueue;
 
 static vk::CommandPool g_commandPool;
 
-static vk::DescriptorPool g_descriptorPool;
 static vk::DescriptorSetLayout g_baseDescriptorSetLayout;
 
 static vk::RenderPass g_renderPass;
@@ -323,9 +322,27 @@ private:
   std::vector<Buffer> buffers;
   std::vector<vk::DescriptorSet> descriptorSets;
 
+  vk::DescriptorPool pool;
+
   size_t alignment = 0;
 
 public:
+  UniformBufferObject() = default;
+  UniformBufferObject(UniformBufferObject &&other) {
+    descriptorSets.resize(other.descriptorSets.size());
+    for (size_t i = 0; i < other.descriptorSets.size(); ++i) {
+      descriptorSets[i] = other.descriptorSets[i];
+      other.descriptorSets[i] = nullptr;
+    }
+
+    pool = other.pool;
+    other.pool = nullptr;
+
+    buffers = std::move(other.buffers);
+    alignment = other.alignment;
+  }
+  ~UniformBufferObject() { g_device.destroyDescriptorPool(pool, g_allocator); }
+
   size_t get_alignment() const { return alignment; }
 
   const vk::DescriptorSet &get_descriptor_set(size_t index) const {
@@ -348,6 +365,17 @@ public:
 
     size_t nbBuffers = g_swapchain.image_count();
 
+    vk::DescriptorPoolSize poolSize{vk::DescriptorType::eUniformBuffer,
+                                    static_cast<uint32_t>(nbBuffers)};
+
+    vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(),
+                                          static_cast<uint32_t>(nbBuffers), 1,
+                                          &poolSize};
+
+    CHECK_VK_RESULT_FATAL(
+        g_device.createDescriptorPool(&poolInfo, g_allocator, &pool),
+        "Failed to create descriptor pool.");
+
     buffers.resize(nbBuffers);
     for (size_t i = 0; i < buffers.size(); ++i)
       buffers[i].allocate(alignment * nbElements,
@@ -358,7 +386,7 @@ public:
     std::vector<vk::DescriptorSetLayout> layouts(nbBuffers, layout);
 
     vk::DescriptorSetAllocateInfo allocInfo{
-        g_descriptorPool, static_cast<uint32_t>(nbBuffers), layouts.data()};
+        pool, static_cast<uint32_t>(nbBuffers), layouts.data()};
 
     descriptorSets.resize(nbBuffers);
     CHECK_VK_RESULT_FATAL(
@@ -543,20 +571,6 @@ public:
   }
 };
 
-static void InitDescriptorPool() {
-  vk::DescriptorPoolSize poolSize{
-      vk::DescriptorType::eUniformBuffer,
-      static_cast<uint32_t>(g_swapchain.image_count())};
-
-  vk::DescriptorPoolCreateInfo poolInfo{
-      vk::DescriptorPoolCreateFlags(),
-      static_cast<uint32_t>(g_swapchain.image_count()), 1, &poolSize};
-
-  CHECK_VK_RESULT_FATAL(
-      g_device.createDescriptorPool(&poolInfo, g_allocator, &g_descriptorPool),
-      "Failed to create descriptor pool.");
-}
-
 static struct {
   std::vector<vk::Framebuffer> framebuffers;
   std::vector<vk::CommandBuffer> commandbuffers;
@@ -706,8 +720,6 @@ static struct {
     init_framebuffers();
 
     if (initMemory) {
-      InitDescriptorPool();
-
       init_objects();
     }
 
@@ -1069,8 +1081,6 @@ static void InitVulkan() {
   InitVMA();
 
   // InitGlobalUBOs();
-
-  // InitDescriptorPool();
   InitUsualDescriptorSetLayouts();
 
   g_renderContext.init();
@@ -1119,7 +1129,6 @@ void Shutdown() {
 
       g_device.destroyDescriptorSetLayout(g_baseDescriptorSetLayout,
                                           g_allocator);
-      g_device.destroyDescriptorPool(g_descriptorPool, g_allocator);
 
       // for (size_t i = 0; i < g_globalDSL.size(); ++i)
       //    g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
