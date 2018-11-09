@@ -23,6 +23,11 @@ int main() {
   Renderer::ModelInstance *plane = Renderer::Spawn(
       planeId, {0.f, -4.f, 0.f}, Renderer::Vec3::Zero(), {10.f, 10.f, 10.f});
 
+  inst1->color = {1.f, 0.f, 0.f};
+  inst2->color = {0.f, 0.f, 1.f};
+
+  plane->color = { 1, 1, 1 };
+
   auto startTime = std::chrono::high_resolution_clock::now();
 
   while (Renderer::Update()) {
