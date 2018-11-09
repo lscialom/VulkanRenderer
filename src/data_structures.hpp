@@ -61,7 +61,7 @@ template <size_t vNum, size_t iNum> struct Primitive {
 #define SET_PRIMITIVE_INDICES(PrimType, ...)                                   \
   template <> PrimType::IType PrimType::Indices = __VA_ARGS__;
 
-// SQUARE
+// PLANE
 DECLARE_PRIMITIVE(Plane, 4, 6)
 SET_PRIMITIVE_VERTICES(
     Plane,
