@@ -267,9 +267,12 @@ private:
     vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo(
         vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
 
+    vk::PushConstantRange pushConstantRange{vk::ShaderStageFlagBits::eVertex, 0,
+                                            sizeof(Vertex<3>) + sizeof(Eigen::Matrix4f)};
+
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-        vk::PipelineLayoutCreateFlags(), 1, &g_mvpDescriptorSetLayout, 0,
-        nullptr); // TODO add custom shader ubos
+        vk::PipelineLayoutCreateFlags(), 1, &g_mvpDescriptorSetLayout, 1,
+        &pushConstantRange); // TODO add custom shader ubos
 
     CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
                                                         g_allocator,
@@ -441,6 +444,24 @@ public:
 
     uint64_t dynamicAlignment = uboMVP.get_alignment();
 
+	Eigen::Matrix4f view =
+		Maths::LookAt(Eigen::Vector3f(2.f, 2.f, 2.f), Eigen::Vector3f::Zero(),
+			Eigen::Vector3f::UnitZ());
+
+	Eigen::Matrix4f proj = Maths::Perspective(
+		90.f, g_extent.width / (float)g_extent.height, 0.1f, 10.f);
+	proj(1, 1) *= -1;
+
+	Eigen::Matrix4f vp = proj * view;
+	commandbuffer.pushConstants(shader->get_pipeline_layout(),
+		vk::ShaderStageFlagBits::eVertex, 0,
+		sizeof(Eigen::Matrix4f), &vp);
+
+    Eigen::Vector3f color = {0, 0, 1};
+    commandbuffer.pushConstants(shader->get_pipeline_layout(),
+                                vk::ShaderStageFlagBits::eVertex, sizeof(Eigen::Matrix4f),
+                                sizeof(Eigen::Vector3f), &color);
+
     for (uint64_t i = 0; i < nbInstances; ++i) {
       uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);
 
@@ -464,13 +485,6 @@ public:
     Eigen::Affine3f rot(
         Eigen::AngleAxisf(time * EIGEN_PI / 2.f, Eigen::Vector3f::UnitZ()));
     Eigen::Affine3f translation;
-
-    // TODO Move view/proj to a pushConstant (maybe model too ?)
-    mvp.view = Maths::LookAt(Eigen::Vector3f(2.f, 2.f, 2.f),
-                             Eigen::Vector3f::Zero(), Eigen::Vector3f::UnitZ());
-    mvp.proj = Maths::Perspective(90.f, g_extent.width / (float)g_extent.height,
-                                  0.1f, 10.f);
-    mvp.proj(1, 1) *= -1;
 
     for (size_t i = 0; i < nbInstances; ++i) {
       translation = (Eigen::Translation3f(

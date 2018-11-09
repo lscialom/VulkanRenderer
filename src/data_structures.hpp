@@ -124,8 +124,6 @@ template <typename T> struct UniformBufferInfo {
 // UniformMVP
 struct UniformMVP {
   Eigen::Matrix4f model;
-  Eigen::Matrix4f view;
-  Eigen::Matrix4f proj;
 };
 
 DEFINE_UBO(UniformMVP, vk::DescriptorType::eUniformBufferDynamic,

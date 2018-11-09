@@ -8,7 +8,7 @@
 //-----------------------------------------------------------------------------
 
 static constexpr const uint8_t MAX_IN_FLIGHT_FRAMES = 2;
-static constexpr const uint8_t MAX_OBJECT_INSTANCES_PER_TEMPLATE = 100;
+static constexpr const size_t MAX_OBJECT_INSTANCES_PER_TEMPLATE = 100;
 
 //-----------------------------------------------------------------------------
 // INDICES TYPE
