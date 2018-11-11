@@ -85,8 +85,8 @@ SET_PRIMITIVE_INDICES(Cube,
                        4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3})
 
 #undef DECLARE_PRIMITIVE
-#undef DEFINE_PRIMITIVE_VERTICES
-#undef DEFINE_PRIMITIVE_INDICES
+#undef SET_PRIMITIVE_VERTICES
+#undef SET_PRIMITIVE_INDICES
 
 //-----------------------------------------------------------------------------
 // UBO RELATED
