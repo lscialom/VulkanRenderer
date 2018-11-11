@@ -10,6 +10,17 @@
 static VmaAllocator g_vmaAllocator;
 static vk::CommandPool g_stagingCommandPool;
 
+static void InitAllocator(vk::PhysicalDevice physicalDevice,
+                          vk::Device device) {
+  VmaAllocatorCreateInfo allocatorInfo = {};
+  allocatorInfo.physicalDevice = physicalDevice;
+  allocatorInfo.device = device;
+
+  vmaCreateAllocator(&allocatorInfo, &g_vmaAllocator);
+}
+
+static void DestroyAllocator() { vmaDestroyAllocator(g_vmaAllocator); }
+
 struct Buffer {
 private:
   vk::Buffer handle;
@@ -39,7 +50,7 @@ public:
 #ifndef NDEBUG
     if (handle)
       printf("[WARNING] Allocating already allocated buffer. This probably "
-             "means memory leaks. (Adress = %p)",
+             "means memory leaks. (Address = %p)",
              (VkBuffer)handle);
 #endif
 
@@ -114,6 +125,90 @@ public:
 
   Buffer &operator=(const Buffer &o) = delete;
   Buffer &operator=(Buffer &&other) {
+    handle = other.handle;
+    other.handle = nullptr;
+
+    allocation = std::move(other.allocation);
+
+    return *this;
+  }
+};
+
+struct Image {
+private:
+  vk::Image handle;
+  VmaAllocation allocation;
+  size_t size = 0;
+
+  static uint8_t GetPixelSizeFromFormat(vk::Format format) {
+    switch (format) {
+    case vk::Format::eR8G8B8A8Unorm:
+      return 4;
+    default:
+      printf("[WARNING] Unsupported image format specified (%s).",
+             vk::to_string(format).c_str());
+      return 0;
+    }
+  }
+
+public:
+  Image() = default;
+
+  Image(const Image &other) = delete;
+  Image(Image &&other) {
+    handle = other.handle;
+    other.handle = nullptr;
+
+    allocation = std::move(other.allocation);
+  }
+
+  ~Image() {
+    if (handle)
+      vmaDestroyImage(g_vmaAllocator, handle, allocation);
+  }
+
+  const vk::Image &get_handle() const { return handle; }
+
+  void allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
+                vk::ImageTiling tiling, vk::ImageUsageFlags usage,
+                vk::MemoryPropertyFlags properties) {
+#ifndef NDEBUG
+    if (handle)
+      printf("[WARNING] Allocating already allocated image. This probably "
+             "means memory leaks. (Address = %p)",
+             (VkImage)handle);
+#endif
+
+    size = texWidth * texHeight * GetPixelSizeFromFormat(format);
+
+    vk::ImageCreateInfo imageInfo{
+        vk::ImageCreateFlags(),
+        vk::ImageType::e2D,
+        format,
+        {texWidth, texHeight, 1},
+        1, // TODO Support mipmapping
+        1,
+        vk::SampleCountFlagBits::e1, // TODO Support multisampling image
+                                     // attachments
+        tiling,
+        usage,
+        vk::SharingMode::eExclusive, // TODO Support Concurrent access
+        0,
+        nullptr,
+        vk::ImageLayout::eUndefined};
+
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
+    allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
+
+    CHECK_VK_RESULT_FATAL(
+        vmaCreateImage(g_vmaAllocator, (VkImageCreateInfo *)&imageInfo,
+                       &allocInfo, (VkImage *)&handle, &allocation, nullptr),
+        "Failed to create image.");
+  }
+
+  Image &operator=(const Image &o) = delete;
+  Image &operator=(Image &&other) {
     handle = other.handle;
     other.handle = nullptr;
 

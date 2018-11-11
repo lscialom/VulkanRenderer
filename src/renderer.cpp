@@ -6,6 +6,9 @@
 #include "memory.hpp"
 #include "window_handler.hpp"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -321,6 +324,41 @@ public:
 
 Shader g_baseShader;
 
+struct Texture {
+private:
+  Image image;
+
+public:
+  void init(const std::string &path) {
+    int texWidth, texHeight, texChannels;
+    stbi_uc *pixels =
+        stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels,
+                  STBI_rgb_alpha); // TODO Support multiple pixel formats
+
+    VkDeviceSize imageSize =
+        texWidth * texHeight * 4; // TODO Support multiple pixel formats
+
+    if (!pixels) {
+      printf("[Error] Failed to load texture image %s", path.c_str());
+      return;
+    }
+
+    Buffer stagingBuffer;
+    stagingBuffer.allocate(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    stagingBuffer.write(pixels, imageSize);
+    stbi_image_free(pixels);
+
+    image.allocate(texWidth, texHeight, vk::Format::eR8G8B8A8Unorm,
+                   vk::ImageTiling::eOptimal,
+                   vk::ImageUsageFlagBits::eTransferDst |
+                       vk::ImageUsageFlagBits::eSampled,
+                   vk::MemoryPropertyFlagBits::eDeviceLocal);
+  }
+};
+
 struct UniformBufferObject {
 private:
   std::vector<Buffer> buffers;
@@ -418,8 +456,8 @@ struct ModelInstanceInternal : ModelInstance {
 private:
   Eigen::Matrix4f matrix;
 
-  ModelInstanceInternal(uint64_t modelId, Vec3 _pos = Vec3::Zero(), Vec3 _rot = Vec3::Zero(),
-                        Vec3 _scale = {1, 1, 1})
+  ModelInstanceInternal(uint64_t modelId, Vec3 _pos = Vec3::Zero(),
+                        Vec3 _rot = Vec3::Zero(), Vec3 _scale = {1, 1, 1})
       : ModelInstance(modelId, _pos, _rot, _scale) {}
 
   void update_matrix() {
@@ -562,7 +600,8 @@ public:
   ModelInstance *spawn_instance(Vec3 pos = Vec3::Zero(),
                                 Vec3 rot = Vec3::Zero(),
                                 Vec3 scale = {1, 1, 1}) {
-    ModelInstanceInternal *inst = new ModelInstanceInternal(uintptr_t(this), pos, rot, scale);
+    ModelInstanceInternal *inst =
+        new ModelInstanceInternal(uintptr_t(this), pos, rot, scale);
     modelInstances.push_back(inst);
 
     return modelInstances.back();
@@ -1050,14 +1089,6 @@ static void InitCommandPools() {
                         "Failed to create staging command pool.");
 }
 
-static void InitVMA() {
-  VmaAllocatorCreateInfo allocatorInfo = {};
-  allocatorInfo.physicalDevice = g_physicalDevice;
-  allocatorInfo.device = g_device;
-
-  vmaCreateAllocator(&allocatorInfo, &g_vmaAllocator);
-}
-
 // void InitGlobalUBOs() {
 //  for (size_t i = 0; i < g_globalDSLInfos.size(); ++i) {
 //    vk::DescriptorSetLayoutCreateInfo layoutInfo(
@@ -1115,7 +1146,7 @@ static void InitVulkan() {
   InitDevice();
 
   InitCommandPools();
-  InitVMA();
+  InitAllocator(g_physicalDevice, g_device);
 
   // InitGlobalUBOs();
   InitUsualDescriptorSetLayouts(); // TODO Does nothing for now
@@ -1171,7 +1202,7 @@ void Shutdown() {
       // for (size_t i = 0; i < g_globalDSL.size(); ++i)
       //    g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
 
-      vmaDestroyAllocator(g_vmaAllocator);
+      DestroyAllocator();
 
       g_device.destroyCommandPool(g_commandPool, g_allocator);
       g_device.destroyCommandPool(g_stagingCommandPool, g_allocator);

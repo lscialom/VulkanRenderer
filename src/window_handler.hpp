@@ -1,5 +1,8 @@
 #pragma once
 
+//TODO Handle window_handler as a separate lib
+//include vulkan based on macro
+
 #include <stdint.h>
 
 struct VkAllocationCallbacks;
