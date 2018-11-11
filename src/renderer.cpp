@@ -1067,7 +1067,7 @@ static void InitDevice() {
       g_device.getQueue(indices.presentFamily, g_presentQueue.index);
 }
 
-static void InitCommandPools() {
+static void InitCommandPool() {
   QueueFamilyIndices queueFamilyIndices =
       GetQueueFamilies(g_physicalDevice, g_surface);
 
@@ -1075,18 +1075,9 @@ static void InitCommandPools() {
       vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
       queueFamilyIndices.graphicsFamily);
 
-  vk::CommandPoolCreateInfo stagingPoolInfo(
-      vk::CommandPoolCreateFlagBits::eTransient,
-      queueFamilyIndices.graphicsFamily);
-
   CHECK_VK_RESULT_FATAL(
       g_device.createCommandPool(&poolInfo, g_allocator, &g_commandPool),
       "Failed to create command pool.");
-
-  CHECK_VK_RESULT_FATAL(g_device.createCommandPool(&stagingPoolInfo,
-                                                   g_allocator,
-                                                   &g_stagingCommandPool),
-                        "Failed to create staging command pool.");
 }
 
 // void InitGlobalUBOs() {
@@ -1145,8 +1136,9 @@ static void InitVulkan() {
                         "Failed to create window surface");
   InitDevice();
 
-  InitCommandPools();
-  InitAllocator(g_physicalDevice, g_device);
+  InitCommandPool();
+  Allocator::Init(g_physicalDevice, g_device, g_graphicsQueue.index,
+                g_allocator); // TODO Staging queue
 
   // InitGlobalUBOs();
   InitUsualDescriptorSetLayouts(); // TODO Does nothing for now
@@ -1202,10 +1194,9 @@ void Shutdown() {
       // for (size_t i = 0; i < g_globalDSL.size(); ++i)
       //    g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
 
-      DestroyAllocator();
+      Allocator::Destroy();
 
       g_device.destroyCommandPool(g_commandPool, g_allocator);
-      g_device.destroyCommandPool(g_stagingCommandPool, g_allocator);
 
       g_device.destroy(g_allocator);
 

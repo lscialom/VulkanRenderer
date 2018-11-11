@@ -1,3 +1,5 @@
+#pragma once
+
 #include "debug_tools.hpp"
 
 #include <fstream>
