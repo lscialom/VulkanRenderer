@@ -70,7 +70,8 @@ public:
                                           &allocation, nullptr),
                           "Failed to create vertex buffer.");
   }
-
+  
+  //TODO Staging queue (TRANSFER_BIT)
   void copy_to(Buffer &dstBuffer, VkDeviceSize copySize, vk::Device device,
                vk::Queue queue) const {
     vk::CommandBufferAllocateInfo allocInfo(
