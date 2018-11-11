@@ -35,8 +35,10 @@ protected:
   Vec3 rot;
   Vec3 scale;
 
-  ModelInstance(Vec3 _pos = Vec3::Zero(), Vec3 _rot = Vec3::Zero(),
-                Vec3 _scale = {1, 1, 1}) {
+  ModelInstance(uint64_t modelTemplateID, Vec3 _pos = Vec3::Zero(),
+                Vec3 _rot = Vec3::Zero(), Vec3 _scale = {1, 1, 1}) {
+    modelID = modelTemplateID;
+
     pos = _pos;
     rot = _rot;
     scale = _scale;
@@ -44,6 +46,10 @@ protected:
 
 public:
   Vec3 color = {0.66f, 0.66f, 0.66f};
+
+  Vec3 GetPosition() const { return pos; }
+  Vec3 GetRotation() const { return rot; }
+  Vec3 GetScale() const { return scale; }
 
   void SetPosition(Vec3 position) {
     pos = position;

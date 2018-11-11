@@ -418,9 +418,9 @@ struct ModelInstanceInternal : ModelInstance {
 private:
   Eigen::Matrix4f matrix;
 
-  ModelInstanceInternal(Vec3 _pos = Vec3::Zero(), Vec3 _rot = Vec3::Zero(),
+  ModelInstanceInternal(uint64_t modelId, Vec3 _pos = Vec3::Zero(), Vec3 _rot = Vec3::Zero(),
                         Vec3 _scale = {1, 1, 1})
-      : ModelInstance(_pos, _rot, _scale) {}
+      : ModelInstance(modelId, _pos, _rot, _scale) {}
 
   void update_matrix() {
     if (upToDate)
@@ -562,9 +562,7 @@ public:
   ModelInstance *spawn_instance(Vec3 pos = Vec3::Zero(),
                                 Vec3 rot = Vec3::Zero(),
                                 Vec3 scale = {1, 1, 1}) {
-    ModelInstanceInternal *inst = new ModelInstanceInternal(pos, rot, scale);
-    inst->modelID = uintptr_t(this);
-
+    ModelInstanceInternal *inst = new ModelInstanceInternal(uintptr_t(this), pos, rot, scale);
     modelInstances.push_back(inst);
 
     return modelInstances.back();
