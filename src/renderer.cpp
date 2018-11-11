@@ -28,11 +28,6 @@ static vk::SurfaceKHR g_surface;
 static vk::Format g_requiredFormat;
 static vk::Extent2D g_extent;
 
-struct Queue {
-  int index = -1;
-  vk::Queue handle = nullptr;
-};
-
 static Queue g_graphicsQueue;
 static Queue g_presentQueue;
 
@@ -520,8 +515,7 @@ private:
                           vk::BufferUsageFlagBits::eIndexBuffer,
                       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    stagingBuffer.copy_to(viBuffer, bufferSize, g_device,
-                          g_graphicsQueue.handle);
+    stagingBuffer.copy_to(viBuffer, bufferSize, g_device);
 
     return offset;
   }
@@ -1137,8 +1131,8 @@ static void InitVulkan() {
   InitDevice();
 
   InitCommandPool();
-  Allocator::Init(g_physicalDevice, g_device, g_graphicsQueue.index,
-                g_allocator); // TODO Staging queue
+  Allocator::Init(g_physicalDevice, g_device, g_graphicsQueue,
+                  g_allocator); // TODO Staging queue
 
   // InitGlobalUBOs();
   InitUsualDescriptorSetLayouts(); // TODO Does nothing for now

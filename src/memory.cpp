@@ -1,7 +1,7 @@
 #define VMA_IMPLEMENTATION
 #include "memory.hpp"
 
-#include "debug_tools.hpp"
+#include "configuration_helper.hpp"
 
 //-----------------------------------------------------------------------------
 // ALLOCATOR
@@ -13,12 +13,14 @@ vk::CommandPool g_stagingCommandPool = nullptr;
 vk::Device g_device = nullptr;
 vk::AllocationCallbacks *g_allocationCallbacks = nullptr;
 
+Queue g_stagingQueue;
+
 namespace Allocator {
 void Init(vk::PhysicalDevice physicalDevice, vk::Device deviceHandle,
-          int stagingQueueIndex,
-          vk::AllocationCallbacks *pAllocationCallbacks) {
+          ::Queue stagingQueue, vk::AllocationCallbacks *pAllocationCallbacks) {
   g_device = deviceHandle;
   g_allocationCallbacks = pAllocationCallbacks;
+  g_stagingQueue = stagingQueue;
 
   VmaAllocatorCreateInfo allocatorInfo = {};
   allocatorInfo.physicalDevice = physicalDevice;
@@ -27,7 +29,7 @@ void Init(vk::PhysicalDevice physicalDevice, vk::Device deviceHandle,
   vmaCreateAllocator(&allocatorInfo, &g_handle);
 
   vk::CommandPoolCreateInfo stagingPoolInfo(
-      vk::CommandPoolCreateFlagBits::eTransient, stagingQueueIndex);
+      vk::CommandPoolCreateFlagBits::eTransient, stagingQueue.index);
 
   CHECK_VK_RESULT_FATAL(g_device.createCommandPool(&stagingPoolInfo,
                                                    g_allocationCallbacks,
@@ -85,7 +87,7 @@ void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
 
 // TODO Staging queue (TRANSFER_BIT)
 void Buffer::copy_to(Buffer &dstBuffer, VkDeviceSize copySize,
-                     vk::Device device, vk::Queue queue) const {
+                     vk::Device device) const {
   vk::CommandBufferAllocateInfo allocInfo(g_stagingCommandPool,
                                           vk::CommandBufferLevel::ePrimary, 1);
 
@@ -109,8 +111,8 @@ void Buffer::copy_to(Buffer &dstBuffer, VkDeviceSize copySize,
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &commandBuffer;
 
-  queue.submit(1, &submitInfo, nullptr);
-  queue.waitIdle();
+  g_stagingQueue.handle.submit(1, &submitInfo, nullptr);
+  g_stagingQueue.handle.waitIdle();
 
   device.freeCommandBuffers(g_stagingCommandPool, 1, &commandBuffer);
 }

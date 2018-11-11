@@ -10,7 +10,7 @@
 
 namespace Allocator {
 void Init(vk::PhysicalDevice physicalDevice, vk::Device deviceHandle,
-          int stagingQueueIndex, vk::AllocationCallbacks *pAllocationCallbacks);
+          struct Queue stagingQueue, vk::AllocationCallbacks *pAllocationCallbacks);
 
 void Destroy();
 }; // namespace Allocator
@@ -39,8 +39,8 @@ public:
                 vk::MemoryPropertyFlags properties);
 
   // TODO Staging queue (TRANSFER_BIT)
-  void copy_to(Buffer &dstBuffer, VkDeviceSize copySize, vk::Device device,
-               vk::Queue queue) const;
+  void copy_to(Buffer &dstBuffer, VkDeviceSize copySize,
+               vk::Device device) const;
 
   void write(const void *data, VkDeviceSize writeSize,
              VkDeviceSize offset = 0) const;

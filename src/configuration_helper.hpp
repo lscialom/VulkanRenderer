@@ -102,6 +102,12 @@ static const std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{
 // CONFIGURATION HELPERS
 //-----------------------------------------------------------------------------
 
+struct Queue
+{
+	int index = -1;
+	vk::Queue handle = nullptr;
+};
+
 struct QueueFamilyIndices {
   int graphicsFamily = -1;
   int presentFamily = -1;
