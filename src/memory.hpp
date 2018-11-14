@@ -5,12 +5,13 @@
 #include "vk_mem_alloc.h"
 
 //-----------------------------------------------------------------------------
-// MEMORY
+// ALLOCATOR
 //-----------------------------------------------------------------------------
 
 namespace Allocator {
 void Init(vk::PhysicalDevice physicalDevice, vk::Device deviceHandle,
-          struct Queue stagingQueue, vk::AllocationCallbacks *pAllocationCallbacks);
+          struct Queue stagingQueue,
+          vk::AllocationCallbacks *pAllocationCallbacks);
 
 void Destroy();
 }; // namespace Allocator
