@@ -515,7 +515,7 @@ private:
                           vk::BufferUsageFlagBits::eIndexBuffer,
                       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    stagingBuffer.copy_to(viBuffer, bufferSize, g_device);
+    stagingBuffer.copy_to(viBuffer, bufferSize);
 
     return offset;
   }

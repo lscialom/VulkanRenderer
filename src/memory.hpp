@@ -40,8 +40,7 @@ public:
                 vk::MemoryPropertyFlags properties);
 
   // TODO Staging queue (TRANSFER_BIT)
-  void copy_to(Buffer &dstBuffer, VkDeviceSize copySize,
-               vk::Device device) const;
+  void copy_to(Buffer &dstBuffer, VkDeviceSize copySize) const;
 
   void write(const void *data, VkDeviceSize writeSize,
              VkDeviceSize offset = 0) const;

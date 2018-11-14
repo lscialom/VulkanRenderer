@@ -15,6 +15,34 @@ vk::AllocationCallbacks *g_allocationCallbacks = nullptr;
 
 Queue g_stagingQueue;
 
+static vk::CommandBuffer BeginSingleTimeCommand() {
+  vk::CommandBufferAllocateInfo allocInfo(g_stagingCommandPool,
+                                          vk::CommandBufferLevel::ePrimary, 1);
+
+  vk::CommandBuffer commandbuffer;
+  g_device.allocateCommandBuffers(&allocInfo, &commandbuffer);
+
+  vk::CommandBufferBeginInfo beginInfo(
+      vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+  commandbuffer.begin(&beginInfo);
+
+  return commandbuffer;
+}
+
+static void EndSingleTimeCommand(vk::CommandBuffer commandbuffer) {
+  commandbuffer.end();
+
+  vk::SubmitInfo submitInfo = {};
+  submitInfo.commandBufferCount = 1;
+  submitInfo.pCommandBuffers = &commandbuffer;
+
+  g_stagingQueue.handle.submit(1, &submitInfo, nullptr);
+  g_stagingQueue.handle.waitIdle();
+
+  g_device.freeCommandBuffers(g_stagingCommandPool, 1, &commandbuffer);
+}
+
 namespace Allocator {
 void Init(vk::PhysicalDevice physicalDevice, vk::Device deviceHandle,
           ::Queue stagingQueue, vk::AllocationCallbacks *pAllocationCallbacks) {
@@ -86,35 +114,15 @@ void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
 }
 
 // TODO Staging queue (TRANSFER_BIT)
-void Buffer::copy_to(Buffer &dstBuffer, VkDeviceSize copySize,
-                     vk::Device device) const {
-  vk::CommandBufferAllocateInfo allocInfo(g_stagingCommandPool,
-                                          vk::CommandBufferLevel::ePrimary, 1);
-
-  vk::CommandBuffer commandBuffer;
-  device.allocateCommandBuffers(&allocInfo, &commandBuffer);
-
-  vk::CommandBufferBeginInfo beginInfo(
-      vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-  commandBuffer.begin(&beginInfo);
-
+void Buffer::copy_to(Buffer &dstBuffer, VkDeviceSize copySize) const {
   vk::BufferCopy copyRegion(0, // TODO src offset
                             0, // TODO dst offset
                             copySize);
 
-  commandBuffer.copyBuffer(handle, dstBuffer.handle, 1, &copyRegion);
+  vk::CommandBuffer commandbuffer = BeginSingleTimeCommand();
+  commandbuffer.copyBuffer(handle, dstBuffer.handle, 1, &copyRegion);
 
-  commandBuffer.end();
-
-  vk::SubmitInfo submitInfo = {};
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &commandBuffer;
-
-  g_stagingQueue.handle.submit(1, &submitInfo, nullptr);
-  g_stagingQueue.handle.waitIdle();
-
-  device.freeCommandBuffers(g_stagingCommandPool, 1, &commandBuffer);
+  EndSingleTimeCommand(commandbuffer);
 }
 
 void Buffer::write(const void *data, VkDeviceSize writeSize,
