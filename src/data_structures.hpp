@@ -12,35 +12,46 @@ template <uint8_t N> struct LiteralVector { float members[N]; };
 
 struct LiteralVertex {
   LiteralVector<3> pos;
-};
-
-template <size_t N> struct Vertex {
-  Eigen::Matrix<float, N, 1> pos;
 
   // Non-wrapped type for constexpr qualifier
   static constexpr VkVertexInputBindingDescription GetBindingDescription() {
-    return {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
-  }
-
-  static constexpr VkFormat GetFormatFromDimension() {
-    switch (N) {
-    case 2:
-      return VK_FORMAT_R32G32_SFLOAT;
-    case 3:
-      return VK_FORMAT_R32G32B32_SFLOAT;
-    case 4:
-      return VK_FORMAT_R32G32B32A32_SFLOAT;
-    }
+    return {0, sizeof(LiteralVertex), VK_VERTEX_INPUT_RATE_VERTEX};
   }
 
   // Non-wrapped type for constexpr qualifier
   static constexpr auto GetAttributeDescription() {
     return std::array<VkVertexInputAttributeDescription, 1>{
-        {{0, 0, GetFormatFromDimension(), offsetof(Vertex, pos)}}};
+        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LiteralVertex, pos)}}};
   }
-
-  static_assert(N >= 2 && N <= 4);
 };
+
+// template <size_t N> struct Vertex {
+//  Eigen::Matrix<float, N, 1> pos;
+//
+//  // Non-wrapped type for constexpr qualifier
+//  static constexpr VkVertexInputBindingDescription GetBindingDescription() {
+//    return {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
+//  }
+//
+//  static constexpr VkFormat GetFormatFromDimension() {
+//    switch (N) {
+//    case 2:
+//      return VK_FORMAT_R32G32_SFLOAT;
+//    case 3:
+//      return VK_FORMAT_R32G32B32_SFLOAT;
+//    case 4:
+//      return VK_FORMAT_R32G32B32A32_SFLOAT;
+//    }
+//  }
+//
+//  // Non-wrapped type for constexpr qualifier
+//  static constexpr auto GetAttributeDescription() {
+//    return std::array<VkVertexInputAttributeDescription, 1>{
+//        {{0, 0, GetFormatFromDimension(), offsetof(Vertex, pos)}}};
+//  }
+//
+//  static_assert(N >= 2 && N <= 4);
+//};
 
 //-----------------------------------------------------------------------------
 // PRIMITIVES

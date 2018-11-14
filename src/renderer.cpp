@@ -219,8 +219,8 @@ private:
                                                         fragShaderStageInfo};
 
     vk::VertexInputBindingDescription bindingDescription =
-        Vertex<3>::GetBindingDescription();
-    auto attributeDescriptions = Vertex<3>::GetAttributeDescription();
+        LiteralVertex::GetBindingDescription();
+    auto attributeDescriptions = LiteralVertex::GetAttributeDescription();
 
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
         vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
@@ -265,7 +265,7 @@ private:
         vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
 
     vk::PushConstantRange pushConstantRange{vk::ShaderStageFlagBits::eVertex, 0,
-                                            sizeof(Vertex<3>) +
+                                            sizeof(LiteralVertex) +
                                                 sizeof(Eigen::Matrix4f) * 2};
 
     // vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
