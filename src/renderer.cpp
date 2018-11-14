@@ -790,7 +790,7 @@ static struct {
     init_commandbuffers();
   }
 
-  void destroy() {
+  void destroy(bool freeMemory = true) {
     destroy_framebuffers();
     destroy_commandbuffers();
 
@@ -798,6 +798,9 @@ static struct {
     destroy_render_pass();
 
     g_swapchain.destroy();
+
+    if (!freeMemory)
+      return;
 
     for (auto &pair : models)
       for (size_t j = 0; j < pair.second.size(); ++j)
@@ -815,7 +818,7 @@ static struct {
 
     g_device.waitIdle();
 
-    destroy();
+    destroy(false);
     init();
   }
 
