@@ -346,11 +346,19 @@ public:
     stagingBuffer.write(pixels, imageSize);
     stbi_image_free(pixels);
 
-    image.allocate(texWidth, texHeight, vk::Format::eR8G8B8A8Unorm,
-                   vk::ImageTiling::eOptimal,
+    vk::Format imageFormat = vk::Format::eR8G8B8A8Unorm;
+    image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
                    vk::ImageUsageFlagBits::eTransferDst |
                        vk::ImageUsageFlagBits::eSampled,
                    vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    // TODO pack these 3 statements into one function helper ?
+    image.transition_layout(imageFormat, vk::ImageLayout::eTransferDstOptimal);
+    image.write_from_buffer(stagingBuffer.get_handle(),
+                            static_cast<uint32_t>(texWidth),
+                            static_cast<uint32_t>(texHeight));
+    image.transition_layout(imageFormat,
+                            vk::ImageLayout::eShaderReadOnlyOptimal);
   }
 };
 

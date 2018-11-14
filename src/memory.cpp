@@ -175,6 +175,9 @@ Image::Image(Image &&other) {
   other.handle = nullptr;
 
   allocation = std::move(other.allocation);
+  size = other.size;
+
+  layout = other.layout;
 }
 
 Image::~Image() {
@@ -193,6 +196,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
 #endif
 
   size = texWidth * texHeight * GetPixelSizeFromFormat(format);
+  layout = vk::ImageLayout::eUndefined;
 
   vk::ImageCreateInfo imageInfo{
       vk::ImageCreateFlags(),
@@ -208,7 +212,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
       vk::SharingMode::eExclusive, // TODO Support Concurrent access
       0,
       nullptr,
-      vk::ImageLayout::eUndefined};
+      layout};
 
   VmaAllocationCreateInfo allocInfo = {};
   allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
@@ -220,11 +224,96 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
       "Failed to create image.");
 }
 
+void Image::transition_layout(vk::Format format, vk::ImageLayout newLayout) {
+  vk::CommandBuffer commandbuffer = BeginSingleTimeCommand();
+
+  vk::ImageSubresourceRange subresourceRange;
+  subresourceRange.aspectMask =
+      vk::ImageAspectFlagBits::eColor; // TODO Support other aspect masks
+  subresourceRange.baseMipLevel = 0;
+  subresourceRange.levelCount = 1;
+  subresourceRange.baseArrayLayer = 0;
+  subresourceRange.layerCount = 1;
+
+  vk::ImageMemoryBarrier barrier;
+  barrier.oldLayout = layout;
+  barrier.newLayout = newLayout;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = handle;
+  barrier.subresourceRange = subresourceRange;
+
+  vk::PipelineStageFlags srcStage;
+  vk::PipelineStageFlags dstStage;
+
+  if (layout == vk::ImageLayout::eUndefined &&
+      newLayout == vk::ImageLayout::eTransferDstOptimal) {
+    barrier.srcAccessMask = vk::AccessFlagBits(0);
+    barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+    srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    dstStage = vk::PipelineStageFlagBits::eTransfer;
+  } else if (layout == vk::ImageLayout::eTransferDstOptimal &&
+             newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+    srcStage = vk::PipelineStageFlagBits::eTransfer;
+    dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+  } else {
+    std::string msg = "Unsupported layout transition."
+                      " (" +
+                      vk::to_string(layout) + " -> " +
+                      vk::to_string(newLayout) + ")";
+
+    throw std::invalid_argument(msg.c_str());
+  }
+
+  commandbuffer.pipelineBarrier(srcStage, dstStage,
+                                vk::DependencyFlagBits::eByRegion, 0, nullptr,
+                                0, nullptr, 1, &barrier);
+
+  EndSingleTimeCommand(commandbuffer);
+
+  layout = newLayout;
+}
+
+// TODO Make it more flexible
+void Image::write_from_buffer(vk::Buffer buffer, uint32_t width,
+                              uint32_t height) {
+  vk::CommandBuffer commandbuffer = BeginSingleTimeCommand();
+
+  vk::BufferImageCopy region;
+  region.bufferOffset = 0;
+  region.bufferRowLength = 0;
+  region.bufferImageHeight = 0;
+
+  vk::ImageSubresourceLayers imageSubresource;
+  imageSubresource.aspectMask =
+      vk::ImageAspectFlagBits::eColor; // TODO Support other aspect masks
+  imageSubresource.mipLevel = 0;
+  imageSubresource.baseArrayLayer = 0;
+  imageSubresource.layerCount = 1;
+
+  region.imageSubresource = imageSubresource;
+
+  region.imageOffset = vk::Offset3D(0, 0, 0);
+  region.imageExtent = vk::Extent3D(width, height, 1);
+
+  commandbuffer.copyBufferToImage(
+      buffer, handle, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+
+  EndSingleTimeCommand(commandbuffer);
+}
+
 Image &Image::operator=(Image &&other) {
   handle = other.handle;
   other.handle = nullptr;
 
   allocation = std::move(other.allocation);
+  size = other.size;
+
+  layout = other.layout;
 
   return *this;
 }

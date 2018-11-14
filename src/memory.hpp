@@ -59,6 +59,8 @@ private:
   VmaAllocation allocation;
   size_t size = 0;
 
+  vk::ImageLayout layout;
+
 public:
   Image() = default;
 
@@ -72,6 +74,10 @@ public:
   void allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
                 vk::ImageTiling tiling, vk::ImageUsageFlags usage,
                 vk::MemoryPropertyFlags properties);
+
+  void transition_layout(vk::Format format, vk::ImageLayout newLayout);
+
+  void write_from_buffer(vk::Buffer buffer, uint32_t width, uint32_t height);
 
   Image &operator=(const Image &o) = delete;
   Image &operator=(Image &&other);
