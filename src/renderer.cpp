@@ -21,6 +21,7 @@ namespace Renderer {
 static vk::Instance g_instance;
 static vk::PhysicalDevice g_physicalDevice;
 
+//TODO Make a Device class and move it along allocator ?
 static vk::Device g_device;
 
 static vk::SurfaceKHR g_surface;
