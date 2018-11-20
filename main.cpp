@@ -10,6 +10,9 @@
 int main() {
   Renderer::Init(WIDTH, HEIGHT);
 
+  Renderer::SetFov(90.f);
+  Renderer::SetFar(100.f);
+
   uint64_t cubeId = Renderer::CreateModel(Renderer::EPrimitive::Cube);
   Renderer::ModelInstance *inst0 = Renderer::Spawn(cubeId);
 
@@ -18,8 +21,7 @@ int main() {
       Renderer::Spawn(cubeId, {4.f, 0.f, 0.f}, baseRot);
   Renderer::ModelInstance *inst2 =
       Renderer::Spawn(cubeId, {-4.f, 0.f, 0.f}, baseRot);
-  Renderer::ModelInstance *inst3 =
-	  Renderer::Spawn(cubeId, { 0.f, 4.f, 0.f });
+  Renderer::ModelInstance *inst3 = Renderer::Spawn(cubeId, {0.f, 4.f, 0.f});
 
   uint64_t planeId = Renderer::CreateModel(Renderer::EPrimitive::Plane);
   Renderer::ModelInstance *plane = Renderer::Spawn(
@@ -42,7 +44,9 @@ int main() {
     inst0->SetRotation({time * M_PI / 2.f, 0, 0});
     inst1->SetRotation({baseRot.x + time * M_PI / 2.f, 0, 0});
     inst2->SetRotation({-(baseRot.x + time * M_PI / 2.f), 0, 0});
-	inst3->SetRotation({ time * M_PI / 2.f, 0, 0 });
+    inst3->SetRotation({time * M_PI / 2.f, 0, 0});
+
+    inst3->SetScale({0.5f, 0.5f, 1.f});
   }
 
   Renderer::Shutdown();

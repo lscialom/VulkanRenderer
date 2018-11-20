@@ -21,7 +21,7 @@ namespace Renderer {
 static vk::Instance g_instance;
 static vk::PhysicalDevice g_physicalDevice;
 
-//TODO Make a Device class and move it along allocator ?
+// TODO Make a Device class and move it along allocator ?
 static vk::Device g_device;
 
 static vk::SurfaceKHR g_surface;
@@ -51,6 +51,14 @@ static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
 //-----------------------------------------------------------------------------
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
+
+static float g_fov = 90.f;
+static float g_near = 0.1f;
+static float g_far = 100.f;
+
+void SetFov(float fov) { g_fov = fov; }
+void SetNear(float nearValue) { g_near = nearValue; }
+void SetFar(float farValue) { g_far = farValue; }
 
 static struct {
 private:
@@ -475,7 +483,7 @@ private:
     rotY = Eigen::AngleAxisf(rot.y, Eigen::Vector3f::UnitY());
     rotZ = Eigen::AngleAxisf(rot.x, Eigen::Vector3f::UnitZ());
 
-    translation = Eigen::Translation3f(Eigen::Vector3f(pos.z, pos.x, pos.y));
+    translation = Eigen::Translation3f(Eigen::Vector3f(-pos.z, pos.x, pos.y));
 
     matrix = (translation * (rotX * rotZ * rotY) *
               Eigen::Scaling(scale.z, scale.x, scale.y))
@@ -569,7 +577,7 @@ public:
                       Eigen::Vector3f::UnitZ());
 
     Eigen::Matrix4f proj = Maths::Perspective(
-        90.f, g_extent.width / (float)g_extent.height, 0.1f, 10.f);
+        g_fov, g_extent.width / (float)g_extent.height, g_near, g_far);
     proj(1, 1) *= -1;
 
     Eigen::Matrix4f vp = proj * view;

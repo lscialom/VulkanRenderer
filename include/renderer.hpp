@@ -19,6 +19,9 @@ VULKAN_RENDERER_EXPORTS void Shutdown();
 VULKAN_RENDERER_EXPORTS void Run(unsigned int width, unsigned int height);
 
 VULKAN_RENDERER_EXPORTS void SetPresentMode(PresentMode presentMode);
+VULKAN_RENDERER_EXPORTS void SetFov(float);
+VULKAN_RENDERER_EXPORTS void SetNear(float);
+VULKAN_RENDERER_EXPORTS void SetFar(float);
 
 struct Vec3 {
   float x, y, z = 0;
