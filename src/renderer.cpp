@@ -52,6 +52,7 @@ static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
 
+// TODO Move to a camera class/namespace
 static float g_fov = 90.f;
 static float g_near = 0.1f;
 static float g_far = 100.f;
@@ -572,6 +573,7 @@ public:
 
     // uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
+    // TODO Compute vp mat in camera
     Eigen::Matrix4f view =
         Maths::LookAt(Eigen::Vector3f(8.f, 0.f, 2.f), Eigen::Vector3f::Zero(),
                       Eigen::Vector3f::UnitZ());
