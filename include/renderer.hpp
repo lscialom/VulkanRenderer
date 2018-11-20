@@ -31,6 +31,16 @@ struct Vec3 {
   static constexpr Vec3 UnitZ() { return {0, 0, 1}; }
 };
 
+namespace Color {
+static constexpr Vec3 Black = Vec3::Zero();
+static constexpr Vec3 Grey = {0.66f, 0.66f, 0.66f};
+static constexpr Vec3 White = Vec3::One();
+
+static constexpr Vec3 Red = Vec3::UnitX();
+static constexpr Vec3 Green = Vec3::UnitY();
+static constexpr Vec3 Blue = Vec3::UnitZ();
+} // namespace Color
+
 struct ModelInstance {
 protected:
   uint64_t modelID;
@@ -50,7 +60,7 @@ protected:
   }
 
 public:
-  Vec3 color = {0.66f, 0.66f, 0.66f};
+  Vec3 color = Color::Grey;
 
   Vec3 GetPosition() const { return pos; }
   Vec3 GetRotation() const { return rot; }

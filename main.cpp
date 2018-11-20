@@ -18,15 +18,18 @@ int main() {
       Renderer::Spawn(cubeId, {4.f, 0.f, 0.f}, baseRot);
   Renderer::ModelInstance *inst2 =
       Renderer::Spawn(cubeId, {-4.f, 0.f, 0.f}, baseRot);
+  Renderer::ModelInstance *inst3 =
+	  Renderer::Spawn(cubeId, { 0.f, 4.f, 0.f });
 
   uint64_t planeId = Renderer::CreateModel(Renderer::EPrimitive::Plane);
   Renderer::ModelInstance *plane = Renderer::Spawn(
       planeId, {0.f, -4.f, 0.f}, Renderer::Vec3::Zero(), {10.f, 10.f, 10.f});
 
-  inst1->color = {1.f, 0.f, 0.f};
-  inst2->color = {0.f, 0.f, 1.f};
+  inst1->color = Renderer::Color::Red;
+  inst2->color = Renderer::Color::Blue;
+  inst3->color = Renderer::Color::Green;
 
-  plane->color = {1, 1, 1};
+  plane->color = Renderer::Color::White;
 
   auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -39,6 +42,7 @@ int main() {
     inst0->SetRotation({time * M_PI / 2.f, 0, 0});
     inst1->SetRotation({baseRot.x + time * M_PI / 2.f, 0, 0});
     inst2->SetRotation({-(baseRot.x + time * M_PI / 2.f), 0, 0});
+	inst3->SetRotation({ time * M_PI / 2.f, 0, 0 });
   }
 
   Renderer::Shutdown();
