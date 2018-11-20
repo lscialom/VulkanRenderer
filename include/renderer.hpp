@@ -84,6 +84,16 @@ public:
     upToDate = false;
   }
 
+  void SetPosition(float x = 0, float y = 0, float z = 0) {
+    SetPosition({x, y, z});
+  }
+
+  void SetRotation(float x = 0, float y = 0, float z = 0) {
+    SetRotation({x, y, z});
+  }
+
+  void SetScale(float x = 0, float y = 0, float z = 0) { SetScale({x, y, z}); }
+
   uint64_t get_model_id() const { return modelID; }
 };
 
