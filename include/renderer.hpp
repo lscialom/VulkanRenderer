@@ -24,6 +24,11 @@ struct Vec3 {
   float x, y, z = 0;
 
   static constexpr Vec3 Zero() { return {0, 0, 0}; }
+  static constexpr Vec3 One() { return {1, 1, 1}; }
+
+  static constexpr Vec3 UnitX() { return {1, 0, 0}; }
+  static constexpr Vec3 UnitY() { return {0, 1, 0}; }
+  static constexpr Vec3 UnitZ() { return {0, 0, 1}; }
 };
 
 struct ModelInstance {
@@ -36,7 +41,7 @@ protected:
   Vec3 scale;
 
   ModelInstance(uint64_t modelTemplateID, Vec3 _pos = Vec3::Zero(),
-                Vec3 _rot = Vec3::Zero(), Vec3 _scale = {1, 1, 1}) {
+                Vec3 _rot = Vec3::Zero(), Vec3 _scale = Vec3::One()) {
     modelID = modelTemplateID;
 
     pos = _pos;
@@ -76,7 +81,7 @@ VULKAN_RENDERER_EXPORTS uint64_t CreateModel(EPrimitive primitive);
 VULKAN_RENDERER_EXPORTS ModelInstance *Spawn(uint64_t modelId,
                                              Vec3 pos = Vec3::Zero(),
                                              Vec3 rot = Vec3::Zero(),
-                                             Vec3 scale = {1, 1, 1});
+                                             Vec3 scale = Vec3::One());
 
 VULKAN_RENDERER_EXPORTS void Destroy(ModelInstance *instance);
 

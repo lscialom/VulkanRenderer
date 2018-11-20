@@ -461,7 +461,7 @@ private:
   Eigen::Matrix4f matrix;
 
   ModelInstanceInternal(uint64_t modelId, Vec3 _pos = Vec3::Zero(),
-                        Vec3 _rot = Vec3::Zero(), Vec3 _scale = {1, 1, 1})
+                        Vec3 _rot = Vec3::Zero(), Vec3 _scale = Vec3::One())
       : ModelInstance(modelId, _pos, _rot, _scale) {}
 
   void update_matrix() {
@@ -602,7 +602,7 @@ public:
 
   ModelInstance *spawn_instance(Vec3 pos = Vec3::Zero(),
                                 Vec3 rot = Vec3::Zero(),
-                                Vec3 scale = {1, 1, 1}) {
+                                Vec3 scale = Vec3::One()) {
     ModelInstanceInternal *inst =
         new ModelInstanceInternal(uintptr_t(this), pos, rot, scale);
     modelInstances.push_back(inst);
