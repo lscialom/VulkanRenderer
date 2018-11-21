@@ -466,8 +466,10 @@ public:
 };
 
 struct ModelInstanceInternal : ModelInstance {
+  using Transform = Eigen::Transform<float, 3, Eigen::Affine>;
+
 private:
-  Eigen::Matrix4f matrix;
+  Transform transform;
 
   ModelInstanceInternal(uint64_t modelId, Vec3 _pos = Vec3::Zero(),
                         Vec3 _rot = Vec3::Zero(), Vec3 _scale = Vec3::One())
@@ -477,23 +479,23 @@ private:
     if (upToDate)
       return;
 
-    Eigen::Affine3f rotX, rotY, rotZ;
-    Eigen::Affine3f translation;
+    Eigen::AngleAxisf rotX, rotY, rotZ;
 
     rotX = Eigen::AngleAxisf(rot.z, Eigen::Vector3f::UnitX());
     rotY = Eigen::AngleAxisf(rot.y, Eigen::Vector3f::UnitY());
     rotZ = Eigen::AngleAxisf(rot.x, Eigen::Vector3f::UnitZ());
 
-    translation = Eigen::Translation3f(Eigen::Vector3f(-pos.z, pos.x, pos.y));
-
-    matrix = (translation * (rotX * rotZ * rotY) *
-              Eigen::Scaling(scale.z, scale.x, scale.y))
-                 .matrix();
+    transform.fromPositionOrientationScale(
+        Eigen::Vector3f(-pos.z, pos.x, pos.y), rotX * rotZ * rotY,
+        Eigen::Vector3f(scale.z, scale.x, scale.y));
 
     upToDate = true;
   }
 
   friend struct Model;
+
+public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW //To ensure Eigen type members are aligned for proper vectorization
 };
 
 struct Model {
@@ -578,6 +580,7 @@ public:
         Maths::LookAt(Eigen::Vector3f(8.f, 0.f, 2.f), Eigen::Vector3f::Zero(),
                       Eigen::Vector3f::UnitZ());
 
+	//TODO Store proj instead of recomputing it
     Eigen::Matrix4f proj = Maths::Perspective(
         g_fov, g_extent.width / (float)g_extent.height, g_near, g_far);
     proj(1, 1) *= -1;
@@ -604,7 +607,7 @@ public:
       commandbuffer.pushConstants(
           shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
           sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f),
-          &modelInstances[i]->matrix);
+          &modelInstances[i]->transform.matrix());
 
       commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
     }
