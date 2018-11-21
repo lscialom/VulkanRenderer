@@ -54,7 +54,7 @@ void Init() {
     if (!preferredFormatFound)
       printf(
           "[WARNING] Specified preferred swapchain image format {%s, %s} not "
-          "found. Using {%s, %s} instead.\n",
+          "supported. Using {%s, %s} instead.\n",
           vk::to_string(PreferredImageFormat.format).c_str(),
           vk::to_string(PreferredImageFormat.colorSpace).c_str(),
           vk::to_string(format.format).c_str(),

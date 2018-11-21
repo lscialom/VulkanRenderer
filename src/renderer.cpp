@@ -32,138 +32,6 @@ void SetFar(float farValue) { g_far = farValue; }
 
 bool g_framebufferResized = false;
 
-// static struct {
-// private:
-//  vk::SwapchainKHR handle;
-//
-//  std::vector<vk::Image> images;
-//  std::vector<vk::ImageView> imageViews;
-//
-// public:
-//  vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
-//
-//  const vk::SwapchainKHR &get_handle() const { return handle; }
-//
-//  size_t image_count() const { return images.size(); }
-//  const vk::ImageView get_image_view(size_t index) const {
-//    return imageViews[index];
-//  }
-//
-//  void init() {
-//    SwapChainSupportDetails swapChainSupport =
-//        QuerySwapChainSupport(g_physicalDevice, g_surface);
-//
-//    vk::SurfaceFormatKHR format =
-//        swapChainSupport.formats[0]; // safe since it has been checked that
-//                                     // there are available formats
-//    if (swapChainSupport.formats.size() == 1 &&
-//        swapChainSupport.formats[0].format == vk::Format::eUndefined)
-//      format = {vk::Format::eB8G8R8A8Unorm,
-//      vk::ColorSpaceKHR::eSrgbNonlinear};
-//    else {
-//      for (const auto &availableFormat : swapChainSupport.formats) {
-//        if (availableFormat.format == vk::Format::eB8G8R8A8Unorm &&
-//            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-//          format = availableFormat;
-//      }
-//    }
-//
-//    vk::PresentModeKHR presentMode =
-//        vk::PresentModeKHR::eFifo; // Fifo mode's availability is guaranteed
-//    if (requiredPresentMode != vk::PresentModeKHR::eFifo) {
-//      for (const auto &availablePresentMode : swapChainSupport.presentModes) {
-//        if (availablePresentMode == requiredPresentMode) {
-//          presentMode = availablePresentMode;
-//          break;
-//        }
-//      }
-//
-//      if (presentMode == vk::PresentModeKHR::eFifo) {
-//        requiredPresentMode = vk::PresentModeKHR::eFifo;
-//        std::cout << vk::to_string(requiredPresentMode)
-//                  << " not supported. Using FIFO V-Sync mode instead."
-//                  << std::endl;
-//      }
-//    }
-//
-//    if (swapChainSupport.capabilities.currentExtent.width !=
-//        std::numeric_limits<uint32_t>::max()) {
-//      g_extent = swapChainSupport.capabilities.currentExtent;
-//    } else {
-//      int width, height;
-//      WindowHandler::GetFramebufferSize(&width, &height);
-//
-//      VkExtent2D actualExtent = {width, height};
-//
-//      actualExtent.width =
-//          std::max(swapChainSupport.capabilities.minImageExtent.width,
-//                   std::min(swapChainSupport.capabilities.maxImageExtent.width,
-//                            actualExtent.width));
-//      actualExtent.height =
-//          std::max(swapChainSupport.capabilities.minImageExtent.height,
-//                   std::min(swapChainSupport.capabilities.maxImageExtent.height,
-//                            actualExtent.height));
-//
-//      g_extent = actualExtent;
-//    }
-//
-//    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-//    if (swapChainSupport.capabilities.maxImageCount > 0 &&
-//        imageCount > swapChainSupport.capabilities.maxImageCount)
-//      imageCount = swapChainSupport.capabilities.maxImageCount;
-//
-//    QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice,
-//    g_surface); uint32_t queueFamilyIndices[] =
-//    {(uint32_t)indices.graphicsFamily,
-//                                     (uint32_t)indices.presentFamily};
-//
-//    vk::SharingMode imageSharingMode = vk::SharingMode::eExclusive;
-//    uint32_t queueFamilyIndexCount = 0;
-//
-//    if (indices.graphicsFamily != indices.presentFamily) {
-//      imageSharingMode = vk::SharingMode::eConcurrent;
-//      queueFamilyIndexCount = sizeof(queueFamilyIndices) / sizeof(uint32_t);
-//    }
-//
-//    vk::SwapchainCreateInfoKHR createInfo(
-//        vk::SwapchainCreateFlagsKHR(), g_surface, imageCount, format.format,
-//        format.colorSpace, g_extent, 1,
-//        vk::ImageUsageFlagBits::eColorAttachment, imageSharingMode,
-//        queueFamilyIndexCount, queueFamilyIndices,
-//        swapChainSupport.capabilities.currentTransform,
-//        vk::CompositeAlphaFlagBitsKHR::eOpaque, presentMode, VK_TRUE
-//        // swapchain
-//    );
-//
-//    g_device.createSwapchainKHR(&createInfo, g_allocationCallbacks, &handle);
-//
-//    images = g_device.getSwapchainImagesKHR(handle);
-//    g_requiredFormat = format.format;
-//
-//    vk::ImageSubresourceRange imageSubresourceRange(
-//        vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
-//
-//    imageViews.resize(images.size());
-//    for (size_t i = 0; i < images.size(); i++) {
-//      vk::ImageViewCreateInfo createInfo(
-//          vk::ImageViewCreateFlags(), images[i], vk::ImageViewType::e2D,
-//          g_requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
-//
-//      CHECK_VK_RESULT_FATAL(g_device.createImageView(&createInfo,
-//                                                     g_allocationCallbacks,
-//                                                     &imageViews[i]),
-//                            "Failed to create image views");
-//    }
-//  }
-//
-//  void destroy() {
-//    for (auto imageView : imageViews)
-//      g_device.destroyImageView(imageView, g_allocationCallbacks);
-//
-//    g_device.destroySwapchainKHR(handle, g_allocationCallbacks);
-//  }
-//} g_swapchain;
-
 struct Shader {
 private:
   // vk::DescriptorSetLayout descriptorSetLayout;
@@ -561,7 +429,7 @@ public:
 
     vk::Extent2D extent = Swapchain::GetExtent();
 
-    // TODO Store proj instead of recomputing it
+    // TODO Store proj in camera instead of recomputing it
     Eigen::Matrix4f proj = Maths::Perspective(
         g_fov, extent.width / (float)extent.height, g_near, g_far);
     proj(1, 1) *= -1;
