@@ -9,9 +9,7 @@
 //-----------------------------------------------------------------------------
 
 namespace Allocator {
-void Init(vk::PhysicalDevice physicalDevice, vk::Device deviceHandle,
-          struct Queue stagingQueue,
-          vk::AllocationCallbacks *pAllocationCallbacks);
+void Init(struct Queue stagingQueue);
 
 void Destroy();
 }; // namespace Allocator

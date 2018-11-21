@@ -1,5 +1,7 @@
 #include "renderer.hpp"
 
+#include "global_context.hpp"
+
 #include "configuration_helper.hpp"
 #include "data_structures.hpp"
 #include "maths.hpp"
@@ -15,44 +17,10 @@
 
 namespace Renderer {
 //-----------------------------------------------------------------------------
-// GLOBAL CONTEXT
-//-----------------------------------------------------------------------------
-
-static vk::Instance g_instance;
-static vk::PhysicalDevice g_physicalDevice;
-
-// TODO Make a Device class and move it along allocator ?
-static vk::Device g_device;
-
-static vk::SurfaceKHR g_surface;
-
-static vk::Format g_requiredFormat;
-static vk::Extent2D g_extent;
-
-static Queue g_graphicsQueue;
-static Queue g_presentQueue;
-
-static vk::CommandPool g_commandPool;
-
-// static vk::DescriptorSetLayout g_baseDescriptorSetLayout;
-
-static vk::RenderPass g_renderPass;
-
-static vk::AllocationCallbacks *g_allocator = nullptr;
-
-static vk::DispatchLoaderDynamic g_dldy;
-
-static bool g_framebufferResized = false;
-
-#ifndef NDEBUG
-static std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
-#endif
-
-//-----------------------------------------------------------------------------
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
 
-// TODO Move to a camera class/namespace
+// TODO Move to a camera class/namespace or make extern
 static float g_fov = 90.f;
 static float g_near = 0.1f;
 static float g_far = 100.f;
@@ -60,6 +28,8 @@ static float g_far = 100.f;
 void SetFov(float fov) { g_fov = fov; }
 void SetNear(float nearValue) { g_near = nearValue; }
 void SetFar(float farValue) { g_far = farValue; }
+
+bool g_framebufferResized = false;
 
 static struct {
 private:
@@ -162,7 +132,7 @@ public:
         // swapchain
     );
 
-    g_device.createSwapchainKHR(&createInfo, g_allocator, &handle);
+    g_device.createSwapchainKHR(&createInfo, g_allocationCallbacks, &handle);
 
     images = g_device.getSwapchainImagesKHR(handle);
     g_requiredFormat = format.format;
@@ -176,17 +146,18 @@ public:
           vk::ImageViewCreateFlags(), images[i], vk::ImageViewType::e2D,
           g_requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
 
-      CHECK_VK_RESULT_FATAL(
-          g_device.createImageView(&createInfo, g_allocator, &imageViews[i]),
-          "Failed to create image views");
+      CHECK_VK_RESULT_FATAL(g_device.createImageView(&createInfo,
+                                                     g_allocationCallbacks,
+                                                     &imageViews[i]),
+                            "Failed to create image views");
     }
   }
 
   void destroy() {
     for (auto imageView : imageViews)
-      g_device.destroyImageView(imageView, g_allocator);
+      g_device.destroyImageView(imageView, g_allocationCallbacks);
 
-    g_device.destroySwapchainKHR(handle, g_allocator);
+    g_device.destroySwapchainKHR(handle, g_allocationCallbacks);
   }
 } g_swapchain;
 
@@ -203,9 +174,10 @@ private:
         reinterpret_cast<const uint32_t *>(code.data()));
 
     vk::ShaderModule shaderModule;
-    CHECK_VK_RESULT_FATAL(
-        g_device.createShaderModule(&createInfo, g_allocator, &shaderModule),
-        "Failed to create shader module");
+    CHECK_VK_RESULT_FATAL(g_device.createShaderModule(&createInfo,
+                                                      g_allocationCallbacks,
+                                                      &shaderModule),
+                          "Failed to create shader module");
 
     return shaderModule;
   }
@@ -287,7 +259,7 @@ private:
         &pushConstantRange); // TODO add custom shader ubos
 
     CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
-                                                        g_allocator,
+                                                        g_allocationCallbacks,
                                                         &pipelineLayout),
                           "Failed to create pipeline layout.");
 
@@ -298,12 +270,12 @@ private:
         g_renderPass, 0, nullptr, -1);
 
     CHECK_VK_RESULT_FATAL(
-        g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo, g_allocator,
-                                         &pipeline),
+        g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo,
+                                         g_allocationCallbacks, &pipeline),
         "Failed to create pipeline layout.");
 
-    g_device.destroyShaderModule(fragShaderModule, g_allocator);
-    g_device.destroyShaderModule(vertShaderModule, g_allocator);
+    g_device.destroyShaderModule(fragShaderModule, g_allocationCallbacks);
+    g_device.destroyShaderModule(vertShaderModule, g_allocationCallbacks);
   }
 
 public:
@@ -322,8 +294,8 @@ public:
   }
 
   void destroy() {
-    g_device.destroyPipeline(pipeline, g_allocator);
-    g_device.destroyPipelineLayout(pipelineLayout, g_allocator);
+    g_device.destroyPipeline(pipeline, g_allocationCallbacks);
+    g_device.destroyPipelineLayout(pipelineLayout, g_allocationCallbacks);
   }
 };
 
@@ -396,7 +368,9 @@ public:
     buffers = std::move(other.buffers);
     alignment = other.alignment;
   }
-  ~UniformBufferObject() { g_device.destroyDescriptorPool(pool, g_allocator); }
+  ~UniformBufferObject() {
+    g_device.destroyDescriptorPool(pool, g_allocationCallbacks);
+  }
 
   size_t get_alignment() const { return alignment; }
 
@@ -428,7 +402,7 @@ public:
                                           &poolSize};
 
     CHECK_VK_RESULT_FATAL(
-        g_device.createDescriptorPool(&poolInfo, g_allocator, &pool),
+        g_device.createDescriptorPool(&poolInfo, g_allocationCallbacks, &pool),
         "Failed to create descriptor pool.");
 
     buffers.resize(nbBuffers);
@@ -495,7 +469,8 @@ private:
   friend struct Model;
 
 public:
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW //To ensure Eigen type members are aligned for proper vectorization
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW // To ensure Eigen type members are aligned
+                                  // for proper vectorization
 };
 
 struct Model {
@@ -580,7 +555,7 @@ public:
         Maths::LookAt(Eigen::Vector3f(8.f, 0.f, 2.f), Eigen::Vector3f::Zero(),
                       Eigen::Vector3f::UnitZ());
 
-	//TODO Store proj instead of recomputing it
+    // TODO Store proj instead of recomputing it
     Eigen::Matrix4f proj = Maths::Perspective(
         g_fov, g_extent.width / (float)g_extent.height, g_near, g_far);
     proj(1, 1) *= -1;
@@ -703,13 +678,14 @@ static struct {
                                             &colorAttachment, 1, &subpass, 1,
                                             &dependency);
 
-    CHECK_VK_RESULT_FATAL(
-        g_device.createRenderPass(&renderPassInfo, g_allocator, &g_renderPass),
-        "Failed to create render pass.");
+    CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
+                                                    g_allocationCallbacks,
+                                                    &g_renderPass),
+                          "Failed to create render pass.");
   }
 
   void destroy_render_pass() {
-    g_device.destroyRenderPass(g_renderPass, g_allocator);
+    g_device.destroyRenderPass(g_renderPass, g_allocationCallbacks);
   }
 
   void init_shaders() {
@@ -730,7 +706,7 @@ static struct {
           g_extent.width, g_extent.height, 1);
 
       CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
-                                                       g_allocator,
+                                                       g_allocationCallbacks,
                                                        &framebuffers[i]),
                             "Failed to create framebuffer.");
     }
@@ -738,7 +714,7 @@ static struct {
 
   void destroy_framebuffers() {
     for (auto framebuffer : framebuffers)
-      g_device.destroyFramebuffer(framebuffer, g_allocator);
+      g_device.destroyFramebuffer(framebuffer, g_allocationCallbacks);
   }
 
   void update_commandbuffer(size_t index) const {
@@ -1008,7 +984,7 @@ static void CreateInstance() {
 #endif
 
   CHECK_VK_RESULT_FATAL(
-      vk::createInstance(&createInfo, g_allocator, &g_instance),
+      vk::createInstance(&createInfo, g_allocationCallbacks, &g_instance),
       "Failed to init vulkan instance");
 
   g_dldy.init(g_instance);
@@ -1016,7 +992,8 @@ static void CreateInstance() {
 #ifndef NDEBUG
   for (size_t i = 0; i < g_debugMessengersInfos.size(); ++i)
     g_debugMessengers.push_back(g_instance.createDebugUtilsMessengerEXT(
-        g_debugMessengersInfos[i].MakeCreateInfo(), g_allocator, g_dldy));
+        g_debugMessengersInfos[i].MakeCreateInfo(), g_allocationCallbacks,
+        g_dldy));
 #endif
 }
 
@@ -1071,9 +1048,9 @@ static void InitDevice() {
       static_cast<uint32_t>(g_deviceExtensions.size()),
       g_deviceExtensions.data(), &deviceFeatures);
 
-  CHECK_VK_RESULT_FATAL(
-      g_physicalDevice.createDevice(&createInfo, g_allocator, &g_device),
-      "Failed to create logical device");
+  CHECK_VK_RESULT_FATAL(g_physicalDevice.createDevice(
+                            &createInfo, g_allocationCallbacks, &g_device),
+                        "Failed to create logical device");
 
   g_dldy.init(g_instance, g_device);
 
@@ -1094,9 +1071,9 @@ static void InitCommandPool() {
       vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
       queueFamilyIndices.graphicsFamily);
 
-  CHECK_VK_RESULT_FATAL(
-      g_device.createCommandPool(&poolInfo, g_allocator, &g_commandPool),
-      "Failed to create command pool.");
+  CHECK_VK_RESULT_FATAL(g_device.createCommandPool(
+                            &poolInfo, g_allocationCallbacks, &g_commandPool),
+                        "Failed to create command pool.");
 }
 
 // void InitGlobalUBOs() {
@@ -1105,7 +1082,8 @@ static void InitCommandPool() {
 //        vk::DescriptorSetLayoutCreateFlags(), 1, &g_globalDSLInfos[i]);
 //
 //    CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
-//                              &layoutInfo, g_allocator, &g_globalDSL[i]),
+//                              &layoutInfo, g_allocationCallbacks,
+//                              &g_globalDSL[i]),
 //                          "Failed to create global descriptor set layout.");
 //  }
 //}
@@ -1120,7 +1098,7 @@ static void InitUsualDescriptorSetLayouts() {
   //    vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
 
   // CHECK_VK_RESULT_FATAL(
-  //    g_device.createDescriptorSetLayout(&layoutInfo, g_allocator,
+  //    g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
   //                                       &g_baseDescriptorSetLayout),
   //    "Failed to create descriptor set layout.");
 }
@@ -1132,17 +1110,18 @@ static void InitSyncBarriers() {
 
   for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
     CHECK_VK_RESULT_FATAL(
-        g_device.createSemaphore(&semaphoreInfo, g_allocator,
+        g_device.createSemaphore(&semaphoreInfo, g_allocationCallbacks,
                                  &g_imageAvailableSemaphores[i]),
         "Failed to create semaphores.");
     CHECK_VK_RESULT_FATAL(
-        g_device.createSemaphore(&semaphoreInfo, g_allocator,
+        g_device.createSemaphore(&semaphoreInfo, g_allocationCallbacks,
                                  &g_renderFinishedSemaphores[i]),
         "Failed to create semaphores.");
 
-    CHECK_VK_RESULT_FATAL(
-        g_device.createFence(&fenceInfo, g_allocator, &g_inFlightFences[i]),
-        "Failed to create semaphores.");
+    CHECK_VK_RESULT_FATAL(g_device.createFence(&fenceInfo,
+                                               g_allocationCallbacks,
+                                               &g_inFlightFences[i]),
+                          "Failed to create semaphores.");
   }
 }
 
@@ -1150,14 +1129,13 @@ static void InitVulkan() {
   CreateInstance();
   CHECK_VK_RESULT_FATAL((vk::Result)WindowHandler::CreateSurface(
                             (VkInstance)g_instance,
-                            (VkAllocationCallbacks *)g_allocator,
+                            (VkAllocationCallbacks *)g_allocationCallbacks,
                             (VkSurfaceKHR *)&g_surface),
                         "Failed to create window surface");
   InitDevice();
 
   InitCommandPool();
-  Allocator::Init(g_physicalDevice, g_device, g_graphicsQueue,
-                  g_allocator); // TODO Staging queue
+  Allocator::Init(g_graphicsQueue); // TODO Staging queue
 
   // InitGlobalUBOs();
   InitUsualDescriptorSetLayouts(); // TODO Does nothing for now
@@ -1199,34 +1177,37 @@ void Shutdown() {
   TRY_CATCH_BLOCK(
       "Failed to shutdown renderer",
       for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
-        g_device.destroySemaphore(g_imageAvailableSemaphores[i], g_allocator);
-        g_device.destroySemaphore(g_renderFinishedSemaphores[i], g_allocator);
+        g_device.destroySemaphore(g_imageAvailableSemaphores[i],
+                                  g_allocationCallbacks);
+        g_device.destroySemaphore(g_renderFinishedSemaphores[i],
+                                  g_allocationCallbacks);
 
-        g_device.destroyFence(g_inFlightFences[i], g_allocator);
+        g_device.destroyFence(g_inFlightFences[i], g_allocationCallbacks);
       }
 
       g_renderContext.destroy();
 
       // g_device.destroyDescriptorSetLayout(g_baseDescriptorSetLayout,
-      // g_allocator);
+      // g_allocationCallbacks);
 
       // for (size_t i = 0; i < g_globalDSL.size(); ++i)
-      //    g_device.destroyDescriptorSetLayout(g_globalDSL[i], g_allocator);
+      //    g_device.destroyDescriptorSetLayout(g_globalDSL[i],
+      //    g_allocationCallbacks);
 
       Allocator::Destroy();
 
-      g_device.destroyCommandPool(g_commandPool, g_allocator);
+      g_device.destroyCommandPool(g_commandPool, g_allocationCallbacks);
 
-      g_device.destroy(g_allocator);
+      g_device.destroy(g_allocationCallbacks);
 
 #ifndef NDEBUG
       for (size_t i = 0; i < g_debugMessengers.size(); ++i)
-          g_instance.destroyDebugUtilsMessengerEXT(g_debugMessengers[i],
-                                                   g_allocator, g_dldy);
+          g_instance.destroyDebugUtilsMessengerEXT(
+              g_debugMessengers[i], g_allocationCallbacks, g_dldy);
 #endif
 
-      g_instance.destroySurfaceKHR(g_surface, g_allocator);
-      g_instance.destroy(g_allocator);
+      g_instance.destroySurfaceKHR(g_surface, g_allocationCallbacks);
+      g_instance.destroy(g_allocationCallbacks);
 
       WindowHandler::Shutdown(););
 }

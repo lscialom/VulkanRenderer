@@ -2,18 +2,16 @@
 #include "memory.hpp"
 
 #include "configuration_helper.hpp"
+#include "global_context.hpp"
 
 //-----------------------------------------------------------------------------
 // ALLOCATOR
 //-----------------------------------------------------------------------------
 
-VmaAllocator g_handle = nullptr;
-vk::CommandPool g_stagingCommandPool = nullptr;
+static VmaAllocator g_handle = nullptr;
 
-vk::Device g_device = nullptr;
-vk::AllocationCallbacks *g_allocationCallbacks = nullptr;
-
-Queue g_stagingQueue;
+static vk::CommandPool g_stagingCommandPool = nullptr;
+static Queue g_stagingQueue;
 
 static vk::CommandBuffer BeginSingleTimeCommand() {
   vk::CommandBufferAllocateInfo allocInfo(g_stagingCommandPool,
@@ -44,14 +42,11 @@ static void EndSingleTimeCommand(vk::CommandBuffer commandbuffer) {
 }
 
 namespace Allocator {
-void Init(vk::PhysicalDevice physicalDevice, vk::Device deviceHandle,
-          ::Queue stagingQueue, vk::AllocationCallbacks *pAllocationCallbacks) {
-  g_device = deviceHandle;
-  g_allocationCallbacks = pAllocationCallbacks;
+void Init(::Queue stagingQueue) {
   g_stagingQueue = stagingQueue;
 
   VmaAllocatorCreateInfo allocatorInfo = {};
-  allocatorInfo.physicalDevice = physicalDevice;
+  allocatorInfo.physicalDevice = g_physicalDevice;
   allocatorInfo.device = g_device;
 
   vmaCreateAllocator(&allocatorInfo, &g_handle);
