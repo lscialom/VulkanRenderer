@@ -16,7 +16,13 @@ static std::vector<vk::Image> images;
 static std::vector<vk::ImageView> imageViews;
 static std::vector<vk::Framebuffer> framebuffers;
 
-size_t ImageCount() { return images.size(); }
+static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> imageAvailableSemaphores;
+static std::array<vk::Fence, MAX_IN_FLIGHT_FRAMES> inFlightFences;
+
+static size_t currentFrame = 0;
+static uint32_t currentImageIndex = 0;
+
+static ::Queue presentQueue;
 
 vk::AttachmentDescription GetAttachmentDescription() {
   return vk::AttachmentDescription(
@@ -27,10 +33,38 @@ vk::AttachmentDescription GetAttachmentDescription() {
       vk::ImageLayout::ePresentSrcKHR);
 }
 
+size_t ImageCount() { return images.size(); }
+uint32_t GetCurrentImageIndex() { return currentImageIndex; }
+const vk::Semaphore *GetCurrentImageSemaphore() {
+  return &imageAvailableSemaphores[currentFrame];
+}
+
+size_t GetCurrentFrameIndex() { return currentFrame; }
+vk::Fence GetCurrentFrameFence() { return inFlightFences[currentFrame]; }
+
 vk::Extent2D GetExtent() { return extent; }
 
-const vk::SwapchainKHR &GetHandle() { return handle; }
 vk::Framebuffer GetFramebuffer(size_t index) { return framebuffers[index]; }
+
+void SetPresentQueue(::Queue queue) { presentQueue = queue; }
+
+void InitSyncBarriers() {
+  vk::SemaphoreCreateInfo semaphoreInfo = {};
+
+  vk::FenceCreateInfo fenceInfo = {vk::FenceCreateFlagBits::eSignaled};
+
+  for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
+    CHECK_VK_RESULT_FATAL(
+        g_device.createSemaphore(&semaphoreInfo, g_allocationCallbacks,
+                                 &imageAvailableSemaphores[i]),
+        "Failed to create image available semaphore.");
+
+    CHECK_VK_RESULT_FATAL(g_device.createFence(&fenceInfo,
+                                               g_allocationCallbacks,
+                                               &inFlightFences[i]),
+                          "Failed to create semaphores.");
+  }
+}
 
 void Init() {
   SwapChainSupportDetails swapChainSupport =
@@ -146,13 +180,28 @@ void Init() {
                           "Failed to create image views");
   }
 
+  InitSyncBarriers();
+
+  // TODO Move in some debug tool
+#ifndef NDEBUG
   g_device.setDebugUtilsObjectNameEXT({vk::ObjectType::eSwapchainKHR,
                                        (uint64_t)((VkSwapchainKHR)handle),
                                        "Swapchain"},
                                       g_dldy);
+
+  g_device.setDebugUtilsObjectNameEXT({vk::ObjectType::eQueue,
+                                       (uint64_t)((VkQueue)presentQueue.handle),
+                                       "Present Queue"},
+                                      g_dldy);
+#endif
 }
 
 void InitFramebuffers(vk::RenderPass renderPass) {
+  if (!framebuffers.empty()) {
+    for (size_t i = 0; i < framebuffers.size(); ++i)
+      g_device.destroyFramebuffer(framebuffers[i], g_allocationCallbacks);
+  }
+
   vk::ImageView attachments[1];
 
   framebuffers.resize(images.size());
@@ -171,11 +220,42 @@ void InitFramebuffers(vk::RenderPass renderPass) {
 }
 
 void Destroy() {
+  for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
+    g_device.destroySemaphore(imageAvailableSemaphores[i],
+                              g_allocationCallbacks);
+
+    g_device.destroyFence(inFlightFences[i], g_allocationCallbacks);
+  }
+
   for (size_t i = 0; i < imageViews.size(); ++i) {
     g_device.destroyImageView(imageViews[i], g_allocationCallbacks);
     g_device.destroyFramebuffer(framebuffers[i], g_allocationCallbacks);
   }
 
+  framebuffers.clear();
+
   g_device.destroySwapchainKHR(handle, g_allocationCallbacks);
+}
+
+vk::Result AcquireNextImage() {
+  g_device.waitForFences(1, &inFlightFences[currentFrame], VK_TRUE,
+                         std::numeric_limits<uint64_t>::max());
+
+  g_device.resetFences(1, &inFlightFences[currentFrame]);
+
+  vk::Result result = g_device.acquireNextImageKHR(
+      handle, std::numeric_limits<uint64_t>::max(),
+      imageAvailableSemaphores[currentFrame], nullptr, &currentImageIndex);
+
+  return result;
+}
+
+vk::Result Present(const vk::Semaphore *presentSemaphore) {
+  vk::PresentInfoKHR presentInfo(1, presentSemaphore, 1, &handle,
+                                 &currentImageIndex, nullptr);
+
+  currentFrame = (currentFrame + 1) % MAX_IN_FLIGHT_FRAMES;
+
+  return presentQueue.handle.presentKHR(&presentInfo);
 }
 } // namespace Swapchain

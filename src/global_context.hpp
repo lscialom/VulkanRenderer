@@ -2,6 +2,12 @@
 
 #include <vulkan/vulkan.hpp>
 
+//TODO Move this somewhere else
+struct Queue {
+  int index = -1;
+  vk::Queue handle = nullptr;
+};
+
 extern vk::Instance g_instance;
 extern vk::PhysicalDevice g_physicalDevice;
 
@@ -9,14 +15,6 @@ extern vk::PhysicalDevice g_physicalDevice;
 extern vk::Device g_device;
 
 extern vk::SurfaceKHR g_surface;
-
-struct Queue {
-  int index = -1;
-  vk::Queue handle = nullptr;
-};
-
-extern Queue g_graphicsQueue;
-extern Queue g_presentQueue;
 
 extern vk::CommandPool g_commandPool;
 

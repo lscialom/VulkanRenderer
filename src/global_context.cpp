@@ -8,9 +8,6 @@ vk::Device g_device = nullptr;
 
 vk::SurfaceKHR g_surface = nullptr;
 
-Queue g_graphicsQueue = {};
-Queue g_presentQueue = {};
-
 vk::CommandPool g_commandPool = nullptr;
 
 // vk::DescriptorSetLayout g_baseDescriptorSetLayout;

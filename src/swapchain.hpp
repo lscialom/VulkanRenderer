@@ -6,19 +6,29 @@
 namespace Swapchain {
 extern vk::PresentModeKHR PreferredPresentMode;
 static constexpr vk::SurfaceFormatKHR PreferredImageFormat = {
-    vk::Format::eR8G8B8A8Unorm,
-    vk::ColorSpaceKHR::eSrgbNonlinear};
+    vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear};
 
 size_t ImageCount();
+uint32_t GetCurrentImageIndex();
+const vk::Semaphore *GetCurrentImageSemaphore();
+
+size_t GetCurrentFrameIndex();
+vk::Fence GetCurrentFrameFence();
+
 vk::AttachmentDescription GetAttachmentDescription();
 vk::Extent2D GetExtent();
 
-//TODO Both temporary need to move some of sync code directly into swapchain.cpp
-const vk::SwapchainKHR& GetHandle();
 vk::Framebuffer GetFramebuffer(size_t index);
 
+void SetPresentQueue(struct Queue queue);
+
 void Init();
+
+// Recreates framebuffers with renderPass if already initialized
 void InitFramebuffers(vk::RenderPass renderPass);
 
 void Destroy();
+
+vk::Result AcquireNextImage();
+vk::Result Present(const vk::Semaphore *presentSemaphore);
 } // namespace Swapchain

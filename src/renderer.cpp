@@ -32,6 +32,10 @@ void SetFar(float farValue) { g_far = farValue; }
 
 bool g_framebufferResized = false;
 
+Queue graphicsQueue;
+
+std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> renderFinishedSemaphores;
+
 struct Shader {
 private:
   // vk::DescriptorSetLayout descriptorSetLayout;
@@ -564,6 +568,24 @@ static struct {
 
   void destroy_shaders() { g_baseShader.destroy(); }
 
+  void init_commandbuffers() {
+    commandbuffers.resize(Swapchain::ImageCount());
+
+    vk::CommandBufferAllocateInfo allocInfo(g_commandPool,
+                                            vk::CommandBufferLevel::ePrimary,
+                                            (uint32_t)commandbuffers.size());
+
+    CHECK_VK_RESULT_FATAL(
+        g_device.allocateCommandBuffers(&allocInfo, commandbuffers.data()),
+        "Failed to allocate command buffers.");
+  }
+
+  void destroy_commandbuffers() {
+    g_device.freeCommandBuffers(g_commandPool,
+                                static_cast<uint32_t>(commandbuffers.size()),
+                                commandbuffers.data());
+  }
+
   void update_commandbuffer(size_t index) const {
     vk::CommandBufferBeginInfo beginInfo(
         vk::CommandBufferUsageFlagBits::eSimultaneousUse, nullptr);
@@ -581,7 +603,8 @@ static struct {
     CHECK_VK_RESULT_FATAL(commandbuffers[index].begin(&beginInfo),
                           "Failed to begin recording command buffer.");
 
-    vk::RenderPassBeginInfo renderPassInfo(g_renderPass, Swapchain::GetFramebuffer(index),
+    vk::RenderPassBeginInfo renderPassInfo(g_renderPass,
+                                           Swapchain::GetFramebuffer(index),
                                            {{0, 0}, extent}, 1, &clearColor);
 
     commandbuffers[index].setViewport(
@@ -607,24 +630,6 @@ static struct {
                 // error checking is possible here
   }
 
-  void init_commandbuffers() {
-    commandbuffers.resize(Swapchain::ImageCount());
-
-    vk::CommandBufferAllocateInfo allocInfo(g_commandPool,
-                                            vk::CommandBufferLevel::ePrimary,
-                                            (uint32_t)commandbuffers.size());
-
-    CHECK_VK_RESULT_FATAL(
-        g_device.allocateCommandBuffers(&allocInfo, commandbuffers.data()),
-        "Failed to allocate command buffers.");
-  }
-
-  void destroy_commandbuffers() {
-    g_device.freeCommandBuffers(g_commandPool,
-                                static_cast<uint32_t>(commandbuffers.size()),
-                                commandbuffers.data());
-  }
-
   void init() {
     Swapchain::Init();
 
@@ -636,7 +641,7 @@ static struct {
     init_commandbuffers();
   }
 
-  void destroy(bool freeMemory = true) {
+  void destroy(bool freeModels = true) {
     destroy_commandbuffers();
 
     destroy_shaders();
@@ -644,7 +649,7 @@ static struct {
 
     Swapchain::Destroy();
 
-    if (!freeMemory)
+    if (!freeModels)
       return;
 
     for (auto &pair : models)
@@ -709,12 +714,8 @@ static void SetMainObjectsDebugNames() {
       g_dldy);
 
   g_device.setDebugUtilsObjectNameEXT(
-      {vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_graphicsQueue.handle),
+      {vk::ObjectType::eQueue, (uint64_t)((VkQueue)graphicsQueue.handle),
        "Graphics Queue"},
-      g_dldy);
-  g_device.setDebugUtilsObjectNameEXT(
-      {vk::ObjectType::eQueue, (uint64_t)((VkQueue)g_presentQueue.handle),
-       "Present Queue"},
       g_dldy);
 
   // Swapchain done in swapchain.cpp
@@ -732,23 +733,8 @@ static void SetMainObjectsDebugNames() {
 // DRAW
 //-----------------------------------------------------------------------------
 
-static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES>
-    g_imageAvailableSemaphores;
-static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES>
-    g_renderFinishedSemaphores;
-
-static std::array<vk::Fence, MAX_IN_FLIGHT_FRAMES> g_inFlightFences;
-
-static size_t g_currentFrame = 0;
-
 static void Draw() {
-  g_device.waitForFences(1, &g_inFlightFences[g_currentFrame], VK_TRUE,
-                         std::numeric_limits<uint64_t>::max());
-
-  uint32_t imageIndex;
-  vk::Result result = g_device.acquireNextImageKHR(
-      Swapchain::GetHandle(), std::numeric_limits<uint64_t>::max(),
-      g_imageAvailableSemaphores[g_currentFrame], nullptr, &imageIndex);
+  vk::Result result = Swapchain::AcquireNextImage();
 
   if (result == vk::Result::eErrorOutOfDateKHR) {
     g_renderContext.refresh();
@@ -766,33 +752,29 @@ static void Draw() {
   vk::PipelineStageFlags waitStage =
       vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
+  uint32_t imageIndex = Swapchain::GetCurrentImageIndex();
+  size_t currentFrame = Swapchain::GetCurrentFrameIndex();
+
   // g_renderContext.update_transforms(imageIndex);
   g_renderContext.update_commandbuffer(imageIndex);
 
-  vk::SubmitInfo submitInfo(1, &g_imageAvailableSemaphores[g_currentFrame],
-                            &waitStage, 1,
+  const vk::Semaphore *imageAvailableSemaphore =
+      Swapchain::GetCurrentImageSemaphore();
+  vk::SubmitInfo submitInfo(1, imageAvailableSemaphore, &waitStage, 1,
                             &g_renderContext.commandbuffers[imageIndex], 1,
-                            &g_renderFinishedSemaphores[g_currentFrame]);
+                            &renderFinishedSemaphores[currentFrame]);
 
-  g_device.resetFences(1, &g_inFlightFences[g_currentFrame]);
-
-  CHECK_VK_RESULT_FATAL(g_graphicsQueue.handle.submit(
-                            1, &submitInfo, g_inFlightFences[g_currentFrame]),
+  CHECK_VK_RESULT_FATAL(graphicsQueue.handle.submit(
+                            1, &submitInfo, Swapchain::GetCurrentFrameFence()),
                         "Failed to submit draw command buffer.");
 
-  vk::PresentInfoKHR presentInfo(1, &g_renderFinishedSemaphores[g_currentFrame],
-                                 1, &Swapchain::GetHandle(), &imageIndex,
-                                 nullptr);
-
-  result = g_presentQueue.handle.presentKHR(&presentInfo);
+  result = Swapchain::Present(&renderFinishedSemaphores[currentFrame]);
   if (result == vk::Result::eErrorOutOfDateKHR ||
       result == vk::Result::eSuboptimalKHR || g_framebufferResized) {
     g_framebufferResized = false;
     g_renderContext.refresh();
   } else
     CHECK_VK_RESULT_FATAL(result, "Failed to present Swapchain image.");
-
-  g_currentFrame = (g_currentFrame + 1) % MAX_IN_FLIGHT_FRAMES;
 }
 
 //-----------------------------------------------------------------------------
@@ -898,13 +880,24 @@ static void InitDevice() {
 
   g_dldy.init(g_instance, g_device);
 
-  g_graphicsQueue.index = 0;
-  g_graphicsQueue.handle =
-      g_device.getQueue(indices.graphicsFamily, g_graphicsQueue.index);
+  graphicsQueue.index = 0;
+  graphicsQueue.handle =
+      g_device.getQueue(indices.graphicsFamily, graphicsQueue.index);
 
-  g_presentQueue.index = 0;
-  g_presentQueue.handle =
-      g_device.getQueue(indices.presentFamily, g_presentQueue.index);
+  Queue presentQueue;
+  presentQueue.index = 0;
+  presentQueue.handle =
+      g_device.getQueue(indices.presentFamily, presentQueue.index);
+
+  Swapchain::SetPresentQueue(presentQueue);
+
+  vk::SemaphoreCreateInfo semaphoreInfo = {};
+
+  for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++)
+    CHECK_VK_RESULT_FATAL(
+        g_device.createSemaphore(&semaphoreInfo, g_allocationCallbacks,
+                                 &renderFinishedSemaphores[i]),
+        "Failed to create render finished semaphore.");
 }
 
 static void InitCommandPool() {
@@ -947,28 +940,6 @@ static void InitUsualDescriptorSetLayouts() {
   //    "Failed to create descriptor set layout.");
 }
 
-static void InitSyncBarriers() {
-  vk::SemaphoreCreateInfo semaphoreInfo = {};
-
-  vk::FenceCreateInfo fenceInfo = {vk::FenceCreateFlagBits::eSignaled};
-
-  for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
-    CHECK_VK_RESULT_FATAL(
-        g_device.createSemaphore(&semaphoreInfo, g_allocationCallbacks,
-                                 &g_imageAvailableSemaphores[i]),
-        "Failed to create semaphores.");
-    CHECK_VK_RESULT_FATAL(
-        g_device.createSemaphore(&semaphoreInfo, g_allocationCallbacks,
-                                 &g_renderFinishedSemaphores[i]),
-        "Failed to create semaphores.");
-
-    CHECK_VK_RESULT_FATAL(g_device.createFence(&fenceInfo,
-                                               g_allocationCallbacks,
-                                               &g_inFlightFences[i]),
-                          "Failed to create semaphores.");
-  }
-}
-
 static void InitVulkan() {
   CreateInstance();
   CHECK_VK_RESULT_FATAL((vk::Result)WindowHandler::CreateSurface(
@@ -979,14 +950,12 @@ static void InitVulkan() {
   InitDevice();
 
   InitCommandPool();
-  Allocator::Init(g_graphicsQueue); // TODO Staging queue
+  Allocator::Init(graphicsQueue); // TODO Staging queue
 
   // InitGlobalUBOs();
   InitUsualDescriptorSetLayouts(); // TODO Does nothing for now
 
   g_renderContext.init();
-
-  InitSyncBarriers();
 
 #ifndef NDEBUG
   SetMainObjectsDebugNames();
@@ -1020,14 +989,10 @@ void Shutdown() {
 
   TRY_CATCH_BLOCK(
       "Failed to shutdown renderer",
-      for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
-        g_device.destroySemaphore(g_imageAvailableSemaphores[i],
-                                  g_allocationCallbacks);
-        g_device.destroySemaphore(g_renderFinishedSemaphores[i],
-                                  g_allocationCallbacks);
 
-        g_device.destroyFence(g_inFlightFences[i], g_allocationCallbacks);
-      }
+      for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++)
+          g_device.destroySemaphore(renderFinishedSemaphores[i],
+                                    g_allocationCallbacks);
 
       g_renderContext.destroy();
 
