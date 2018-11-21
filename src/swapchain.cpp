@@ -48,7 +48,7 @@ vk::Framebuffer GetFramebuffer(size_t index) { return framebuffers[index]; }
 
 void SetPresentQueue(::Queue queue) { presentQueue = queue; }
 
-void InitSyncBarriers() {
+static void InitSyncBarriers() {
   vk::SemaphoreCreateInfo semaphoreInfo = {};
 
   vk::FenceCreateInfo fenceInfo = {vk::FenceCreateFlagBits::eSignaled};
