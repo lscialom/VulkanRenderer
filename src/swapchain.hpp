@@ -22,7 +22,11 @@ vk::Extent2D GetExtent();
 // since Swapchain don't have to sync this with its other stuff. So it's
 // Renderer's job (since it's Renderer's commandbuffers that write on these
 // framebuffers) ?
-// => Or just move the framebuffers back to Renderer.
+// ANSWER => Or just move the framebuffers back to Renderer. Framebuffers are
+// tied to the images but it's the commandbuffers who decide which one to use
+// and the signal semaphore attached to the submit command who gives the signal
+// for the presentation of the resulting image so Renderer should have total
+// control on them.
 vk::Framebuffer GetFramebuffer(size_t index);
 
 void SetPresentQueue(struct Queue queue);
