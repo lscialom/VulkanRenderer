@@ -87,7 +87,7 @@ void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
 #ifndef NDEBUG
   if (handle)
     printf("[WARNING] Allocating already allocated buffer. This probably "
-           "means memory leaks. (Address = %p)",
+           "means memory leaks. (Address = %p)\n",
            (VkBuffer)handle);
 #endif
 
@@ -126,7 +126,7 @@ void Buffer::write(const void *data, VkDeviceSize writeSize,
   if (writeSize + offset > size) {
 #ifndef NDEBUG
     printf("[WARNING] Specified write to buffer out of allocation bounds. "
-           "Data might be corrupted. (Address = %p)",
+           "Data might be corrupted. (Address = %p)\n",
            (VkBuffer)handle);
 #endif
     if (offset >= size)
@@ -159,7 +159,7 @@ static uint8_t GetPixelSizeFromFormat(vk::Format format) {
   case vk::Format::eR8G8B8A8Unorm:
     return 4;
   default:
-    printf("[WARNING] Unsupported image format specified (%s).",
+    printf("[WARNING] Unsupported image format specified (%s).\n",
            vk::to_string(format).c_str());
     return 0;
   }
@@ -186,7 +186,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
 #ifndef NDEBUG
   if (handle)
     printf("[WARNING] Allocating already allocated image. This probably "
-           "means memory leaks. (Address = %p)",
+           "means memory leaks. (Address = %p)\n",
            (VkImage)handle);
 #endif
 

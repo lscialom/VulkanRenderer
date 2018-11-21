@@ -8,9 +8,6 @@ vk::Device g_device = nullptr;
 
 vk::SurfaceKHR g_surface = nullptr;
 
-vk::Format g_requiredFormat = vk::Format::eUndefined;
-vk::Extent2D g_extent = {0, 0};
-
 Queue g_graphicsQueue = {};
 Queue g_presentQueue = {};
 

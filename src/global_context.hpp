@@ -10,9 +10,6 @@ extern vk::Device g_device;
 
 extern vk::SurfaceKHR g_surface;
 
-extern vk::Format g_requiredFormat;
-extern vk::Extent2D g_extent;
-
 struct Queue {
   int index = -1;
   vk::Queue handle = nullptr;
@@ -25,6 +22,7 @@ extern vk::CommandPool g_commandPool;
 
 // extern vk::DescriptorSetLayout g_baseDescriptorSetLayout;
 
+// TODO Should be elsewhere than global
 extern vk::RenderPass g_renderPass;
 
 extern vk::AllocationCallbacks *g_allocationCallbacks;

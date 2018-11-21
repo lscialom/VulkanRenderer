@@ -2,11 +2,12 @@
 
 #include "global_context.hpp"
 
+#include "swapchain.hpp"
+
 #include "configuration_helper.hpp"
 #include "data_structures.hpp"
 #include "maths.hpp"
 #include "memory.hpp"
-#include "window_handler.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
@@ -31,135 +32,137 @@ void SetFar(float farValue) { g_far = farValue; }
 
 bool g_framebufferResized = false;
 
-static struct {
-private:
-  vk::SwapchainKHR handle;
-
-  std::vector<vk::Image> images;
-  std::vector<vk::ImageView> imageViews;
-
-public:
-  vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
-
-  const vk::SwapchainKHR &get_handle() const { return handle; }
-
-  size_t image_count() const { return images.size(); }
-  const vk::ImageView get_image_view(size_t index) const {
-    return imageViews[index];
-  }
-
-  void init() {
-    SwapChainSupportDetails swapChainSupport =
-        QuerySwapChainSupport(g_physicalDevice, g_surface);
-
-    vk::SurfaceFormatKHR format =
-        swapChainSupport.formats[0]; // safe since it has been checked that
-                                     // there are available formats
-    if (swapChainSupport.formats.size() == 1 &&
-        swapChainSupport.formats[0].format == vk::Format::eUndefined)
-      format = {vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear};
-    else {
-      for (const auto &availableFormat : swapChainSupport.formats) {
-        if (availableFormat.format == vk::Format::eB8G8R8A8Unorm &&
-            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-          format = availableFormat;
-      }
-    }
-
-    vk::PresentModeKHR presentMode =
-        vk::PresentModeKHR::eFifo; // Fifo mode's availability is guaranteed
-    if (requiredPresentMode != vk::PresentModeKHR::eFifo) {
-      for (const auto &availablePresentMode : swapChainSupport.presentModes) {
-        if (availablePresentMode == requiredPresentMode) {
-          presentMode = availablePresentMode;
-          break;
-        }
-      }
-
-      if (presentMode == vk::PresentModeKHR::eFifo) {
-        requiredPresentMode = vk::PresentModeKHR::eFifo;
-        std::cout << vk::to_string(requiredPresentMode)
-                  << " not supported. Using FIFO V-Sync mode instead."
-                  << std::endl;
-      }
-    }
-
-    if (swapChainSupport.capabilities.currentExtent.width !=
-        std::numeric_limits<uint32_t>::max()) {
-      g_extent = swapChainSupport.capabilities.currentExtent;
-    } else {
-      int width, height;
-      WindowHandler::GetFramebufferSize(&width, &height);
-
-      VkExtent2D actualExtent = {width, height};
-
-      actualExtent.width =
-          std::max(swapChainSupport.capabilities.minImageExtent.width,
-                   std::min(swapChainSupport.capabilities.maxImageExtent.width,
-                            actualExtent.width));
-      actualExtent.height =
-          std::max(swapChainSupport.capabilities.minImageExtent.height,
-                   std::min(swapChainSupport.capabilities.maxImageExtent.height,
-                            actualExtent.height));
-
-      g_extent = actualExtent;
-    }
-
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    if (swapChainSupport.capabilities.maxImageCount > 0 &&
-        imageCount > swapChainSupport.capabilities.maxImageCount)
-      imageCount = swapChainSupport.capabilities.maxImageCount;
-
-    QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice, g_surface);
-    uint32_t queueFamilyIndices[] = {(uint32_t)indices.graphicsFamily,
-                                     (uint32_t)indices.presentFamily};
-
-    vk::SharingMode imageSharingMode = vk::SharingMode::eExclusive;
-    uint32_t queueFamilyIndexCount = 0;
-
-    if (indices.graphicsFamily != indices.presentFamily) {
-      imageSharingMode = vk::SharingMode::eConcurrent;
-      queueFamilyIndexCount = sizeof(queueFamilyIndices) / sizeof(uint32_t);
-    }
-
-    vk::SwapchainCreateInfoKHR createInfo(
-        vk::SwapchainCreateFlagsKHR(), g_surface, imageCount, format.format,
-        format.colorSpace, g_extent, 1,
-        vk::ImageUsageFlagBits::eColorAttachment, imageSharingMode,
-        queueFamilyIndexCount, queueFamilyIndices,
-        swapChainSupport.capabilities.currentTransform,
-        vk::CompositeAlphaFlagBitsKHR::eOpaque, presentMode, VK_TRUE
-        // swapchain
-    );
-
-    g_device.createSwapchainKHR(&createInfo, g_allocationCallbacks, &handle);
-
-    images = g_device.getSwapchainImagesKHR(handle);
-    g_requiredFormat = format.format;
-
-    vk::ImageSubresourceRange imageSubresourceRange(
-        vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
-
-    imageViews.resize(images.size());
-    for (size_t i = 0; i < images.size(); i++) {
-      vk::ImageViewCreateInfo createInfo(
-          vk::ImageViewCreateFlags(), images[i], vk::ImageViewType::e2D,
-          g_requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
-
-      CHECK_VK_RESULT_FATAL(g_device.createImageView(&createInfo,
-                                                     g_allocationCallbacks,
-                                                     &imageViews[i]),
-                            "Failed to create image views");
-    }
-  }
-
-  void destroy() {
-    for (auto imageView : imageViews)
-      g_device.destroyImageView(imageView, g_allocationCallbacks);
-
-    g_device.destroySwapchainKHR(handle, g_allocationCallbacks);
-  }
-} g_swapchain;
+// static struct {
+// private:
+//  vk::SwapchainKHR handle;
+//
+//  std::vector<vk::Image> images;
+//  std::vector<vk::ImageView> imageViews;
+//
+// public:
+//  vk::PresentModeKHR requiredPresentMode = vk::PresentModeKHR::eMailbox;
+//
+//  const vk::SwapchainKHR &get_handle() const { return handle; }
+//
+//  size_t image_count() const { return images.size(); }
+//  const vk::ImageView get_image_view(size_t index) const {
+//    return imageViews[index];
+//  }
+//
+//  void init() {
+//    SwapChainSupportDetails swapChainSupport =
+//        QuerySwapChainSupport(g_physicalDevice, g_surface);
+//
+//    vk::SurfaceFormatKHR format =
+//        swapChainSupport.formats[0]; // safe since it has been checked that
+//                                     // there are available formats
+//    if (swapChainSupport.formats.size() == 1 &&
+//        swapChainSupport.formats[0].format == vk::Format::eUndefined)
+//      format = {vk::Format::eB8G8R8A8Unorm,
+//      vk::ColorSpaceKHR::eSrgbNonlinear};
+//    else {
+//      for (const auto &availableFormat : swapChainSupport.formats) {
+//        if (availableFormat.format == vk::Format::eB8G8R8A8Unorm &&
+//            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+//          format = availableFormat;
+//      }
+//    }
+//
+//    vk::PresentModeKHR presentMode =
+//        vk::PresentModeKHR::eFifo; // Fifo mode's availability is guaranteed
+//    if (requiredPresentMode != vk::PresentModeKHR::eFifo) {
+//      for (const auto &availablePresentMode : swapChainSupport.presentModes) {
+//        if (availablePresentMode == requiredPresentMode) {
+//          presentMode = availablePresentMode;
+//          break;
+//        }
+//      }
+//
+//      if (presentMode == vk::PresentModeKHR::eFifo) {
+//        requiredPresentMode = vk::PresentModeKHR::eFifo;
+//        std::cout << vk::to_string(requiredPresentMode)
+//                  << " not supported. Using FIFO V-Sync mode instead."
+//                  << std::endl;
+//      }
+//    }
+//
+//    if (swapChainSupport.capabilities.currentExtent.width !=
+//        std::numeric_limits<uint32_t>::max()) {
+//      g_extent = swapChainSupport.capabilities.currentExtent;
+//    } else {
+//      int width, height;
+//      WindowHandler::GetFramebufferSize(&width, &height);
+//
+//      VkExtent2D actualExtent = {width, height};
+//
+//      actualExtent.width =
+//          std::max(swapChainSupport.capabilities.minImageExtent.width,
+//                   std::min(swapChainSupport.capabilities.maxImageExtent.width,
+//                            actualExtent.width));
+//      actualExtent.height =
+//          std::max(swapChainSupport.capabilities.minImageExtent.height,
+//                   std::min(swapChainSupport.capabilities.maxImageExtent.height,
+//                            actualExtent.height));
+//
+//      g_extent = actualExtent;
+//    }
+//
+//    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+//    if (swapChainSupport.capabilities.maxImageCount > 0 &&
+//        imageCount > swapChainSupport.capabilities.maxImageCount)
+//      imageCount = swapChainSupport.capabilities.maxImageCount;
+//
+//    QueueFamilyIndices indices = GetQueueFamilies(g_physicalDevice,
+//    g_surface); uint32_t queueFamilyIndices[] =
+//    {(uint32_t)indices.graphicsFamily,
+//                                     (uint32_t)indices.presentFamily};
+//
+//    vk::SharingMode imageSharingMode = vk::SharingMode::eExclusive;
+//    uint32_t queueFamilyIndexCount = 0;
+//
+//    if (indices.graphicsFamily != indices.presentFamily) {
+//      imageSharingMode = vk::SharingMode::eConcurrent;
+//      queueFamilyIndexCount = sizeof(queueFamilyIndices) / sizeof(uint32_t);
+//    }
+//
+//    vk::SwapchainCreateInfoKHR createInfo(
+//        vk::SwapchainCreateFlagsKHR(), g_surface, imageCount, format.format,
+//        format.colorSpace, g_extent, 1,
+//        vk::ImageUsageFlagBits::eColorAttachment, imageSharingMode,
+//        queueFamilyIndexCount, queueFamilyIndices,
+//        swapChainSupport.capabilities.currentTransform,
+//        vk::CompositeAlphaFlagBitsKHR::eOpaque, presentMode, VK_TRUE
+//        // swapchain
+//    );
+//
+//    g_device.createSwapchainKHR(&createInfo, g_allocationCallbacks, &handle);
+//
+//    images = g_device.getSwapchainImagesKHR(handle);
+//    g_requiredFormat = format.format;
+//
+//    vk::ImageSubresourceRange imageSubresourceRange(
+//        vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+//
+//    imageViews.resize(images.size());
+//    for (size_t i = 0; i < images.size(); i++) {
+//      vk::ImageViewCreateInfo createInfo(
+//          vk::ImageViewCreateFlags(), images[i], vk::ImageViewType::e2D,
+//          g_requiredFormat, vk::ComponentMapping(), imageSubresourceRange);
+//
+//      CHECK_VK_RESULT_FATAL(g_device.createImageView(&createInfo,
+//                                                     g_allocationCallbacks,
+//                                                     &imageViews[i]),
+//                            "Failed to create image views");
+//    }
+//  }
+//
+//  void destroy() {
+//    for (auto imageView : imageViews)
+//      g_device.destroyImageView(imageView, g_allocationCallbacks);
+//
+//    g_device.destroySwapchainKHR(handle, g_allocationCallbacks);
+//  }
+//} g_swapchain;
 
 struct Shader {
 private:
@@ -214,10 +217,11 @@ private:
         vk::PipelineInputAssemblyStateCreateFlags(),
         vk::PrimitiveTopology::eTriangleList, VK_FALSE);
 
-    vk::Viewport viewport(0, 0, (float)g_extent.width, (float)g_extent.height,
-                          0, 1);
+    vk::Extent2D extent = Swapchain::GetExtent();
+    vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
+                          1);
 
-    vk::Rect2D scissor({0, 0}, g_extent);
+    vk::Rect2D scissor({0, 0}, extent);
 
     vk::PipelineViewportStateCreateInfo viewportState(
         vk::PipelineViewportStateCreateFlags(), 1, &viewport, 1, &scissor);
@@ -316,7 +320,7 @@ public:
         texWidth * texHeight * 4; // TODO Support multiple pixel formats
 
     if (!pixels) {
-      printf("[Error] Failed to load texture image %s", path.c_str());
+      printf("[Error] Failed to load texture image %s\n", path.c_str());
       return;
     }
 
@@ -555,9 +559,11 @@ public:
         Maths::LookAt(Eigen::Vector3f(8.f, 0.f, 2.f), Eigen::Vector3f::Zero(),
                       Eigen::Vector3f::UnitZ());
 
+    vk::Extent2D extent = Swapchain::GetExtent();
+
     // TODO Store proj instead of recomputing it
     Eigen::Matrix4f proj = Maths::Perspective(
-        g_fov, g_extent.width / (float)g_extent.height, g_near, g_far);
+        g_fov, extent.width / (float)extent.height, g_near, g_far);
     proj(1, 1) *= -1;
 
     Eigen::Matrix4f vp = proj * view;
@@ -646,25 +652,20 @@ public:
 };
 
 static struct {
-  std::vector<vk::Framebuffer> framebuffers;
   std::vector<vk::CommandBuffer> commandbuffers;
 
   std::unordered_map<Shader *, std::vector<Model *>> models;
 
   void init_render_pass() {
-    vk::AttachmentDescription colorAttachment(
-        vk::AttachmentDescriptionFlags(), g_requiredFormat,
-        vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eClear,
-        vk::AttachmentStoreOp::eStore, vk::AttachmentLoadOp::eDontCare,
-        vk::AttachmentStoreOp::eDontCare, vk::ImageLayout::eUndefined,
-        vk::ImageLayout::ePresentSrcKHR);
+    vk::AttachmentDescription swapchainColorAttachment =
+        Swapchain::GetAttachmentDescription();
 
-    vk::AttachmentReference colorAttachmentRef(
+    vk::AttachmentReference swapchainColorAttachmentRef(
         0, vk::ImageLayout::eColorAttachmentOptimal);
 
     vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(),
                                    vk::PipelineBindPoint::eGraphics, 0, nullptr,
-                                   1, &colorAttachmentRef);
+                                   1, &swapchainColorAttachmentRef);
 
     vk::SubpassDependency dependency(
         VK_SUBPASS_EXTERNAL, 0,
@@ -675,8 +676,8 @@ static struct {
             vk::AccessFlagBits::eColorAttachmentWrite);
 
     vk::RenderPassCreateInfo renderPassInfo(vk::RenderPassCreateFlags(), 1,
-                                            &colorAttachment, 1, &subpass, 1,
-                                            &dependency);
+                                            &swapchainColorAttachment, 1,
+                                            &subpass, 1, &dependency);
 
     CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
                                                     g_allocationCallbacks,
@@ -695,34 +696,13 @@ static struct {
 
   void destroy_shaders() { g_baseShader.destroy(); }
 
-  void init_framebuffers() {
-    framebuffers.resize(g_swapchain.image_count());
-
-    for (size_t i = 0; i < framebuffers.size(); i++) {
-      vk::ImageView attachments[] = {g_swapchain.get_image_view(i)};
-
-      vk::FramebufferCreateInfo framebufferInfo(
-          vk::FramebufferCreateFlags(), g_renderPass, 1, attachments,
-          g_extent.width, g_extent.height, 1);
-
-      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
-                                                       g_allocationCallbacks,
-                                                       &framebuffers[i]),
-                            "Failed to create framebuffer.");
-    }
-  }
-
-  void destroy_framebuffers() {
-    for (auto framebuffer : framebuffers)
-      g_device.destroyFramebuffer(framebuffer, g_allocationCallbacks);
-  }
-
   void update_commandbuffer(size_t index) const {
     vk::CommandBufferBeginInfo beginInfo(
         vk::CommandBufferUsageFlagBits::eSimultaneousUse, nullptr);
 
-    vk::Viewport viewport(0, 0, (float)g_extent.width, (float)g_extent.height,
-                          0, 1);
+    vk::Extent2D extent = Swapchain::GetExtent();
+    vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
+                          1);
 
     static constexpr const std::array<float, 4> clearColorArray = {
         {0.0f, 0.0f, 0.0f, 1.0f}};
@@ -733,8 +713,8 @@ static struct {
     CHECK_VK_RESULT_FATAL(commandbuffers[index].begin(&beginInfo),
                           "Failed to begin recording command buffer.");
 
-    vk::RenderPassBeginInfo renderPassInfo(g_renderPass, framebuffers[index],
-                                           {{0, 0}, g_extent}, 1, &clearColor);
+    vk::RenderPassBeginInfo renderPassInfo(g_renderPass, Swapchain::GetFramebuffer(index),
+                                           {{0, 0}, extent}, 1, &clearColor);
 
     commandbuffers[index].setViewport(
         0, 1,
@@ -760,7 +740,7 @@ static struct {
   }
 
   void init_commandbuffers() {
-    commandbuffers.resize(framebuffers.size());
+    commandbuffers.resize(Swapchain::ImageCount());
 
     vk::CommandBufferAllocateInfo allocInfo(g_commandPool,
                                             vk::CommandBufferLevel::ePrimary,
@@ -778,24 +758,23 @@ static struct {
   }
 
   void init() {
-    g_swapchain.init();
+    Swapchain::Init();
 
     init_render_pass();
     init_shaders();
 
-    init_framebuffers();
+    Swapchain::InitFramebuffers(g_renderPass);
 
     init_commandbuffers();
   }
 
   void destroy(bool freeMemory = true) {
-    destroy_framebuffers();
     destroy_commandbuffers();
 
     destroy_shaders();
     destroy_render_pass();
 
-    g_swapchain.destroy();
+    Swapchain::Destroy();
 
     if (!freeMemory)
       return;
@@ -870,10 +849,7 @@ static void SetMainObjectsDebugNames() {
        "Present Queue"},
       g_dldy);
 
-  g_device.setDebugUtilsObjectNameEXT(
-      {vk::ObjectType::eSwapchainKHR,
-       (uint64_t)((VkSwapchainKHR)g_swapchain.get_handle()), "Swapchain"},
-      g_dldy);
+  // Swapchain done in swapchain.cpp
 
   for (size_t i = 0; i < g_debugMessengers.size(); ++i)
     g_device.setDebugUtilsObjectNameEXT(
@@ -903,7 +879,7 @@ static void Draw() {
 
   uint32_t imageIndex;
   vk::Result result = g_device.acquireNextImageKHR(
-      g_swapchain.get_handle(), std::numeric_limits<uint64_t>::max(),
+      Swapchain::GetHandle(), std::numeric_limits<uint64_t>::max(),
       g_imageAvailableSemaphores[g_currentFrame], nullptr, &imageIndex);
 
   if (result == vk::Result::eErrorOutOfDateKHR) {
@@ -937,7 +913,7 @@ static void Draw() {
                         "Failed to submit draw command buffer.");
 
   vk::PresentInfoKHR presentInfo(1, &g_renderFinishedSemaphores[g_currentFrame],
-                                 1, &g_swapchain.get_handle(), &imageIndex,
+                                 1, &Swapchain::GetHandle(), &imageIndex,
                                  nullptr);
 
   result = g_presentQueue.handle.presentKHR(&presentInfo);
@@ -1222,7 +1198,7 @@ void Run(unsigned int width, unsigned int height) {
 }
 
 void SetPresentMode(PresentMode presentMode) {
-  g_swapchain.requiredPresentMode =
+  Swapchain::PreferredPresentMode =
       static_cast<vk::PresentModeKHR>(presentMode);
   g_renderContext.refresh();
 }
