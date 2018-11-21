@@ -758,9 +758,7 @@ static void Draw() {
   // g_renderContext.update_transforms(imageIndex);
   g_renderContext.update_commandbuffer(imageIndex);
 
-  const vk::Semaphore *imageAvailableSemaphore =
-      Swapchain::GetCurrentImageSemaphore();
-  vk::SubmitInfo submitInfo(1, imageAvailableSemaphore, &waitStage, 1,
+  vk::SubmitInfo submitInfo(1, Swapchain::GetCurrentImageSemaphore(), &waitStage, 1,
                             &g_renderContext.commandbuffers[imageIndex], 1,
                             &renderFinishedSemaphores[currentFrame]);
 
