@@ -525,6 +525,7 @@ public:
 
 static struct {
   std::vector<vk::CommandBuffer> commandbuffers;
+  std::vector<vk::Framebuffer> framebuffers;
 
   std::unordered_map<Shader *, std::vector<Model *>> models;
 
@@ -568,6 +569,28 @@ static struct {
 
   void destroy_shaders() { g_baseShader.destroy(); }
 
+  void init_framebuffers() {
+    const std::vector<vk::ImageView> &attachments = Swapchain::GetImageViews();
+    vk::Extent2D extent = Swapchain::GetExtent();
+
+    framebuffers.resize(Swapchain::ImageCount());
+    for (size_t i = 0; i < framebuffers.size(); i++) {
+      vk::FramebufferCreateInfo framebufferInfo(
+          vk::FramebufferCreateFlags(), g_renderPass, 1, &attachments[i],
+          extent.width, extent.height, 1);
+
+      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
+                                                       g_allocationCallbacks,
+                                                       &framebuffers[i]),
+                            "Failed to create framebuffer.");
+    }
+  }
+
+  void destroy_framebuffers() {
+    for (size_t i = 0; i < framebuffers.size(); ++i)
+      g_device.destroyFramebuffer(framebuffers[i], g_allocationCallbacks);
+  }
+
   void init_commandbuffers() {
     commandbuffers.resize(Swapchain::ImageCount());
 
@@ -604,7 +627,7 @@ static struct {
                           "Failed to begin recording command buffer.");
 
     vk::RenderPassBeginInfo renderPassInfo(g_renderPass,
-                                           Swapchain::GetFramebuffer(index),
+                                           framebuffers[index],
                                            {{0, 0}, extent}, 1, &clearColor);
 
     commandbuffers[index].setViewport(
@@ -636,12 +659,13 @@ static struct {
     init_render_pass();
     init_shaders();
 
-    Swapchain::InitFramebuffers(g_renderPass);
+    init_framebuffers();
 
     init_commandbuffers();
   }
 
   void destroy(bool freeModels = true) {
+    destroy_framebuffers();
     destroy_commandbuffers();
 
     destroy_shaders();
@@ -758,7 +782,8 @@ static void Draw() {
   // g_renderContext.update_transforms(imageIndex);
   g_renderContext.update_commandbuffer(imageIndex);
 
-  vk::SubmitInfo submitInfo(1, Swapchain::GetCurrentImageSemaphore(), &waitStage, 1,
+  vk::SubmitInfo submitInfo(1, Swapchain::GetCurrentImageSemaphore(),
+                            &waitStage, 1,
                             &g_renderContext.commandbuffers[imageIndex], 1,
                             &renderFinishedSemaphores[currentFrame]);
 

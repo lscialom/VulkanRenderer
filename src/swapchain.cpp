@@ -14,7 +14,6 @@ static vk::SwapchainKHR handle;
 
 static std::vector<vk::Image> images;
 static std::vector<vk::ImageView> imageViews;
-static std::vector<vk::Framebuffer> framebuffers;
 
 static std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> imageAvailableSemaphores;
 static std::array<vk::Fence, MAX_IN_FLIGHT_FRAMES> inFlightFences;
@@ -44,7 +43,7 @@ vk::Fence GetCurrentFrameFence() { return inFlightFences[currentFrame]; }
 
 vk::Extent2D GetExtent() { return extent; }
 
-vk::Framebuffer GetFramebuffer(size_t index) { return framebuffers[index]; }
+const std::vector<vk::ImageView> &GetImageViews() { return imageViews; }
 
 void SetPresentQueue(::Queue queue) { presentQueue = queue; }
 
@@ -196,29 +195,6 @@ void Init() {
 #endif
 }
 
-void InitFramebuffers(vk::RenderPass renderPass) {
-  if (!framebuffers.empty()) {
-    for (size_t i = 0; i < framebuffers.size(); ++i)
-      g_device.destroyFramebuffer(framebuffers[i], g_allocationCallbacks);
-  }
-
-  vk::ImageView attachments[1];
-
-  framebuffers.resize(images.size());
-  for (size_t i = 0; i < framebuffers.size(); i++) {
-    attachments[0] = imageViews[i];
-
-    vk::FramebufferCreateInfo framebufferInfo(vk::FramebufferCreateFlags(),
-                                              renderPass, 1, attachments,
-                                              extent.width, extent.height, 1);
-
-    CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
-                                                     g_allocationCallbacks,
-                                                     &framebuffers[i]),
-                          "Failed to create framebuffer.");
-  }
-}
-
 void Destroy() {
   for (size_t i = 0; i < MAX_IN_FLIGHT_FRAMES; i++) {
     g_device.destroySemaphore(imageAvailableSemaphores[i],
@@ -229,10 +205,7 @@ void Destroy() {
 
   for (size_t i = 0; i < imageViews.size(); ++i) {
     g_device.destroyImageView(imageViews[i], g_allocationCallbacks);
-    g_device.destroyFramebuffer(framebuffers[i], g_allocationCallbacks);
   }
-
-  framebuffers.clear();
 
   g_device.destroySwapchainKHR(handle, g_allocationCallbacks);
 }
