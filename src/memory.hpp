@@ -9,7 +9,9 @@
 //-----------------------------------------------------------------------------
 
 namespace Allocator {
-void Init(struct Queue stagingQueue);
+void Init();
+
+void SetTransferQueue(struct Queue queue);
 
 void Destroy();
 }; // namespace Allocator

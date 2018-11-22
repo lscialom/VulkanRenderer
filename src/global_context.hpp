@@ -2,10 +2,12 @@
 
 #include <vulkan/vulkan.hpp>
 
-//TODO Move this somewhere else
+// TODO Move this somewhere else
 struct Queue {
   int index = -1;
   vk::Queue handle = nullptr;
+
+  bool isValid() { return index != -1 && handle; }
 };
 
 extern vk::Instance g_instance;

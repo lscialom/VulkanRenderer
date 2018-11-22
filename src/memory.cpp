@@ -8,13 +8,13 @@
 // ALLOCATOR
 //-----------------------------------------------------------------------------
 
-static VmaAllocator g_handle = nullptr;
+static VmaAllocator vmaAllocator = nullptr;
 
-static vk::CommandPool g_stagingCommandPool = nullptr;
-static Queue g_stagingQueue;
+static vk::CommandPool stagingCommandPool = nullptr;
+static Queue transferQueue;
 
 static vk::CommandBuffer BeginSingleTimeCommand() {
-  vk::CommandBufferAllocateInfo allocInfo(g_stagingCommandPool,
+  vk::CommandBufferAllocateInfo allocInfo(stagingCommandPool,
                                           vk::CommandBufferLevel::ePrimary, 1);
 
   vk::CommandBuffer commandbuffer;
@@ -35,34 +35,36 @@ static void EndSingleTimeCommand(vk::CommandBuffer commandbuffer) {
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &commandbuffer;
 
-  g_stagingQueue.handle.submit(1, &submitInfo, nullptr);
-  g_stagingQueue.handle.waitIdle();
+  transferQueue.handle.submit(1, &submitInfo, nullptr);
+  transferQueue.handle.waitIdle();
 
-  g_device.freeCommandBuffers(g_stagingCommandPool, 1, &commandbuffer);
+  g_device.freeCommandBuffers(stagingCommandPool, 1, &commandbuffer);
 }
 
 namespace Allocator {
-void Init(::Queue stagingQueue) {
-  g_stagingQueue = stagingQueue;
+void Init() {
+  assert(transferQueue.isValid());
 
   VmaAllocatorCreateInfo allocatorInfo = {};
   allocatorInfo.physicalDevice = g_physicalDevice;
   allocatorInfo.device = g_device;
 
-  vmaCreateAllocator(&allocatorInfo, &g_handle);
+  vmaCreateAllocator(&allocatorInfo, &vmaAllocator);
 
   vk::CommandPoolCreateInfo stagingPoolInfo(
-      vk::CommandPoolCreateFlagBits::eTransient, stagingQueue.index);
+      vk::CommandPoolCreateFlagBits::eTransient, transferQueue.index);
 
   CHECK_VK_RESULT_FATAL(g_device.createCommandPool(&stagingPoolInfo,
                                                    g_allocationCallbacks,
-                                                   &g_stagingCommandPool),
+                                                   &stagingCommandPool),
                         "Failed to create staging command pool.");
 };
 
+void SetTransferQueue(::Queue queue) { transferQueue = queue; }
+
 void Destroy() {
-  vmaDestroyAllocator(g_handle);
-  g_device.destroyCommandPool(g_stagingCommandPool, g_allocationCallbacks);
+  vmaDestroyAllocator(vmaAllocator);
+  g_device.destroyCommandPool(stagingCommandPool, g_allocationCallbacks);
 }
 } // namespace Allocator
 
@@ -79,7 +81,7 @@ Buffer::Buffer(Buffer &&other) {
 
 Buffer::~Buffer() {
   if (handle)
-    vmaDestroyBuffer(g_handle, handle, allocation);
+    vmaDestroyBuffer(vmaAllocator, handle, allocation);
 }
 
 void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
@@ -102,7 +104,7 @@ void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
   allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
   allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
 
-  CHECK_VK_RESULT_FATAL(vmaCreateBuffer(g_handle, &bufferInfo, &allocInfo,
+  CHECK_VK_RESULT_FATAL(vmaCreateBuffer(vmaAllocator, &bufferInfo, &allocInfo,
                                         (VkBuffer *)&handle, &allocation,
                                         nullptr),
                         "Failed to create vertex buffer.");
@@ -136,9 +138,9 @@ void Buffer::write(const void *data, VkDeviceSize writeSize,
   }
 
   void *mappedMemory;
-  vmaMapMemory(g_handle, allocation, &mappedMemory);
+  vmaMapMemory(vmaAllocator, allocation, &mappedMemory);
   memcpy((char *)mappedMemory + offset, data, (size_t)writeSize);
-  vmaUnmapMemory(g_handle, allocation);
+  vmaUnmapMemory(vmaAllocator, allocation);
 }
 
 Buffer &Buffer::operator=(Buffer &&other) {
@@ -177,7 +179,7 @@ Image::Image(Image &&other) {
 
 Image::~Image() {
   if (handle)
-    vmaDestroyImage(g_handle, handle, allocation);
+    vmaDestroyImage(vmaAllocator, handle, allocation);
 }
 
 void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
@@ -214,7 +216,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
   allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
 
   CHECK_VK_RESULT_FATAL(
-      vmaCreateImage(g_handle, (VkImageCreateInfo *)&imageInfo, &allocInfo,
+      vmaCreateImage(vmaAllocator, (VkImageCreateInfo *)&imageInfo, &allocInfo,
                      (VkImage *)&handle, &allocation, nullptr),
       "Failed to create image.");
 }

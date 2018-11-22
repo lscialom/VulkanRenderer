@@ -626,8 +626,7 @@ static struct {
     CHECK_VK_RESULT_FATAL(commandbuffers[index].begin(&beginInfo),
                           "Failed to begin recording command buffer.");
 
-    vk::RenderPassBeginInfo renderPassInfo(g_renderPass,
-                                           framebuffers[index],
+    vk::RenderPassBeginInfo renderPassInfo(g_renderPass, framebuffers[index],
                                            {{0, 0}, extent}, 1, &clearColor);
 
     commandbuffers[index].setViewport(
@@ -872,9 +871,10 @@ static void InitDevice() {
   std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
   const QueueFamilyIndices indices =
       GetQueueFamilies(g_physicalDevice, g_surface);
-  const std::set<int> uniqueQueueFamilies = {indices.graphicsFamily,
-                                             indices.presentFamily};
+  const std::set<int> uniqueQueueFamilies = {
+      indices.graphicsFamily, indices.presentFamily, indices.transferFamily};
 
+  // TODO Manage priorities if using different queues from the same family
   float queuePriority = 1.0f;
   for (int queueFamily : uniqueQueueFamilies) {
     vk::DeviceQueueCreateInfo queueCreateInfo(vk::DeviceQueueCreateFlags(),
@@ -903,6 +903,7 @@ static void InitDevice() {
 
   g_dldy.init(g_instance, g_device);
 
+  // TODO Different index for each (need to create a queue for each then)?
   graphicsQueue.index = 0;
   graphicsQueue.handle =
       g_device.getQueue(indices.graphicsFamily, graphicsQueue.index);
@@ -912,7 +913,13 @@ static void InitDevice() {
   presentQueue.handle =
       g_device.getQueue(indices.presentFamily, presentQueue.index);
 
+  Queue transferQueue;
+  transferQueue.index = 0;
+  transferQueue.handle =
+      g_device.getQueue(indices.transferFamily, transferQueue.index);
+
   Swapchain::SetPresentQueue(presentQueue);
+  Allocator::SetTransferQueue(transferQueue);
 
   vk::SemaphoreCreateInfo semaphoreInfo = {};
 
@@ -973,7 +980,7 @@ static void InitVulkan() {
   InitDevice();
 
   InitCommandPool();
-  Allocator::Init(graphicsQueue); // TODO Staging queue
+  Allocator::Init();
 
   // InitGlobalUBOs();
   InitUsualDescriptorSetLayouts(); // TODO Does nothing for now

@@ -105,8 +105,11 @@ static const std::array<const DebugMessengerInfo, 1> g_debugMessengersInfos{
 struct QueueFamilyIndices {
   int graphicsFamily = -1;
   int presentFamily = -1;
+  int transferFamily = -1;
 
-  bool isComplete() { return graphicsFamily >= 0 && presentFamily >= 0; }
+  bool isComplete() {
+    return graphicsFamily >= 0 && presentFamily >= 0 && transferFamily >= 0;
+  }
 };
 
 static QueueFamilyIndices GetQueueFamilies(vk::PhysicalDevice device,
@@ -123,6 +126,9 @@ static QueueFamilyIndices GetQueueFamilies(vk::PhysicalDevice device,
 
       if (device.getSurfaceSupportKHR(i, surface))
         indices.presentFamily = i;
+
+      if (queueFamily.queueFlags & vk::QueueFlagBits::eTransfer)
+        indices.transferFamily = i;
     }
 
     if (indices.isComplete())
