@@ -22,15 +22,15 @@ namespace Renderer {
 //-----------------------------------------------------------------------------
 
 // TODO Move to a camera class/namespace or make extern
-static float g_fov = 90.f;
-static float g_near = 0.1f;
-static float g_far = 100.f;
+static float fovValue = 90.f;
+static float nearValue = 0.1f;
+static float farValue = 100.f;
 
-void SetFov(float fov) { g_fov = fov; }
-void SetNear(float nearValue) { g_near = nearValue; }
-void SetFar(float farValue) { g_far = farValue; }
+void SetFov(float value) { fovValue = value; }
+void SetNear(float value) { nearValue = value; }
+void SetFar(float value) { farValue = value; }
 
-bool g_framebufferResized = false;
+bool framebufferResized = false;
 
 Queue graphicsQueue;
 
@@ -435,7 +435,7 @@ public:
 
     // TODO Store proj in camera instead of recomputing it
     Eigen::Matrix4f proj = Maths::Perspective(
-        g_fov, extent.width / (float)extent.height, g_near, g_far);
+        fovValue, extent.width / (float)extent.height, nearValue, farValue);
     proj(1, 1) *= -1;
 
     Eigen::Matrix4f vp = proj * view;
@@ -703,7 +703,7 @@ static struct {
   //  }
   //}
 
-} g_renderContext;
+} renderContext;
 
 //-----------------------------------------------------------------------------
 // DEBUG UTILS
@@ -760,7 +760,7 @@ static void Draw() {
   vk::Result result = Swapchain::AcquireNextImage();
 
   if (result == vk::Result::eErrorOutOfDateKHR) {
-    g_renderContext.refresh();
+    renderContext.refresh();
     return;
   } else if (result != vk::Result::eSuccess &&
              result != vk::Result::eSuboptimalKHR) {
@@ -778,12 +778,12 @@ static void Draw() {
   uint32_t imageIndex = Swapchain::GetCurrentImageIndex();
   size_t currentFrame = Swapchain::GetCurrentFrameIndex();
 
-  // g_renderContext.update_transforms(imageIndex);
-  g_renderContext.update_commandbuffer(imageIndex);
+  // renderContext.update_transforms(imageIndex);
+  renderContext.update_commandbuffer(imageIndex);
 
   vk::SubmitInfo submitInfo(1, Swapchain::GetCurrentImageSemaphore(),
                             &waitStage, 1,
-                            &g_renderContext.commandbuffers[imageIndex], 1,
+                            &renderContext.commandbuffers[imageIndex], 1,
                             &renderFinishedSemaphores[currentFrame]);
 
   CHECK_VK_RESULT_FATAL(graphicsQueue.handle.submit(
@@ -792,9 +792,9 @@ static void Draw() {
 
   result = Swapchain::Present(&renderFinishedSemaphores[currentFrame]);
   if (result == vk::Result::eErrorOutOfDateKHR ||
-      result == vk::Result::eSuboptimalKHR || g_framebufferResized) {
-    g_framebufferResized = false;
-    g_renderContext.refresh();
+      result == vk::Result::eSuboptimalKHR || framebufferResized) {
+    framebufferResized = false;
+    renderContext.refresh();
   } else
     CHECK_VK_RESULT_FATAL(result, "Failed to present Swapchain image.");
 }
@@ -985,7 +985,7 @@ static void InitVulkan() {
   // InitGlobalUBOs();
   InitUsualDescriptorSetLayouts(); // TODO Does nothing for now
 
-  g_renderContext.init();
+  renderContext.init();
 
 #ifndef NDEBUG
   SetMainObjectsDebugNames();
@@ -1024,7 +1024,7 @@ void Shutdown() {
           g_device.destroySemaphore(renderFinishedSemaphores[i],
                                     g_allocationCallbacks);
 
-      g_renderContext.destroy();
+      renderContext.destroy();
 
       // g_device.destroyDescriptorSetLayout(g_baseDescriptorSetLayout,
       // g_allocationCallbacks);
@@ -1063,7 +1063,7 @@ void Run(unsigned int width, unsigned int height) {
 void SetPresentMode(PresentMode presentMode) {
   Swapchain::PreferredPresentMode =
       static_cast<vk::PresentModeKHR>(presentMode);
-  g_renderContext.refresh();
+  renderContext.refresh();
 }
 
 uint64_t CreateModel(EPrimitive primitive) {
@@ -1078,9 +1078,9 @@ uint64_t CreateModel(EPrimitive primitive) {
   }
 
   // TODO Set different shaders
-  g_renderContext.models[&g_baseShader].push_back(model);
+  renderContext.models[&g_baseShader].push_back(model);
 
-  return uintptr_t(g_renderContext.models[&g_baseShader].back());
+  return uintptr_t(renderContext.models[&g_baseShader].back());
 }
 
 ModelInstance *Spawn(uint64_t modelId, Vec3 pos, Vec3 rot, Vec3 scale) {
