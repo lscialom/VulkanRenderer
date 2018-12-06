@@ -1,6 +1,6 @@
-[submodule "deps/glfw"]
-	path = deps/glfw
-	url = https://github.com/glfw/glfw
 [submodule "deps/eigen"]
 	path = deps/eigen
 	url = https://github.com/eigenteam/eigen-git-mirror
+[submodule "deps/WindowHandler"]
+	path = deps/WindowHandler
+	url = https://github.com/lscialom/WindowHandler.git

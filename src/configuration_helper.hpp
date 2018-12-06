@@ -25,6 +25,14 @@ static constexpr const size_t MAX_OBJECT_INSTANCES_PER_TEMPLATE = 100;
 // EXTENSIONS
 //-----------------------------------------------------------------------------
 
+static constexpr const std::array<const char *, 2>
+    g_requiredInstanceExtensions = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+#ifdef _WIN32
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#endif
+};
+
 static constexpr const std::array<const char *, 1> g_deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 

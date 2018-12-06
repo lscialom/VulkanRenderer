@@ -1,7 +1,6 @@
 #pragma once
 
 #include "vulkan/vulkan.hpp"
-#include "window_handler.hpp"
 
 namespace Swapchain {
 extern vk::PresentModeKHR PreferredPresentMode;
@@ -22,7 +21,7 @@ const std::vector<vk::ImageView> &GetImageViews();
 
 void SetPresentQueue(struct Queue queue);
 
-void Init();
+void Init(uint32_t w, uint32_t h);
 
 void Destroy();
 

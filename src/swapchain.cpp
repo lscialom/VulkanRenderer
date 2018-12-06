@@ -65,7 +65,7 @@ static void InitSyncBarriers() {
   }
 }
 
-void Init() {
+void Init(uint32_t w, uint32_t h) {
   SwapChainSupportDetails swapChainSupport =
       QuerySwapChainSupport(g_physicalDevice, g_surface);
 
@@ -116,10 +116,7 @@ void Init() {
       std::numeric_limits<uint32_t>::max()) {
     extent = swapChainSupport.capabilities.currentExtent;
   } else {
-    int width, height;
-    WindowHandler::GetFramebufferSize(&width, &height);
-
-    VkExtent2D actualExtent = {width, height};
+    VkExtent2D actualExtent = {w, h};
 
     actualExtent.width =
         std::max(swapChainSupport.capabilities.minImageExtent.width,

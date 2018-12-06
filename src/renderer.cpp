@@ -30,7 +30,8 @@ void SetFov(float value) { fovValue = value; }
 void SetNear(float value) { nearValue = value; }
 void SetFar(float value) { farValue = value; }
 
-bool framebufferResized = false;
+static uint32_t requestedWidth = 0;
+static uint32_t requestedHeight = 0;
 
 Queue graphicsQueue;
 
@@ -653,7 +654,7 @@ static struct {
   }
 
   void init() {
-    Swapchain::Init();
+    Swapchain::Init(requestedWidth, requestedHeight);
 
     init_render_pass();
     init_shaders();
@@ -683,12 +684,6 @@ static struct {
   }
 
   void refresh() {
-    int width = 0, height = 0;
-    while (width == 0 || height == 0) {
-      WindowHandler::GetFramebufferSize(&width, &height);
-      WindowHandler::Update();
-    }
-
     g_device.waitIdle();
 
     destroy(false);
@@ -792,10 +787,9 @@ static void Draw() {
 
   result = Swapchain::Present(&renderFinishedSemaphores[currentFrame]);
   if (result == vk::Result::eErrorOutOfDateKHR ||
-      result == vk::Result::eSuboptimalKHR || framebufferResized) {
-    framebufferResized = false;
+      result == vk::Result::eSuboptimalKHR)
     renderContext.refresh();
-  } else
+  else
     CHECK_VK_RESULT_FATAL(result, "Failed to present Swapchain image.");
 }
 
@@ -810,12 +804,9 @@ static void CreateInstance() {
   vk::InstanceCreateInfo createInfo;
   createInfo.pApplicationInfo = &appInfo;
 
-  const char **pExtensions = nullptr;
-
-  uint32_t requiredExtensionsCount =
-      WindowHandler::GetRequiredInstanceExtensions(pExtensions);
-  std::vector<const char *> extensions(pExtensions,
-                                       pExtensions + requiredExtensionsCount);
+  std::vector<const char *> extensions(g_requiredInstanceExtensions.data(),
+                                       g_requiredInstanceExtensions.data() +
+                                           g_requiredInstanceExtensions.size());
 
   extensions.insert(extensions.end(), g_instanceExtensions.begin(),
                     g_instanceExtensions.end());
@@ -843,6 +834,19 @@ static void CreateInstance() {
         g_debugMessengersInfos[i].MakeCreateInfo(), g_allocationCallbacks,
         g_dldy));
 #endif
+}
+
+static void InitSurface(void *windowHandle) {
+#ifdef _WIN32
+  vk::Win32SurfaceCreateInfoKHR createInfo{vk::Win32SurfaceCreateFlagsKHR(),
+                                           GetModuleHandle(nullptr),
+                                           (HWND)windowHandle};
+
+  CHECK_VK_RESULT_FATAL(g_instance.createWin32SurfaceKHR(&createInfo, g_allocationCallbacks,
+                                   &g_surface, g_dldy), "Failed to create window surface");
+#endif
+
+  // TODO Support other OS
 }
 
 static void InitDevice() {
@@ -970,13 +974,14 @@ static void InitUsualDescriptorSetLayouts() {
   //    "Failed to create descriptor set layout.");
 }
 
-static void InitVulkan() {
+static void InitVulkan(void *windowHandle) {
   CreateInstance();
-  CHECK_VK_RESULT_FATAL((vk::Result)WindowHandler::CreateSurface(
-                            (VkInstance)g_instance,
-                            (VkAllocationCallbacks *)g_allocationCallbacks,
-                            (VkSurfaceKHR *)&g_surface),
-                        "Failed to create window surface");
+  InitSurface(windowHandle);
+  // CHECK_VK_RESULT_FATAL((vk::Result)WindowHandler::CreateSurface(
+  //                          (VkInstance)g_instance,
+  //                          (VkAllocationCallbacks *)g_allocationCallbacks,
+  //                          (VkSurfaceKHR *)&g_surface),
+  //                      "Failed to create window surface");
   InitDevice();
 
   InitCommandPool();
@@ -996,22 +1001,19 @@ static void InitVulkan() {
 // USER FUNCTIONS
 //-----------------------------------------------------------------------------
 
-void Init(unsigned int width, unsigned int height) {
+void Init(unsigned int width, unsigned int height, void *windowHandle) {
   assert(width != 0 && height != 0);
+  requestedWidth = width, requestedHeight = height;
 
   TRY_CATCH_BLOCK("Failed to init renderer",
 
-                  WindowHandler::Init(width, height);
-                  InitVulkan(););
+                  InitVulkan(windowHandle););
 }
 
-bool Update() {
+void Update() {
   TRY_CATCH_BLOCK("Failed to update renderer",
 
-                  bool signal = WindowHandler::Update();
-                  Draw();
-
-                  return signal;);
+                  Draw(););
 }
 
 void Shutdown() {
@@ -1046,18 +1048,12 @@ void Shutdown() {
 #endif
 
       g_instance.destroySurfaceKHR(g_surface, g_allocationCallbacks);
-      g_instance.destroy(g_allocationCallbacks);
-
-      WindowHandler::Shutdown(););
+      g_instance.destroy(g_allocationCallbacks););
 }
 
-void Run(unsigned int width, unsigned int height) {
-  Init(width, height);
-
-  while (Update())
-    ;
-
-  Shutdown();
+void Resize(unsigned int width, unsigned int height) {
+  requestedWidth = width, requestedHeight = height;
+  renderContext.refresh();
 }
 
 void SetPresentMode(PresentMode presentMode) {

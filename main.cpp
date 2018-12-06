@@ -1,3 +1,5 @@
+#include <window_handler.hpp>
+
 #include <renderer.hpp>
 
 #include <chrono>
@@ -7,8 +9,12 @@
 
 #define M_PI 3.14159265359
 
+bool resizeCallback = false;
 int main() {
-  Renderer::Init(WIDTH, HEIGHT);
+  WindowHandler::Init(WIDTH, HEIGHT);
+  WindowHandler::SetFramebufferSizeCallbackSignal(&resizeCallback);
+
+  Renderer::Init(WIDTH, HEIGHT, WindowHandler::GetHandle());
 
   Renderer::SetFov(90.f);
   Renderer::SetFar(100.f);
@@ -35,7 +41,21 @@ int main() {
 
   auto startTime = std::chrono::high_resolution_clock::now();
 
-  while (Renderer::Update()) {
+  while (WindowHandler::Update()) {
+    // TODO Move into a function
+    if (resizeCallback) {
+      int width = 0, height = 0;
+      while (width == 0 || height == 0) {
+        WindowHandler::GetFramebufferSize(&width, &height);
+        WindowHandler::Update();
+      }
+
+      resizeCallback = false;
+      Renderer::Resize(width, height);
+    }
+
+    Renderer::Update();
+
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(
                      currentTime - startTime)
@@ -50,6 +70,7 @@ int main() {
   }
 
   Renderer::Shutdown();
+  WindowHandler::Shutdown();
 
   return 0;
 }
