@@ -361,8 +361,6 @@ private:
 
   std::vector<ModelInstanceInternal *> modelInstances;
 
-  uint64_t id;
-
   template <typename T, size_t N, size_t O>
   vk::DeviceSize
   init_vi_buffer(const std::array<T, N> &vertexBuffer,
@@ -393,17 +391,12 @@ private:
   }
 
 public:
-  Model() {
-    static uint64_t idCounter = 0;
-    id = idCounter++;
-  }
+  Model() = default;
   Model(Model &&other) = default;
   ~Model() {
     for (size_t i = 0; i < modelInstances.size(); ++i)
       delete modelInstances[i];
   }
-
-  uint64_t get_id() const { return id; }
 
   template <typename T, size_t N, size_t O>
   void init(const std::array<T, N> &vertices,
@@ -419,8 +412,9 @@ public:
     init(Prim::Vertices, Prim::Indices);
   }
 
+  // TODO index param only used for descriptors (that are unused for now).
   void record(const vk::CommandBuffer &commandbuffer, Shader *shader,
-              size_t index) const {
+              size_t imageIndex) const {
     commandbuffer.bindIndexBuffer(viBuffer.get_handle(), 0,
                                   VULKAN_INDICES_TYPE);
     commandbuffer.bindVertexBuffers(0, 1, &viBuffer.get_handle(), &vOffset);
@@ -449,7 +443,7 @@ public:
 
       // commandbuffer.bindDescriptorSets(
       //    vk::PipelineBindPoint::eGraphics, shader->get_pipeline_layout(), 0,
-      //    1, &uboModelMat.get_descriptor_set(index), 1, &dynamicOffset);
+      //    1, &uboModelMat.get_descriptor_set(imageIndex), 1, &dynamicOffset);
 
       modelInstances[i]->update_matrix();
 
@@ -842,8 +836,10 @@ static void InitSurface(void *windowHandle) {
                                            GetModuleHandle(nullptr),
                                            (HWND)windowHandle};
 
-  CHECK_VK_RESULT_FATAL(g_instance.createWin32SurfaceKHR(&createInfo, g_allocationCallbacks,
-                                   &g_surface, g_dldy), "Failed to create window surface");
+  CHECK_VK_RESULT_FATAL(g_instance.createWin32SurfaceKHR(&createInfo,
+                                                         g_allocationCallbacks,
+                                                         &g_surface, g_dldy),
+                        "Failed to create window surface");
 #endif
 
   // TODO Support other OS
