@@ -269,7 +269,7 @@ public:
     } else
       alignment = T::Size;
 
-    size_t nbBuffers = g_swapchain.image_count();
+	size_t nbBuffers = Swapchain::ImageCount();
 
     vk::DescriptorPoolSize poolSize{vk::DescriptorType::eUniformBuffer,
                                     static_cast<uint32_t>(nbBuffers)};
