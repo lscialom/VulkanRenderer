@@ -61,10 +61,10 @@ int main() {
                      currentTime - startTime)
                      .count();
 
-    inst0->SetRotation({time * M_PI / 2.f, 0, 0});
-    inst1->SetRotation({baseRot.x + time * M_PI / 2.f, 0, 0});
-    inst2->SetRotation({-(baseRot.x + time * M_PI / 2.f), 0, 0});
-    inst3->SetRotation({time * M_PI / 2.f, 0, 0});
+    inst0->SetRotation({time * static_cast<float>(M_PI) / 2.f, 0, 0});
+    inst1->SetRotation({baseRot.x + time * static_cast<float>(M_PI) / 2.f, 0, 0});
+    inst2->SetRotation({-(baseRot.x + time * static_cast<float>(M_PI) / 2.f), 0, 0});
+    inst3->SetRotation({time * static_cast<float>(M_PI) / 2.f, 0, 0});
 
     inst3->SetScale({0.5f, 0.5f, 1.f});
   }

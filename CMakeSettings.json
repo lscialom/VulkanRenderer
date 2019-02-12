@@ -62,10 +62,6 @@
         {
           "name": "CMAKE_C_COMPILER",
           "value": "clang-cl"
-        },
-        {
-          "name": "CMAKE_LINKER",
-          "value": "${projectDir}\\tools\\lld-link.exe"
         }
       ]
     },
@@ -86,10 +82,6 @@
         {
           "name": "CMAKE_C_COMPILER",
           "value": "clang-cl"
-        },
-        {
-          "name": "CMAKE_LINKER",
-          "value": "${projectDir}\\tools\\lld-link.exe"
         }
       ]
     },
@@ -110,10 +102,6 @@
         {
           "name": "CMAKE_C_COMPILER",
           "value": "clang-cl"
-        },
-        {
-          "name": "CMAKE_LINKER",
-          "value": "${projectDir}\\tools\\lld-link.exe"
         }
       ]
     }

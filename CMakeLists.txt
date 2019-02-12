@@ -20,10 +20,10 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${OUTPUT_DIRECTORY}/archive")
 
 #Compile flags
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -std=c++17 -Xclang -fcxx-exceptions /fp:fast /arch:AVX -flto -fwhole-program-vtables -Xclang -O0") # /FA for asm, -Rpass-analysis=loop-vectorize for vectorization check
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -std=c++17 -Xclang -fcxx-exceptions /fp:fast /arch:AVX -Xclang -O0") # /FA for asm, -Rpass-analysis=loop-vectorize for vectorization check
 	add_definitions(-DDEBUG)
 else()
- 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -std=c++17 -Xclang -fcxx-exceptions /fp:fast /arch:AVX -flto -fwhole-program-vtables -Xclang -O3") # AVX2 is being slower with Eigen since it prefers 128-bits (rather than 256) packets
+ 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -std=c++17 -Xclang -fcxx-exceptions /fp:fast /arch:AVX -Xclang -O3") # AVX2 is being slower with Eigen since it prefers 128-bits (rather than 256) packets
 	add_definitions(-DNDEBUG)
 endif()
 
