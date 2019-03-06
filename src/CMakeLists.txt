@@ -21,7 +21,8 @@ target_include_directories(vulkan_renderer PRIVATE ${PROJECT_SOURCE_DIR}/include
 												   ${PROJECT_SOURCE_DIR}/deps/eigen
 												   ${PROJECT_SOURCE_DIR}/deps/glfw/include
 												   ${PROJECT_SOURCE_DIR}/deps/vma/include
-												   $ENV{VK_SDK_PATH}/Include)
+												   $ENV{VK_SDK_PATH}/Include
+												   ${PROJECT_SOURCE_DIR}/resources/shaders/hr/include)
 
 target_link_libraries(vulkan_renderer PRIVATE ${VULKAN_LIBRARY})
 set_target_properties(vulkan_renderer PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -DVULKAN_RENDERER_DLL_EXPORTS")

@@ -5,6 +5,8 @@
 #include <fstream>
 #include <set>
 
+#include <constants.glsl>
+
 //-----------------------------------------------------------------------------
 // MAX VALUES
 //-----------------------------------------------------------------------------
@@ -16,7 +18,7 @@ static constexpr const size_t MAX_OBJECT_INSTANCES_PER_TEMPLATE = 100;
 // INDICES TYPE
 //-----------------------------------------------------------------------------
 
-#define VERTEX_INDICES_TYPE uint16_t
+#define VERTEX_INDICES_TYPE uint32_t
 #define VULKAN_INDICES_TYPE                                                    \
   (sizeof(VERTEX_INDICES_TYPE) == sizeof(uint16_t) ? vk::IndexType::eUint16    \
                                                    : vk::IndexType::eUint32)
@@ -163,6 +165,25 @@ static SwapChainSupportDetails QuerySwapChainSupport(vk::PhysicalDevice device,
   details.presentModes = device.getSurfacePresentModesKHR(surface);
 
   return details;
+}
+
+static vk::Format FindSupportedFormat(vk::PhysicalDevice device,
+                                      const std::vector<vk::Format> &candidates,
+                                      vk::ImageTiling tiling,
+                                      vk::FormatFeatureFlags features) {
+  for (vk::Format format : candidates) {
+    vk::FormatProperties props = device.getFormatProperties(format);
+
+    if (tiling == vk::ImageTiling::eLinear &&
+        (props.linearTilingFeatures & features) == features) {
+      return format;
+    } else if (tiling == vk::ImageTiling::eOptimal &&
+               (props.optimalTilingFeatures & features) == features) {
+      return format;
+    }
+  }
+
+  throw std::runtime_error("failed to find supported format!");
 }
 
 static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) {

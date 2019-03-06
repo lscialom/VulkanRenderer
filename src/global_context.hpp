@@ -22,9 +22,6 @@ extern vk::CommandPool g_commandPool;
 
 // extern vk::DescriptorSetLayout g_baseDescriptorSetLayout;
 
-// TODO Should be elsewhere than global
-extern vk::RenderPass g_renderPass;
-
 extern vk::AllocationCallbacks *g_allocationCallbacks;
 
 extern vk::DispatchLoaderDynamic g_dldy;

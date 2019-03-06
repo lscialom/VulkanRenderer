@@ -4,6 +4,8 @@
 #include "configuration_helper.hpp"
 #include "global_context.hpp"
 
+namespace Renderer {
+
 //-----------------------------------------------------------------------------
 // ALLOCATOR
 //-----------------------------------------------------------------------------
@@ -12,6 +14,11 @@ static VmaAllocator vmaAllocator = nullptr;
 
 static vk::CommandPool stagingCommandPool = nullptr;
 static Queue transferQueue;
+
+static std::array<vk::CommandBuffer, 3> commandbuffersAsync;
+static std::array<vk::Fence, 3> cbAsyncFences;
+
+static uint8_t lastCommandbufferUsedID = commandbuffersAsync.size() - 1;
 
 static vk::CommandBuffer BeginSingleTimeCommand() {
   vk::CommandBufferAllocateInfo allocInfo(stagingCommandPool,
@@ -41,6 +48,44 @@ static void EndSingleTimeCommand(vk::CommandBuffer commandbuffer) {
   g_device.freeCommandBuffers(stagingCommandPool, 1, &commandbuffer);
 }
 
+static void InitCommandbufferAsync() {
+  vk::CommandBufferAllocateInfo allocInfo(stagingCommandPool,
+                                          vk::CommandBufferLevel::ePrimary, 1);
+
+  for (size_t i = 0; i < commandbuffersAsync.size(); ++i) {
+    g_device.allocateCommandBuffers(&allocInfo, &commandbuffersAsync[i]);
+
+    vk::FenceCreateInfo info{vk::FenceCreateFlagBits::eSignaled};
+    g_device.createFence(&info, g_allocationCallbacks, &cbAsyncFences[i]);
+  }
+}
+
+static void SubmitAsyncCommandBegin() {
+  vk::CommandBufferBeginInfo beginInfo(
+      vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+
+  lastCommandbufferUsedID =
+      (lastCommandbufferUsedID + 1) % (commandbuffersAsync.size());
+
+  g_device.waitForFences(1, &cbAsyncFences[lastCommandbufferUsedID], true,
+                         std::numeric_limits<uint64_t>::max());
+  g_device.resetFences(1, &cbAsyncFences[lastCommandbufferUsedID]);
+
+  commandbuffersAsync[lastCommandbufferUsedID].begin(&beginInfo);
+}
+
+static void SubmitAsyncCommandEnd() {
+
+  commandbuffersAsync[lastCommandbufferUsedID].end();
+
+  vk::SubmitInfo submitInfo = {};
+  submitInfo.commandBufferCount = 1;
+  submitInfo.pCommandBuffers = &commandbuffersAsync[lastCommandbufferUsedID];
+
+  transferQueue.handle.submit(1, &submitInfo,
+                              cbAsyncFences[lastCommandbufferUsedID]);
+}
+
 namespace Allocator {
 void Init() {
   assert(transferQueue.isValid());
@@ -52,19 +97,28 @@ void Init() {
   vmaCreateAllocator(&allocatorInfo, &vmaAllocator);
 
   vk::CommandPoolCreateInfo stagingPoolInfo(
-      vk::CommandPoolCreateFlagBits::eTransient, transferQueue.index);
+      vk::CommandPoolCreateFlagBits::eTransient |
+          vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+      transferQueue.index);
 
   CHECK_VK_RESULT_FATAL(g_device.createCommandPool(&stagingPoolInfo,
                                                    g_allocationCallbacks,
                                                    &stagingCommandPool),
                         "Failed to create staging command pool.");
+
+  InitCommandbufferAsync();
 };
 
 void SetTransferQueue(::Queue queue) { transferQueue = queue; }
 
+void WaitForTransferQueue() { transferQueue.handle.waitIdle(); }
+
 void Destroy() {
   vmaDestroyAllocator(vmaAllocator);
   g_device.destroyCommandPool(stagingCommandPool, g_allocationCallbacks);
+
+  for (size_t i = 0; i < cbAsyncFences.size(); ++i)
+    g_device.destroyFence(cbAsyncFences[i], g_allocationCallbacks);
 }
 } // namespace Allocator
 
@@ -80,8 +134,10 @@ Buffer::Buffer(Buffer &&other) {
 }
 
 Buffer::~Buffer() {
-  if (handle)
+  if (handle) {
     vmaDestroyBuffer(vmaAllocator, handle, allocation);
+    handle = nullptr;
+  }
 }
 
 void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
@@ -159,7 +215,15 @@ Buffer &Buffer::operator=(Buffer &&other) {
 static uint8_t GetPixelSizeFromFormat(vk::Format format) {
   switch (format) {
   case vk::Format::eR8G8B8A8Unorm:
+  case vk::Format::eD32Sfloat:
+  case vk::Format::eR8G8B8A8Snorm:
+  case vk::Format::eR8G8B8A8Srgb:
+  case vk::Format::eR32Sfloat:
     return 4;
+
+  case vk::Format::eR32G32B32A32Sfloat:
+    return 16;
+
   default:
     printf("[WARNING] Unsupported image format specified (%s).\n",
            vk::to_string(format).c_str());
@@ -170,21 +234,26 @@ static uint8_t GetPixelSizeFromFormat(vk::Format format) {
 Image::Image(Image &&other) {
   handle = other.handle;
   other.handle = nullptr;
+  view = other.view;
+  other.view = nullptr;
 
   allocation = std::move(other.allocation);
   size = other.size;
 
-  layout = other.layout;
+  aspect = other.aspect;
 }
 
 Image::~Image() {
+  if (view)
+    g_device.destroyImageView(view, g_allocationCallbacks);
   if (handle)
     vmaDestroyImage(vmaAllocator, handle, allocation);
 }
 
 void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
                      vk::ImageTiling tiling, vk::ImageUsageFlags usage,
-                     vk::MemoryPropertyFlags properties) {
+                     vk::MemoryPropertyFlags properties,
+                     vk::ImageAspectFlags aspectFlags) {
 #ifndef NDEBUG
   if (handle)
     printf("[WARNING] Allocating already allocated image. This probably "
@@ -193,7 +262,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
 #endif
 
   size = texWidth * texHeight * GetPixelSizeFromFormat(format);
-  layout = vk::ImageLayout::eUndefined;
+  aspect = aspectFlags;
 
   vk::ImageCreateInfo imageInfo{
       vk::ImageCreateFlags(),
@@ -209,7 +278,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
       vk::SharingMode::eExclusive, // TODO Support Concurrent access
       0,
       nullptr,
-      layout};
+      vk::ImageLayout::eUndefined};
 
   VmaAllocationCreateInfo allocInfo = {};
   allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
@@ -219,21 +288,53 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
       vmaCreateImage(vmaAllocator, (VkImageCreateInfo *)&imageInfo, &allocInfo,
                      (VkImage *)&handle, &allocation, nullptr),
       "Failed to create image.");
+
+  vk::ImageViewCreateInfo viewInfo;
+  viewInfo.format = format;
+  viewInfo.components.r = vk::ComponentSwizzle::eIdentity;
+  viewInfo.components.g = vk::ComponentSwizzle::eIdentity;
+  viewInfo.components.b = vk::ComponentSwizzle::eIdentity;
+  viewInfo.components.a = vk::ComponentSwizzle::eIdentity;
+  viewInfo.image = handle;
+  viewInfo.viewType = vk::ImageViewType::e2D;
+  viewInfo.subresourceRange.aspectMask = aspect;
+  viewInfo.subresourceRange.baseArrayLayer = 0;
+  viewInfo.subresourceRange.baseMipLevel = 0;
+  viewInfo.subresourceRange.layerCount = 1;
+  viewInfo.subresourceRange.levelCount = 1;
+
+  view = g_device.createImageView(viewInfo, g_allocationCallbacks);
 }
 
-void Image::transition_layout(vk::Format format, vk::ImageLayout newLayout) {
-  vk::CommandBuffer commandbuffer = BeginSingleTimeCommand();
+void Image::free() {
+  if (view)
+    g_device.destroyImageView(view, g_allocationCallbacks);
+  if (handle)
+    vmaDestroyImage(vmaAllocator, handle, allocation);
+
+  view = nullptr;
+  handle = nullptr;
+
+  allocation = VmaAllocation{};
+  size = 0;
+
+  aspect = vk::ImageAspectFlags{};
+}
+
+void Image::transition_layout(vk::ImageLayout oldLayout,
+                              vk::ImageLayout newLayout) {
+
+  SubmitAsyncCommandBegin();
 
   vk::ImageSubresourceRange subresourceRange;
-  subresourceRange.aspectMask =
-      vk::ImageAspectFlagBits::eColor; // TODO Support other aspect masks
+  subresourceRange.aspectMask = aspect;
   subresourceRange.baseMipLevel = 0;
   subresourceRange.levelCount = 1;
   subresourceRange.baseArrayLayer = 0;
   subresourceRange.layerCount = 1;
 
   vk::ImageMemoryBarrier barrier;
-  barrier.oldLayout = layout;
+  barrier.oldLayout = oldLayout;
   barrier.newLayout = newLayout;
   barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -243,36 +344,77 @@ void Image::transition_layout(vk::Format format, vk::ImageLayout newLayout) {
   vk::PipelineStageFlags srcStage;
   vk::PipelineStageFlags dstStage;
 
-  if (layout == vk::ImageLayout::eUndefined &&
+  if (oldLayout == vk::ImageLayout::eUndefined &&
       newLayout == vk::ImageLayout::eTransferDstOptimal) {
+
     barrier.srcAccessMask = vk::AccessFlagBits(0);
     barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
 
     srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
     dstStage = vk::PipelineStageFlagBits::eTransfer;
-  } else if (layout == vk::ImageLayout::eTransferDstOptimal &&
+
+  } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
              newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+
     barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
     barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
     srcStage = vk::PipelineStageFlagBits::eTransfer;
     dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+
+  } else if (oldLayout == vk::ImageLayout::eUndefined &&
+             newLayout ==
+                 vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal) {
+
+    barrier.srcAccessMask = vk::AccessFlagBits(0);
+    barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+    srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    dstStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+
+  } else if (oldLayout ==
+                 vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal &&
+             newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+
+    barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead;
+    barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+    srcStage = vk::PipelineStageFlagBits::eLateFragmentTests;
+    dstStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+
+  } else if (oldLayout == vk::ImageLayout::eUndefined &&
+             newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+
+    barrier.srcAccessMask = vk::AccessFlagBits(0);
+    barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+
+    srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+
+  } else if (oldLayout == vk::ImageLayout::eShaderReadOnlyOptimal &&
+             newLayout == vk::ImageLayout::eColorAttachmentOptimal) {
+
+    barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+    barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+
+    srcStage = vk::PipelineStageFlagBits::eFragmentShader;
+    dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+
   } else {
+
     std::string msg = "Unsupported layout transition."
                       " (" +
-                      vk::to_string(layout) + " -> " +
+                      vk::to_string(oldLayout) + " -> " +
                       vk::to_string(newLayout) + ")";
 
     throw std::invalid_argument(msg.c_str());
   }
 
-  commandbuffer.pipelineBarrier(srcStage, dstStage,
-                                vk::DependencyFlagBits::eByRegion, 0, nullptr,
-                                0, nullptr, 1, &barrier);
+  commandbuffersAsync[lastCommandbufferUsedID].pipelineBarrier(
+      srcStage, dstStage, vk::DependencyFlagBits::eByRegion, 0, nullptr, 0,
+      nullptr, 1, &barrier);
 
-  EndSingleTimeCommand(commandbuffer);
-
-  layout = newLayout;
+  SubmitAsyncCommandEnd();
 }
 
 // TODO Make it more flexible
@@ -286,8 +428,7 @@ void Image::write_from_buffer(vk::Buffer buffer, uint32_t width,
   region.bufferImageHeight = 0;
 
   vk::ImageSubresourceLayers imageSubresource;
-  imageSubresource.aspectMask =
-      vk::ImageAspectFlagBits::eColor; // TODO Support other aspect masks
+  imageSubresource.aspectMask = aspect;
   imageSubresource.mipLevel = 0;
   imageSubresource.baseArrayLayer = 0;
   imageSubresource.layerCount = 1;
@@ -306,11 +447,15 @@ void Image::write_from_buffer(vk::Buffer buffer, uint32_t width,
 Image &Image::operator=(Image &&other) {
   handle = other.handle;
   other.handle = nullptr;
+  view = other.view;
+  other.view = nullptr;
 
   allocation = std::move(other.allocation);
   size = other.size;
 
-  layout = other.layout;
+  aspect = other.aspect;
 
   return *this;
 }
+
+} // namespace Renderer

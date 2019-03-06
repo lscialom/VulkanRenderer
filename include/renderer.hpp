@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
 
 #ifdef VULKAN_RENDERER_DLL_EXPORTS
 #define VULKAN_RENDERER_EXPORTS __declspec(dllexport)
@@ -11,6 +12,11 @@
 namespace Renderer {
 enum class PresentMode { Immediate = 0, Mailbox = 1, VSync = 2 };
 
+namespace Config {
+VULKAN_RENDERER_EXPORTS extern bool ShowGBuffer;
+VULKAN_RENDERER_EXPORTS extern bool SSAOEnable;
+}
+
 VULKAN_RENDERER_EXPORTS void Init(unsigned int width, unsigned int height,
                                   void *windowHandle);
 
@@ -20,12 +26,16 @@ VULKAN_RENDERER_EXPORTS void Shutdown();
 VULKAN_RENDERER_EXPORTS void Resize(unsigned int width, unsigned int height);
 
 VULKAN_RENDERER_EXPORTS void SetPresentMode(PresentMode presentMode);
-VULKAN_RENDERER_EXPORTS void SetFov(float);
-VULKAN_RENDERER_EXPORTS void SetNear(float);
-VULKAN_RENDERER_EXPORTS void SetFar(float);
+VULKAN_RENDERER_EXPORTS void GetCurrentResolution(int &w, int &h);
 
 struct Vec3 {
   float x, y, z = 0;
+
+  const Vec3 operator+(const Vec3 &other) {
+    return {x + other.x, y + other.y, z + other.z};
+  }
+
+  const Vec3 operator*(float a) { return {x * a, y * a, z * a}; }
 
   static constexpr Vec3 Zero() { return {0, 0, 0}; }
   static constexpr Vec3 One() { return {1, 1, 1}; }
@@ -44,6 +54,40 @@ static constexpr Vec3 Red = Vec3::UnitX();
 static constexpr Vec3 Green = Vec3::UnitY();
 static constexpr Vec3 Blue = Vec3::UnitZ();
 } // namespace Color
+
+namespace Camera {
+VULKAN_RENDERER_EXPORTS extern float Fov;
+VULKAN_RENDERER_EXPORTS extern float Near;
+VULKAN_RENDERER_EXPORTS extern float Far;
+
+VULKAN_RENDERER_EXPORTS extern Vec3 Position;
+VULKAN_RENDERER_EXPORTS extern Vec3 Rotation;
+
+} // namespace Camera
+
+enum class LightType { Directional = 0, Point = 1 };
+
+struct Light {
+  // if LightType is Directional, vector is a direction, else if LightType is a
+  // Point, vector is a position
+  Vec3 vector;
+
+  Vec3 color;
+
+  float ambientFactor = 0.1f;
+
+  float maxDist = 65.f;
+
+  LightType lightType = LightType::Directional;
+
+private:
+  Light() = default;
+  Light(Vec3 vec = Vec3::Zero(), Vec3 col = Color::White,
+        float ambientStrength = 0.1f)
+      : vector{vec}, color{col}, ambientFactor{ambientStrength} {};
+
+  friend struct RenderContext;
+};
 
 struct ModelInstance {
 protected:
@@ -64,7 +108,8 @@ protected:
   }
 
 public:
-  Vec3 color = Color::Grey;
+  Vec3 color = Color::White;
+  float shininess = 0.5f;
 
   Vec3 GetPosition() const { return pos; }
   Vec3 GetRotation() const { return rot; }
@@ -100,7 +145,9 @@ public:
 
 enum class EPrimitive { Plane, Cube };
 
-VULKAN_RENDERER_EXPORTS uint64_t CreateModel(EPrimitive primitive);
+VULKAN_RENDERER_EXPORTS uint64_t CreateModelFromPrimitive(EPrimitive primitive);
+VULKAN_RENDERER_EXPORTS uint64_t
+CreateModelFromObj(const std::string &objFilename);
 
 VULKAN_RENDERER_EXPORTS ModelInstance *Spawn(uint64_t modelId,
                                              Vec3 pos = Vec3::Zero(),
@@ -108,5 +155,9 @@ VULKAN_RENDERER_EXPORTS ModelInstance *Spawn(uint64_t modelId,
                                              Vec3 scale = Vec3::One());
 
 VULKAN_RENDERER_EXPORTS void Destroy(ModelInstance *instance);
+
+VULKAN_RENDERER_EXPORTS Light *SpawnLight(Vec3 position = Vec3::Zero(),
+                                          Vec3 color = Color::White,
+                                          float ambientStrength = 0.1f);
 
 } // namespace Renderer

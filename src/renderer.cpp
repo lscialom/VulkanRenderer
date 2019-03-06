@@ -9,26 +9,80 @@
 #include "maths.hpp"
 #include "memory.hpp"
 
+#include "pass.hpp"
+
+#include "obj_loader.hpp"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
+#include <array>
 #include <map>
+#include <string>
 #include <unordered_map>
 #include <vector>
+
+//-----------------------------------------------------------------------------
+// USER CONFIG VARIABLES
+//-----------------------------------------------------------------------------
+namespace Renderer {
+namespace Config {
+
+bool ShowGBuffer = true;
+bool SSAOEnable = true;
+
+} // namespace Config
+} // namespace Renderer
+
+//-----------------------------------------------------------------------------
+// CAMERA
+//-----------------------------------------------------------------------------
+namespace Renderer {
+namespace Camera {
+
+float Fov = 90.f;
+float Near = 0.1f;
+float Far = 100.f;
+
+Vec3 Position = Vec3::Zero();
+Vec3 Rotation = Vec3::Zero();
+
+Eigen::Matrix4f Matrix;
+Eigen::Matrix4f ProjMatrix;
+Eigen::Matrix4f ViewMatrix;
+
+static void UpdateMatrix() {
+  Eigen::AngleAxisf rotX, rotY, rotZ;
+
+  Eigen::Vector3f position = Maths::EigenizeVec3(Position);
+
+  rotX = Eigen::AngleAxisf(Rotation.x, Eigen::Vector3f::UnitX());
+  rotY = Eigen::AngleAxisf(Rotation.y, Eigen::Vector3f::UnitY());
+  rotZ = Eigen::AngleAxisf(Rotation.z, Eigen::Vector3f::UnitZ());
+
+  Eigen::Quaternionf rot = rotZ * rotY * rotX;
+
+  vk::Extent2D extent = Swapchain::GetExtent();
+
+  ViewMatrix =
+      Maths::LookAt(position, position + rot * Eigen::Vector3f::UnitZ(),
+                    Eigen::Vector3f::UnitY());
+  ProjMatrix =
+      Maths::Perspective(Camera::Fov, extent.width / (float)extent.height,
+                         Camera::Near, Camera::Far);
+
+  ProjMatrix(1, 1) *= -1;
+
+  Matrix = ProjMatrix * ViewMatrix;
+}
+
+} // namespace Camera
+} // namespace Renderer
 
 namespace Renderer {
 //-----------------------------------------------------------------------------
 // RENDER CONTEXT
 //-----------------------------------------------------------------------------
-
-// TODO Move to a camera class/namespace or make extern
-static float fovValue = 90.f;
-static float nearValue = 0.1f;
-static float farValue = 100.f;
-
-void SetFov(float value) { fovValue = value; }
-void SetNear(float value) { nearValue = value; }
-void SetFar(float value) { farValue = value; }
 
 static uint32_t requestedWidth = 0;
 static uint32_t requestedHeight = 0;
@@ -36,147 +90,6 @@ static uint32_t requestedHeight = 0;
 Queue graphicsQueue;
 
 std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> renderFinishedSemaphores;
-
-struct Shader {
-private:
-  // vk::DescriptorSetLayout descriptorSetLayout;
-
-  vk::Pipeline pipeline;
-  vk::PipelineLayout pipelineLayout;
-
-  static vk::ShaderModule CreateShaderModule(const std::vector<char> &code) {
-    vk::ShaderModuleCreateInfo createInfo(
-        vk::ShaderModuleCreateFlags(), code.size(),
-        reinterpret_cast<const uint32_t *>(code.data()));
-
-    vk::ShaderModule shaderModule;
-    CHECK_VK_RESULT_FATAL(g_device.createShaderModule(&createInfo,
-                                                      g_allocationCallbacks,
-                                                      &shaderModule),
-                          "Failed to create shader module");
-
-    return shaderModule;
-  }
-
-  void init_pipeline(const std::string &vertPath, const std::string &fragPath) {
-    auto vertShaderCode = ReadFile(vertPath);
-    auto fragShaderCode = ReadFile(fragPath);
-
-    vk::ShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-    vk::ShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
-
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo(
-        vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
-        vertShaderModule, "main");
-
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo(
-        vk::PipelineShaderStageCreateFlags(),
-        vk::ShaderStageFlagBits::eFragment, fragShaderModule, "main");
-
-    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
-                                                        fragShaderStageInfo};
-
-    vk::VertexInputBindingDescription bindingDescription =
-        LiteralVertex::GetBindingDescription();
-    auto attributeDescriptions = LiteralVertex::GetAttributeDescription();
-
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
-        vk::PipelineVertexInputStateCreateFlags(), 1, &bindingDescription,
-        static_cast<uint32_t>(attributeDescriptions.size()),
-        reinterpret_cast<vk::VertexInputAttributeDescription *>(
-            attributeDescriptions.data()));
-
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
-        vk::PipelineInputAssemblyStateCreateFlags(),
-        vk::PrimitiveTopology::eTriangleList, VK_FALSE);
-
-    vk::Extent2D extent = Swapchain::GetExtent();
-    vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
-                          1);
-
-    vk::Rect2D scissor({0, 0}, extent);
-
-    vk::PipelineViewportStateCreateInfo viewportState(
-        vk::PipelineViewportStateCreateFlags(), 1, &viewport, 1, &scissor);
-
-    vk::PipelineRasterizationStateCreateInfo rasterizer(
-        vk::PipelineRasterizationStateCreateFlags(), VK_FALSE, VK_FALSE,
-        vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack,
-        vk::FrontFace::eCounterClockwise, VK_FALSE, 0, 0, 0, 1);
-
-    vk::PipelineMultisampleStateCreateInfo multisampling(
-        vk::PipelineMultisampleStateCreateFlags(), vk::SampleCountFlagBits::e1,
-        VK_FALSE, 1, nullptr, VK_FALSE, VK_FALSE);
-
-    vk::PipelineColorBlendAttachmentState colorBlendAttachment(
-        VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha,
-        vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero,
-        vk::BlendOp::eAdd,
-        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-
-    vk::PipelineColorBlendStateCreateInfo colorBlending(
-        vk::PipelineColorBlendStateCreateFlags(), VK_FALSE, vk::LogicOp::eCopy,
-        1, &colorBlendAttachment);
-
-    vk::DynamicState dynamicState = vk::DynamicState::eViewport;
-    vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo(
-        vk::PipelineDynamicStateCreateFlags(), 1, &dynamicState);
-
-    vk::PushConstantRange pushConstantRange{vk::ShaderStageFlagBits::eVertex, 0,
-                                            sizeof(LiteralVertex) +
-                                                sizeof(Eigen::Matrix4f) * 2};
-
-    // vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-    //    vk::PipelineLayoutCreateFlags(), 1, &g_baseDescriptorSetLayout, 1,
-    //    &pushConstantRange); // TODO add custom shader ubos
-
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
-        vk::PipelineLayoutCreateFlags(), 0, nullptr, 1,
-        &pushConstantRange); // TODO add custom shader ubos
-
-    CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
-                                                        g_allocationCallbacks,
-                                                        &pipelineLayout),
-                          "Failed to create pipeline layout.");
-
-    vk::GraphicsPipelineCreateInfo pipelineInfo(
-        vk::PipelineCreateFlags(), 2, shaderStages, &vertexInputInfo,
-        &inputAssembly, nullptr, &viewportState, &rasterizer, &multisampling,
-        nullptr, &colorBlending, &dynamicStateCreateInfo, pipelineLayout,
-        g_renderPass, 0, nullptr, -1);
-
-    CHECK_VK_RESULT_FATAL(
-        g_device.createGraphicsPipelines(nullptr, 1, &pipelineInfo,
-                                         g_allocationCallbacks, &pipeline),
-        "Failed to create pipeline layout.");
-
-    g_device.destroyShaderModule(fragShaderModule, g_allocationCallbacks);
-    g_device.destroyShaderModule(vertShaderModule, g_allocationCallbacks);
-  }
-
-public:
-  const vk::PipelineLayout get_pipeline_layout() const {
-    return pipelineLayout;
-  }
-
-  void bind_pipeline(const vk::CommandBuffer &commandbuffer) const {
-    commandbuffer.bindPipeline(
-        vk::PipelineBindPoint::eGraphics, // TODO Compute shader support
-        pipeline);
-  }
-
-  void init(const std::string &vertPath, const std::string &fragPath) {
-    init_pipeline(vertPath, fragPath);
-  }
-
-  void destroy() {
-    g_device.destroyPipeline(pipeline, g_allocationCallbacks);
-    g_device.destroyPipelineLayout(pipelineLayout, g_allocationCallbacks);
-  }
-};
-
-Shader g_baseShader;
 
 struct Texture {
 private:
@@ -212,12 +125,17 @@ public:
                    vk::MemoryPropertyFlagBits::eDeviceLocal);
 
     // TODO pack these 3 statements into one function helper ?
-    image.transition_layout(imageFormat, vk::ImageLayout::eTransferDstOptimal);
+    image.transition_layout(vk::ImageLayout::eUndefined,
+                            vk::ImageLayout::eTransferDstOptimal);
+
     image.write_from_buffer(stagingBuffer.get_handle(),
                             static_cast<uint32_t>(texWidth),
                             static_cast<uint32_t>(texHeight));
-    image.transition_layout(imageFormat,
+
+    image.transition_layout(vk::ImageLayout::eTransferDstOptimal,
                             vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    Allocator::WaitForTransferQueue();
   }
 };
 
@@ -246,7 +164,10 @@ public:
     alignment = other.alignment;
   }
   ~UniformBufferObject() {
-    g_device.destroyDescriptorPool(pool, g_allocationCallbacks);
+    if (pool) {
+      g_device.destroyDescriptorPool(pool, g_allocationCallbacks);
+      pool = nullptr;
+    }
   }
 
   size_t get_alignment() const { return alignment; }
@@ -258,7 +179,8 @@ public:
   template <typename T>
   void init(vk::DescriptorSetLayout layout,
             size_t nbElements = MAX_OBJECT_INSTANCES_PER_TEMPLATE) {
-    if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic) {
+    if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic ||
+        T::DescriptorType == vk::DescriptorType::eUniformBuffer) {
       size_t minUboAlignment = g_physicalDevice.getProperties()
                                    .limits.minUniformBufferOffsetAlignment;
       alignment = sizeof(T::Size);
@@ -269,7 +191,7 @@ public:
     } else
       alignment = T::Size;
 
-	size_t nbBuffers = Swapchain::ImageCount();
+    size_t nbBuffers = Swapchain::ImageCount();
 
     vk::DescriptorPoolSize poolSize{vk::DescriptorType::eUniformBuffer,
                                     static_cast<uint32_t>(nbBuffers)};
@@ -300,11 +222,30 @@ public:
         "Failed to allocate descriptor sets.");
 
     for (size_t i = 0; i < descriptorSets.size(); ++i) {
-      vk::DescriptorBufferInfo bufferInfo{buffers[i].get_handle(), 0, T::Size};
 
-      vk::WriteDescriptorSet descriptorWrite{
-          descriptorSets[i], 0,       0,           1,
-          T::DescriptorType, nullptr, &bufferInfo, nullptr};
+      std::vector<vk::DescriptorBufferInfo> bInfos;
+      if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic) {
+
+        vk::DescriptorBufferInfo bufferInfo{buffers[i].get_handle(), 0,
+                                            alignment * nbElements};
+        bInfos.push_back(bufferInfo);
+
+      } else {
+        for (size_t j = 0; j < nbElements; ++j) {
+          vk::DescriptorBufferInfo bufferInfo{buffers[i].get_handle(),
+                                              alignment * j, alignment};
+          bInfos.push_back(bufferInfo);
+        }
+      }
+
+      vk::WriteDescriptorSet descriptorWrite{descriptorSets[i],
+                                             0,
+                                             0,
+                                             (uint32_t)bInfos.size(),
+                                             T::DescriptorType,
+                                             nullptr,
+                                             bInfos.data(),
+                                             nullptr};
 
       g_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
     }
@@ -312,6 +253,9 @@ public:
 
   void write(uint32_t bufferIndex, const void *data, VkDeviceSize writeSize,
              uint64_t step) const {
+
+    // TODO Support alignment for multiple elements at once
+    writeSize = (writeSize + alignment - 1) & ~(alignment - 1);
     buffers[bufferIndex].write(data, writeSize, step * alignment);
   }
 };
@@ -330,15 +274,17 @@ private:
     if (upToDate)
       return;
 
+    Eigen::Vector3f position = Maths::EigenizeVec3(pos);
+    Eigen::Vector3f rotation = Maths::EigenizeVec3(rot);
+
     Eigen::AngleAxisf rotX, rotY, rotZ;
 
-    rotX = Eigen::AngleAxisf(rot.z, Eigen::Vector3f::UnitX());
-    rotY = Eigen::AngleAxisf(rot.y, Eigen::Vector3f::UnitY());
-    rotZ = Eigen::AngleAxisf(rot.x, Eigen::Vector3f::UnitZ());
+    rotX = Eigen::AngleAxisf(rotation.x(), Eigen::Vector3f::UnitX());
+    rotY = Eigen::AngleAxisf(rotation.y(), Eigen::Vector3f::UnitY());
+    rotZ = Eigen::AngleAxisf(rotation.z(), Eigen::Vector3f::UnitZ());
 
-    transform.fromPositionOrientationScale(
-        Eigen::Vector3f(-pos.z, pos.x, pos.y), rotX * rotZ * rotY,
-        Eigen::Vector3f(scale.z, scale.x, scale.y));
+    transform.fromPositionOrientationScale(position, rotZ * rotY * rotX,
+                                           Maths::EigenizeVec3(scale));
 
     upToDate = true;
   }
@@ -390,6 +336,36 @@ private:
     return offset;
   }
 
+  template <typename T>
+  vk::DeviceSize
+  init_vi_buffer(const std::vector<T> &vertexBuffer,
+                 const std::vector<VERTEX_INDICES_TYPE> &indexBuffer) {
+    const VkDeviceSize iBufferSize =
+        sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
+    const VkDeviceSize vBufferSize = sizeof(T) * vertexBuffer.size();
+
+    const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
+    const VkDeviceSize offset = iBufferSize;
+
+    Buffer stagingBuffer;
+    stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    stagingBuffer.write(indexBuffer.data(), iBufferSize);
+    stagingBuffer.write(vertexBuffer.data(), vBufferSize, offset);
+
+    viBuffer.allocate(bufferSize,
+                      vk::BufferUsageFlagBits::eTransferDst |
+                          vk::BufferUsageFlagBits::eVertexBuffer |
+                          vk::BufferUsageFlagBits::eIndexBuffer,
+                      vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    stagingBuffer.copy_to(viBuffer, bufferSize);
+
+    return offset;
+  }
+
 public:
   Model() = default;
   Model(Model &&other) = default;
@@ -408,12 +384,26 @@ public:
     //    g_baseDescriptorSetLayout);
   }
 
+  template <typename T>
+  void init(const std::vector<T> &vertices,
+            const std::vector<VERTEX_INDICES_TYPE> &indices) {
+    vOffset = init_vi_buffer(vertices, indices);
+    nbIndices = indices.size();
+  }
+
   template <typename Prim> void init_from_primitive() {
     init(Prim::Vertices, Prim::Indices);
   }
 
+  void init_from_obj_file(const std::string &objFilename) {
+    std::vector<LiteralVertex> vertices;
+    std::vector<VERTEX_INDICES_TYPE> indices;
+    ObjLoader::LoadObj(objFilename, vertices, indices);
+    init(vertices, indices);
+  }
+
   // TODO index param only used for descriptors (that are unused for now).
-  void record(const vk::CommandBuffer &commandbuffer, Shader *shader,
+  void record(const vk::CommandBuffer &commandbuffer, const Shader &shader,
               size_t imageIndex) const {
     commandbuffer.bindIndexBuffer(viBuffer.get_handle(), 0,
                                   VULKAN_INDICES_TYPE);
@@ -421,22 +411,11 @@ public:
 
     // uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
-    // TODO Compute vp mat in camera
-    Eigen::Matrix4f view =
-        Maths::LookAt(Eigen::Vector3f(8.f, 0.f, 2.f), Eigen::Vector3f::Zero(),
-                      Eigen::Vector3f::UnitZ());
+    ModelInstancePushConstant miPc = {};
 
-    vk::Extent2D extent = Swapchain::GetExtent();
-
-    // TODO Store proj in camera instead of recomputing it
-    Eigen::Matrix4f proj = Maths::Perspective(
-        fovValue, extent.width / (float)extent.height, nearValue, farValue);
-    proj(1, 1) *= -1;
-
-    Eigen::Matrix4f vp = proj * view;
-    commandbuffer.pushConstants(shader->get_pipeline_layout(),
-                                vk::ShaderStageFlagBits::eVertex, 0,
-                                sizeof(Eigen::Matrix4f), &vp);
+    // commandbuffer.pushConstants(shader.get_pipeline_layout(),
+    //                            vk::ShaderStageFlagBits::eVertex, 0,
+    //                            sizeof(Eigen::Matrix4f), &Camera::Matrix);
 
     for (uint64_t i = 0; i < modelInstances.size(); ++i) {
       // uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);
@@ -447,15 +426,24 @@ public:
 
       modelInstances[i]->update_matrix();
 
-      commandbuffer.pushConstants(
-          shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
-          sizeof(Eigen::Matrix4f) * 2, sizeof(Eigen::Vector3f),
-          &modelInstances[i]->color);
+      miPc.color.head<3>() << Maths::EigenizeVec3(modelInstances[i]->color);
+      miPc.color.tail<1>() << modelInstances[i]->shininess;
+      miPc.model = modelInstances[i]->transform.matrix();
 
-      commandbuffer.pushConstants(
-          shader->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
-          sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f),
-          &modelInstances[i]->transform.matrix());
+      // commandbuffer.pushConstants(
+      //    shader.get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
+      //    sizeof(Eigen::Matrix4f) * 2, sizeof(Eigen::Vector3f),
+      //    &modelInstances[i]->color);
+
+      // commandbuffer.pushConstants(
+      //    shader.get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
+      //    sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f),
+      //    &modelInstances[i]->transform.matrix());
+
+      commandbuffer.pushConstants(shader.get_pipeline_layout(),
+                                  vk::ShaderStageFlagBits::eVertex |
+                                      vk::ShaderStageFlagBits::eFragment,
+                                  0, sizeof(miPc), &miPc);
 
       commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
     }
@@ -518,72 +506,991 @@ public:
   //}
 };
 
-static struct {
+struct RenderContext {
   std::vector<vk::CommandBuffer> commandbuffers;
-  std::vector<vk::Framebuffer> framebuffers;
+  std::vector<vk::Framebuffer> presentFramebuffers;
+  vk::Framebuffer geomFramebuffer;
 
-  std::unordered_map<Shader *, std::vector<Model *>> models;
+  vk::Framebuffer ssaoFramebuffer;
+  vk::Framebuffer blurFramebuffer;
 
-  void init_render_pass() {
-    vk::AttachmentDescription swapchainColorAttachment =
-        Swapchain::GetAttachmentDescription();
+  vk::RenderPass geomRenderPass;
+  vk::RenderPass ssaoRenderPass;
+  vk::RenderPass blurRenderPass;
+  vk::RenderPass lightRenderPass;
 
-    vk::AttachmentReference swapchainColorAttachmentRef(
-        0, vk::ImageLayout::eColorAttachmentOptimal);
+  Attachment depthAttachment;
+  Attachment posAttachment;
+  Attachment normalAttachment;
+  Attachment colorAttachment;
 
-    vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(),
-                                   vk::PipelineBindPoint::eGraphics, 0, nullptr,
-                                   1, &swapchainColorAttachmentRef);
+  Attachment ssaoColorAttachment;
+  Attachment blurColorAttachment;
 
-    vk::SubpassDependency dependency(
-        VK_SUBPASS_EXTERNAL, 0,
-        vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        (vk::AccessFlagBits)0,
-        vk::AccessFlagBits::eColorAttachmentRead |
-            vk::AccessFlagBits::eColorAttachmentWrite);
+  vk::DescriptorSetLayout blurLayout;
+  vk::DescriptorPool blurDPool;
+  vk::DescriptorSet blurDSet;
 
-    vk::RenderPassCreateInfo renderPassInfo(vk::RenderPassCreateFlags(), 1,
-                                            &swapchainColorAttachment, 1,
-                                            &subpass, 1, &dependency);
+  static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
 
-    CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
-                                                    g_allocationCallbacks,
-                                                    &g_renderPass),
-                          "Failed to create render pass.");
+  static constexpr uint32_t posAttachmentArrayIndex = POS_BUFFER_INDEX;
+  static constexpr uint32_t normalAttachmentArrayIndex = NORMAL_BUFFER_INDEX;
+  static constexpr uint32_t colorAttachmentArrayIndex = COLOR_BUFFER_INDEX;
+
+  static constexpr uint32_t gPassAttachmentCount = G_BUFFER_SIZE;
+
+  Shader gShader;
+  Shader ssaoShader;
+  Shader blurShader;
+  Shader lightShader;
+  Shader overlayShader;
+
+  vk::DescriptorPool descriptorPool;
+  vk::DescriptorSetLayout uniformSamplersLayout;
+  vk::DescriptorSet uniformSamplersSet;
+
+  vk::Sampler sampler;
+
+  vk::DescriptorSetLayout camUBOLayout;
+  UniformBufferObject camUBO;
+
+  vk::DescriptorSetLayout lightsUBOLayout;
+  UniformBufferObject lightsUBO;
+
+  vk::DescriptorSetLayout sdfDLayout;
+  vk::DescriptorPool sdfDPool;
+  vk::DescriptorSet sdfDSet;
+
+  // Image sdfImage;
+
+  Image ssaoNoiseTex;
+  vk::DescriptorSetLayout ssaoLayout;
+  vk::DescriptorPool ssaoDPool;
+  vk::DescriptorSet ssaoDSet;
+
+  // TODO Rename as Repeat Sampler
+  vk::Sampler ssaoSampler;
+
+  vk::DescriptorSetLayout ssaoOutLayout;
+  vk::DescriptorPool ssaoOutDPool;
+  vk::DescriptorSet ssaoOutDSet;
+
+  Buffer ssaoKernel;
+
+  Image ditherTex;
+  vk::DescriptorSetLayout ditherLayout;
+  vk::DescriptorPool ditherDPool;
+  vk::DescriptorSet ditherDSet;
+
+  std::vector<Model *> models;
+  std::vector<Light *> lights;
+
+  void init_descriptor() {
+
+    {
+      UniformObjectInfo<UniformSampler2D> info;
+      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
+
+      info.binding = 0;
+      info.arraySize = gPassAttachmentCount;
+      layoutBindings[0] = info.make_descriptor_set_layout_binding();
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(),
+          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &uniformSamplersLayout),
+          "Failed to create descriptor set layout.");
+    }
+
+    {
+      UniformObjectInfo<CameraUBO> info;
+
+      info.binding = 0;
+      vk::DescriptorSetLayoutBinding layoutBinding =
+          info.make_descriptor_set_layout_binding();
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &camUBOLayout),
+          "Failed to create descriptor set layout.");
+
+      camUBO.init<decltype(info)>(camUBOLayout, 1);
+    }
+
+    {
+      UniformObjectInfo<LightUBO> info;
+
+      info.binding = 0;
+      info.arraySize = MAX_LIGHTS;
+      vk::DescriptorSetLayoutBinding layoutBinding =
+          info.make_descriptor_set_layout_binding();
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &lightsUBOLayout),
+          "Failed to create descriptor set layout.");
+
+      lightsUBO.init<decltype(info)>(lightsUBOLayout, MAX_LIGHTS);
+    }
+
+    {
+      vk::DescriptorSetLayoutBinding layoutBinding;
+      layoutBinding.binding = 0;
+      layoutBinding.descriptorCount = 1;
+      layoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+      layoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &sdfDLayout),
+          "Failed to create descriptor set layout.");
+    }
+
+    {
+		CREATE_DESCRIPTOR_SET_LAYOUT(SSAOLayoutInfo, ssaoLayout);
+    }
+
+    {
+      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
+
+      layoutBindings[0].binding = 0;
+      layoutBindings[0].descriptorCount = 1;
+      layoutBindings[0].descriptorType =
+          vk::DescriptorType::eCombinedImageSampler;
+      layoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(),
+          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &ssaoOutLayout),
+          "Failed to create descriptor set layout.");
+    }
+
+    {
+      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
+
+      layoutBindings[0].binding = 0;
+      layoutBindings[0].descriptorCount = 1;
+      layoutBindings[0].descriptorType =
+          vk::DescriptorType::eCombinedImageSampler;
+      layoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(),
+          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &blurLayout),
+          "Failed to create descriptor set layout.");
+    }
+
+    {
+      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
+
+      layoutBindings[0].binding = 0;
+      layoutBindings[0].descriptorCount = 1;
+      layoutBindings[0].descriptorType =
+          vk::DescriptorType::eCombinedImageSampler;
+      layoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(),
+          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &ditherLayout),
+          "Failed to create descriptor set layout.");
+    }
+  }
+
+  void allocate_descriptor() {
+    vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
+                                    1u};
+
+    vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(), 1, 1,
+                                          &poolSize};
+
+    CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(&poolInfo,
+                                                        g_allocationCallbacks,
+                                                        &descriptorPool),
+                          "Failed to create descriptor pool.");
+
+    vk::DescriptorSetAllocateInfo allocInfo{descriptorPool, 1,
+                                            &uniformSamplersLayout};
+
+    CHECK_VK_RESULT_FATAL(
+        g_device.allocateDescriptorSets(&allocInfo, &uniformSamplersSet),
+        "Failed to allocate descriptor sets.");
+
+    vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo(
+        vk::SamplerCreateFlags(), vk::Filter::eNearest, vk::Filter::eNearest,
+        vk::SamplerMipmapMode::eNearest, vk::SamplerAddressMode::eClampToBorder,
+        vk::SamplerAddressMode::eClampToBorder,
+        vk::SamplerAddressMode::eClampToBorder, 0.f, false, 0, false,
+        vk::CompareOp::eAlways, 0, 0, vk::BorderColor::eFloatOpaqueBlack,
+        false);
+
+    g_device.createSampler(&samplerInfo, g_allocationCallbacks, &sampler);
+
+    std::array<vk::DescriptorImageInfo, gPassAttachmentCount> imageInfos;
+
+    imageInfos[posAttachmentArrayIndex] =
+        vk::DescriptorImageInfo(sampler, posAttachment.get_image_view(),
+                                vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    imageInfos[normalAttachmentArrayIndex] =
+        vk::DescriptorImageInfo(sampler, normalAttachment.get_image_view(),
+                                vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    imageInfos[colorAttachmentArrayIndex] =
+        vk::DescriptorImageInfo(sampler, colorAttachment.get_image_view(),
+                                vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    imageInfos[depthAttachmentArrayIndex] = vk::DescriptorImageInfo(
+        sampler, depthAttachment.get_image_view(),
+        vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
+
+    std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
+
+    descriptorWrites[0] = vk::WriteDescriptorSet{
+        uniformSamplersSet,
+        0,
+        0,
+        static_cast<uint32_t>(imageInfos.size()),
+        UniformObjectInfo<UniformSampler2D>::DescriptorType,
+        imageInfos.data(),
+        nullptr,
+        nullptr};
+
+    g_device.updateDescriptorSets(
+        static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(),
+        0, nullptr);
+
+    // sdf set
+    {
+      vk::DescriptorPoolSize size;
+      size.descriptorCount = 1;
+      size.type = vk::DescriptorType::eCombinedImageSampler;
+
+      vk::DescriptorPoolCreateInfo poolInfo;
+      poolInfo.maxSets = 1;
+      poolInfo.poolSizeCount = 1;
+      poolInfo.pPoolSizes = &size;
+
+      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
+                                &poolInfo, g_allocationCallbacks, &sdfDPool),
+                            "Failed to create descriptor pool.");
+
+      vk::DescriptorSetAllocateInfo allocInfo;
+      allocInfo.descriptorPool = sdfDPool;
+      allocInfo.descriptorSetCount = 1;
+      allocInfo.pSetLayouts = &sdfDLayout;
+
+      g_device.allocateDescriptorSets(&allocInfo, &sdfDSet);
+    }
+
+    // ssao out set
+    {
+      vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
+                                      1u};
+
+      vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(), 1,
+                                            1, &poolSize};
+
+      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(&poolInfo,
+                                                          g_allocationCallbacks,
+                                                          &ssaoOutDPool),
+                            "Failed to create descriptor pool.");
+
+      vk::DescriptorSetAllocateInfo allocInfo{ssaoOutDPool, 1, &ssaoOutLayout};
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.allocateDescriptorSets(&allocInfo, &ssaoOutDSet),
+          "Failed to allocate descriptor sets.");
+
+      std::array<vk::DescriptorImageInfo, 1> imageInfos;
+
+      imageInfos[0] =
+          vk::DescriptorImageInfo(sampler, ssaoColorAttachment.get_image_view(),
+                                  vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
+
+      descriptorWrites[0] = vk::WriteDescriptorSet{
+          ssaoOutDSet,
+          0,
+          0,
+          static_cast<uint32_t>(imageInfos.size()),
+          UniformObjectInfo<UniformSampler2D>::DescriptorType,
+          imageInfos.data(),
+          nullptr,
+          nullptr};
+
+      g_device.updateDescriptorSets(
+          static_cast<uint32_t>(descriptorWrites.size()),
+          descriptorWrites.data(), 0, nullptr);
+    }
+
+    // ssao set
+    {
+      vk::DescriptorPoolSize size;
+      size.descriptorCount = 1;
+      size.type = vk::DescriptorType::eCombinedImageSampler;
+
+      vk::DescriptorPoolCreateInfo poolInfo;
+      poolInfo.maxSets = 1;
+      poolInfo.poolSizeCount = 1;
+      poolInfo.pPoolSizes = &size;
+
+      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
+                                &poolInfo, g_allocationCallbacks, &ssaoDPool),
+                            "Failed to create descriptor pool.");
+
+      vk::DescriptorSetAllocateInfo allocInfo;
+      allocInfo.descriptorPool = ssaoDPool;
+      allocInfo.descriptorSetCount = 1;
+      allocInfo.pSetLayouts = &ssaoLayout;
+
+      g_device.allocateDescriptorSets(&allocInfo, &ssaoDSet);
+
+      vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo(
+          vk::SamplerCreateFlags(), vk::Filter::eNearest, vk::Filter::eNearest,
+          vk::SamplerMipmapMode::eNearest, vk::SamplerAddressMode::eRepeat,
+          vk::SamplerAddressMode::eRepeat, vk::SamplerAddressMode::eRepeat, 0.f,
+          false, 0, false, vk::CompareOp::eAlways, 0, 0,
+          vk::BorderColor::eFloatOpaqueBlack, false);
+
+      g_device.createSampler(&samplerInfo, g_allocationCallbacks, &ssaoSampler);
+
+      ssaoNoiseTex.allocate(SSAO_NOISE_DIM, SSAO_NOISE_DIM,
+                            vk::Format::eR32G32B32A32Sfloat,
+                            vk::ImageTiling::eOptimal,
+                            vk::ImageUsageFlagBits::eTransferDst |
+                                vk::ImageUsageFlagBits::eSampled,
+                            vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+      ssaoNoiseTex.transition_layout(vk::ImageLayout::eUndefined,
+                                     vk::ImageLayout::eTransferDstOptimal);
+
+      std::vector<Eigen::Vector4f> ssaoNoise =
+          Maths::GenerateSSAONoise(SSAO_NOISE_DIM);
+      Buffer stagingBuffer;
+      stagingBuffer.allocate(ssaoNoise.size() * sizeof(*ssaoNoise.data()),
+                             vk::BufferUsageFlagBits::eTransferSrc,
+                             vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent);
+
+      stagingBuffer.write(ssaoNoise.data(),
+                          ssaoNoise.size() * sizeof(*ssaoNoise.data()));
+
+      ssaoNoiseTex.write_from_buffer(stagingBuffer.get_handle(), SSAO_NOISE_DIM,
+                                     SSAO_NOISE_DIM);
+
+      ssaoNoiseTex.transition_layout(vk::ImageLayout::eTransferDstOptimal,
+                                     vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      std::vector<Eigen::Vector4f> ssaoKernelData =
+          Maths::GenerateSSAOKernel(SSAO_NUM_SAMPLES);
+      // TODO DeviceLocal
+      ssaoKernel.allocate(ssaoKernelData.size() *
+                              sizeof(*ssaoKernelData.data()),
+                          vk::BufferUsageFlagBits::eUniformBuffer,
+                          vk::MemoryPropertyFlagBits::eHostVisible |
+                              vk::MemoryPropertyFlagBits::eHostCoherent);
+
+      ssaoKernel.write(ssaoKernelData.data(),
+                       ssaoKernelData.size() * sizeof(*ssaoKernelData.data()));
+
+      vk::DescriptorBufferInfo bufferInfo;
+      bufferInfo.buffer = ssaoKernel.get_handle();
+      bufferInfo.offset = 0;
+      bufferInfo.range = ssaoKernelData.size() * sizeof(*ssaoKernelData.data());
+
+      vk::DescriptorImageInfo imageInfo;
+      imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+      imageInfo.imageView = ssaoNoiseTex.get_view();
+      imageInfo.sampler = ssaoSampler;
+
+      std::array<vk::WriteDescriptorSet, 2> descriptorWrites;
+
+      descriptorWrites[0] =
+          vk::WriteDescriptorSet{ssaoDSet,
+                                 0,
+                                 0,
+                                 1,
+                                 vk::DescriptorType::eCombinedImageSampler,
+                                 &imageInfo,
+                                 nullptr,
+                                 nullptr};
+
+      descriptorWrites[1] = vk::WriteDescriptorSet{
+          ssaoDSet, 1,           0,      1, vk::DescriptorType::eUniformBuffer,
+          nullptr,  &bufferInfo, nullptr};
+
+      g_device.updateDescriptorSets(
+          static_cast<uint32_t>(descriptorWrites.size()),
+          descriptorWrites.data(), 0, nullptr);
+    }
+
+    // blur set
+    {
+      vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
+                                      1u};
+
+      vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(), 1,
+                                            1, &poolSize};
+
+      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
+                                &poolInfo, g_allocationCallbacks, &blurDPool),
+                            "Failed to create descriptor pool.");
+
+      vk::DescriptorSetAllocateInfo allocInfo{blurDPool, 1, &blurLayout};
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.allocateDescriptorSets(&allocInfo, &blurDSet),
+          "Failed to allocate descriptor sets.");
+
+      std::array<vk::DescriptorImageInfo, 1> imageInfos;
+
+      imageInfos[0] =
+          vk::DescriptorImageInfo(sampler, blurColorAttachment.get_image_view(),
+                                  vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
+
+      descriptorWrites[0] = vk::WriteDescriptorSet{
+          blurDSet,
+          0,
+          0,
+          static_cast<uint32_t>(imageInfos.size()),
+          UniformObjectInfo<UniformSampler2D>::DescriptorType,
+          imageInfos.data(),
+          nullptr,
+          nullptr};
+
+      g_device.updateDescriptorSets(
+          static_cast<uint32_t>(descriptorWrites.size()),
+          descriptorWrites.data(), 0, nullptr);
+    }
+
+    // dither set
+    {
+      vk::DescriptorPoolSize size;
+      size.descriptorCount = 1;
+      size.type = vk::DescriptorType::eCombinedImageSampler;
+
+      vk::DescriptorPoolCreateInfo poolInfo;
+      poolInfo.maxSets = 1;
+      poolInfo.poolSizeCount = 1;
+      poolInfo.pPoolSizes = &size;
+
+      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
+                                &poolInfo, g_allocationCallbacks, &ditherDPool),
+                            "Failed to create descriptor pool.");
+
+      vk::DescriptorSetAllocateInfo allocInfo;
+      allocInfo.descriptorPool = ditherDPool;
+      allocInfo.descriptorSetCount = 1;
+      allocInfo.pSetLayouts = &ditherLayout;
+
+      g_device.allocateDescriptorSets(&allocInfo, &ditherDSet);
+
+      ditherTex.allocate(Maths::DitheringPatternDim, Maths::DitheringPatternDim,
+                         vk::Format::eR32Sfloat, vk::ImageTiling::eOptimal,
+                         vk::ImageUsageFlagBits::eTransferDst |
+                             vk::ImageUsageFlagBits::eSampled,
+                         vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+      ditherTex.transition_layout(vk::ImageLayout::eUndefined,
+                                  vk::ImageLayout::eTransferDstOptimal);
+
+      Buffer stagingBuffer;
+      stagingBuffer.allocate(Maths::DitheringPattern.size() *
+                                 sizeof(*Maths::DitheringPattern.data()),
+                             vk::BufferUsageFlagBits::eTransferSrc,
+                             vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent);
+
+      stagingBuffer.write(Maths::DitheringPattern.data(),
+                          Maths::DitheringPattern.size() *
+                              sizeof(*Maths::DitheringPattern.data()));
+
+      ditherTex.write_from_buffer(stagingBuffer.get_handle(),
+                                  Maths::DitheringPatternDim,
+                                  Maths::DitheringPatternDim);
+
+      ditherTex.transition_layout(vk::ImageLayout::eTransferDstOptimal,
+                                  vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      vk::DescriptorImageInfo imageInfo;
+      imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+      imageInfo.imageView = ditherTex.get_view();
+      imageInfo.sampler = ssaoSampler;
+
+      std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
+
+      descriptorWrites[0] =
+          vk::WriteDescriptorSet{ditherDSet,
+                                 0,
+                                 0,
+                                 1,
+                                 vk::DescriptorType::eCombinedImageSampler,
+                                 &imageInfo,
+                                 nullptr,
+                                 nullptr};
+
+      g_device.updateDescriptorSets(
+          static_cast<uint32_t>(descriptorWrites.size()),
+          descriptorWrites.data(), 0, nullptr);
+    }
+  }
+
+  void destroy_descriptor() {
+    g_device.destroyDescriptorSetLayout(uniformSamplersLayout,
+                                        g_allocationCallbacks);
+
+    g_device.destroyDescriptorSetLayout(camUBOLayout, g_allocationCallbacks);
+    camUBO.~UniformBufferObject();
+
+    g_device.destroyDescriptorSetLayout(lightsUBOLayout, g_allocationCallbacks);
+    lightsUBO.~UniformBufferObject();
+
+    g_device.destroyDescriptorSetLayout(ssaoLayout, g_allocationCallbacks);
+
+    ssaoNoiseTex.free();
+    g_device.destroySampler(ssaoSampler, g_allocationCallbacks);
+
+    ssaoKernel.~Buffer();
+
+    g_device.destroyDescriptorPool(ssaoDPool, g_allocationCallbacks);
+
+    g_device.destroyDescriptorSetLayout(ssaoOutLayout, g_allocationCallbacks);
+    g_device.destroyDescriptorPool(ssaoOutDPool, g_allocationCallbacks);
+
+    g_device.destroyDescriptorSetLayout(ditherLayout, g_allocationCallbacks);
+    g_device.destroyDescriptorPool(ditherDPool, g_allocationCallbacks);
+    ditherTex.free();
+
+    g_device.destroyDescriptorSetLayout(blurLayout, g_allocationCallbacks);
+    g_device.destroyDescriptorPool(blurDPool, g_allocationCallbacks);
+
+    g_device.destroySampler(sampler, g_allocationCallbacks);
+
+    g_device.destroyDescriptorPool(descriptorPool, g_allocationCallbacks);
+
+    g_device.destroy(sdfDPool);
+    g_device.destroy(sdfDLayout);
+  }
+
+  void init_render_passes() {
+    {
+      // First Pass
+      std::array<vk::AttachmentDescription, gPassAttachmentCount>
+          attachmentDescriptions = {};
+
+      depthAttachment.requiredFormat = FindSupportedFormat(
+          g_physicalDevice,
+          {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint,
+           vk::Format::eD24UnormS8Uint},
+          vk::ImageTiling::eOptimal,
+          vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+
+      attachmentDescriptions[depthAttachmentArrayIndex] =
+          depthAttachment.make_attachment_description(
+              vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal,
+              vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
+
+      posAttachment.requiredFormat = vk::Format::eR32G32B32A32Sfloat;
+
+      attachmentDescriptions[posAttachmentArrayIndex] =
+          posAttachment.make_attachment_description(
+              vk::ImageLayout::eShaderReadOnlyOptimal,
+              vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      normalAttachment.requiredFormat = vk::Format::eR32G32B32A32Sfloat;
+
+      attachmentDescriptions[normalAttachmentArrayIndex] =
+          normalAttachment.make_attachment_description(
+              vk::ImageLayout::eShaderReadOnlyOptimal,
+              vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      colorAttachment.requiredFormat = vk::Format::eR32G32B32A32Sfloat;
+
+      attachmentDescriptions[colorAttachmentArrayIndex] =
+          colorAttachment.make_attachment_description(
+              vk::ImageLayout::eShaderReadOnlyOptimal,
+              vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      // Color Attachments
+      std::array<vk::AttachmentReference, gPassAttachmentCount - 1> colorRefs;
+
+      colorRefs[posAttachmentArrayIndex - 1] = vk::AttachmentReference(
+          posAttachmentArrayIndex, vk::ImageLayout::eColorAttachmentOptimal);
+
+      colorRefs[normalAttachmentArrayIndex - 1] = vk::AttachmentReference(
+          normalAttachmentArrayIndex, vk::ImageLayout::eColorAttachmentOptimal);
+
+      colorRefs[colorAttachmentArrayIndex - 1] = vk::AttachmentReference(
+          colorAttachmentArrayIndex, vk::ImageLayout::eColorAttachmentOptimal);
+
+      vk::AttachmentReference depthAttachmentRef(
+          depthAttachmentArrayIndex,
+          vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+      vk::SubpassDescription subpass(
+          vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
+          nullptr, static_cast<uint32_t>(colorRefs.size()), colorRefs.data(),
+          nullptr, &depthAttachmentRef);
+
+      vk::RenderPassCreateInfo renderPassInfo(
+          vk::RenderPassCreateFlags(),
+          static_cast<uint32_t>(attachmentDescriptions.size()),
+          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
+
+      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
+                                                      g_allocationCallbacks,
+                                                      &geomRenderPass),
+                            "Failed to create render pass.");
+
+#ifndef NDEBUG
+      g_device.setDebugUtilsObjectNameEXT(
+          {vk::ObjectType::eRenderPass,
+           (uint64_t)((VkRenderPass)geomRenderPass), "Geometry Render Pass"},
+          g_dldy);
+#endif
+    }
+
+    {
+      // Second Pass
+      std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {};
+
+      ssaoColorAttachment.requiredFormat = vk::Format::eR32Sfloat;
+
+      attachmentDescriptions[0] =
+          ssaoColorAttachment.make_attachment_description(
+              vk::ImageLayout::eShaderReadOnlyOptimal,
+              vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      // Color Attachments
+      std::array<vk::AttachmentReference, 1> colorRefs;
+
+      colorRefs[0] =
+          vk::AttachmentReference(0, vk::ImageLayout::eColorAttachmentOptimal);
+
+      vk::SubpassDescription subpass(
+          vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
+          nullptr, static_cast<uint32_t>(colorRefs.size()), colorRefs.data(),
+          nullptr, nullptr);
+
+      vk::RenderPassCreateInfo renderPassInfo(
+          vk::RenderPassCreateFlags(),
+          static_cast<uint32_t>(attachmentDescriptions.size()),
+          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
+
+      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
+                                                      g_allocationCallbacks,
+                                                      &ssaoRenderPass),
+                            "Failed to create render pass.");
+
+#ifndef NDEBUG
+      g_device.setDebugUtilsObjectNameEXT(
+          {vk::ObjectType::eRenderPass,
+           (uint64_t)((VkRenderPass)ssaoRenderPass), "SSAO Render Pass"},
+          g_dldy);
+#endif
+    }
+
+    {
+      // Third Pass
+      std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {};
+
+      blurColorAttachment.requiredFormat = vk::Format::eR32Sfloat;
+
+      attachmentDescriptions[0] =
+          blurColorAttachment.make_attachment_description(
+              vk::ImageLayout::eShaderReadOnlyOptimal,
+              vk::ImageLayout::eShaderReadOnlyOptimal);
+
+      // Color Attachments
+      std::array<vk::AttachmentReference, 1> colorRefs;
+
+      colorRefs[0] =
+          vk::AttachmentReference(0, vk::ImageLayout::eColorAttachmentOptimal);
+
+      vk::SubpassDescription subpass(
+          vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
+          nullptr, static_cast<uint32_t>(colorRefs.size()), colorRefs.data(),
+          nullptr, nullptr);
+
+      vk::RenderPassCreateInfo renderPassInfo(
+          vk::RenderPassCreateFlags(),
+          static_cast<uint32_t>(attachmentDescriptions.size()),
+          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
+
+      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
+                                                      g_allocationCallbacks,
+                                                      &blurRenderPass),
+                            "Failed to create render pass.");
+
+#ifndef NDEBUG
+      g_device.setDebugUtilsObjectNameEXT(
+          {vk::ObjectType::eRenderPass,
+           (uint64_t)((VkRenderPass)blurRenderPass), "Blur Render Pass"},
+          g_dldy);
+#endif
+    }
+
+    {
+      // Fourth Pass
+      std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {
+          Swapchain::GetAttachmentDescription()};
+
+      vk::AttachmentReference swapchainColorAttachmentRef(
+          0, vk::ImageLayout::eColorAttachmentOptimal);
+
+      vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(),
+                                     vk::PipelineBindPoint::eGraphics, 0,
+                                     nullptr, 1, &swapchainColorAttachmentRef);
+
+      // vk::SubpassDependency dependency(
+      //    VK_SUBPASS_EXTERNAL, 0,
+      //    vk::PipelineStageFlagBits::eColorAttachmentOutput,
+      //    vk::PipelineStageFlagBits::eColorAttachmentOutput,
+      //    (vk::AccessFlagBits)0,
+      //    vk::AccessFlagBits::eColorAttachmentRead |
+      //        vk::AccessFlagBits::eColorAttachmentWrite);
+
+      vk::RenderPassCreateInfo renderPassInfo(
+          vk::RenderPassCreateFlags(),
+          static_cast<uint32_t>(attachmentDescriptions.size()),
+          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
+
+      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
+                                                      g_allocationCallbacks,
+                                                      &lightRenderPass),
+                            "Failed to create render pass.");
+
+#ifndef NDEBUG
+      g_device.setDebugUtilsObjectNameEXT(
+          {vk::ObjectType::eRenderPass,
+           (uint64_t)((VkRenderPass)lightRenderPass), "Light Render Pass"},
+          g_dldy);
+#endif
+    }
   }
 
   void destroy_render_pass() {
-    g_device.destroyRenderPass(g_renderPass, g_allocationCallbacks);
+    g_device.destroyRenderPass(geomRenderPass, g_allocationCallbacks);
+    g_device.destroyRenderPass(ssaoRenderPass, g_allocationCallbacks);
+    g_device.destroyRenderPass(blurRenderPass, g_allocationCallbacks);
+    g_device.destroyRenderPass(lightRenderPass, g_allocationCallbacks);
   }
 
   void init_shaders() {
-    g_baseShader.init("../resources/shaders/spv/shader.vert.spv",
-                      "../resources/shaders/spv/shader.frag.spv");
+
+    std::vector<vk::PushConstantRange> pushConstantRanges;
+
+    PushConstantDescriptor<ModelInstancePushConstant>
+        modelInstancePushConstantRange{};
+    pushConstantRanges.push_back(
+        modelInstancePushConstantRange.make_push_constant_range());
+
+    std::vector<vk::DescriptorSetLayout> descriptors = {camUBOLayout};
+
+    gShader.init("../resources/shaders/spv/geom.vert.spv",
+                 "../resources/shaders/spv/geom.frag.spv", geomRenderPass, 3,
+                 true, true, false, pushConstantRanges, descriptors);
+
+    pushConstantRanges.clear();
+    PushConstantDescriptor<SSAOPassPushConstant> ssaoPassPushConstantRange{};
+    pushConstantRanges.push_back(
+        ssaoPassPushConstantRange.make_push_constant_range());
+
+    descriptors.push_back(uniformSamplersLayout);
+    descriptors.push_back(ssaoLayout);
+
+    ssaoShader.init("../resources/shaders/spv/ssao.vert.spv",
+                    "../resources/shaders/spv/ssao.frag.spv", ssaoRenderPass, 1,
+                    false, false, false, pushConstantRanges, descriptors);
+
+    pushConstantRanges.clear();
+
+    descriptors.clear();
+    descriptors.push_back(ssaoOutLayout);
+
+    blurShader.init("../resources/shaders/spv/blur.vert.spv",
+                    "../resources/shaders/spv/blur.frag.spv", blurRenderPass, 1,
+                    false, false, false, pushConstantRanges, descriptors);
+
+    pushConstantRanges.clear();
+    PushConstantDescriptor<LightPassPushConstant> lightPassPushConstantRange{};
+    pushConstantRanges.push_back(
+        lightPassPushConstantRange.make_push_constant_range());
+
+    descriptors.clear();
+    descriptors.push_back(camUBOLayout);
+    descriptors.push_back(uniformSamplersLayout);
+    descriptors.push_back(lightsUBOLayout);
+    descriptors.push_back(blurLayout);
+    descriptors.push_back(ditherLayout);
+
+    lightShader.init("../resources/shaders/spv/light.vert.spv",
+                     "../resources/shaders/spv/light.frag.spv", lightRenderPass,
+                     1, false, false, true, pushConstantRanges, descriptors);
+
+    pushConstantRanges.clear();
+
+    PushConstantDescriptor<ExtentPushConstant> extentPushConstantRange{};
+    pushConstantRanges.push_back(
+        extentPushConstantRange.make_push_constant_range());
+
+    descriptors.clear();
+    descriptors.push_back(uniformSamplersLayout);
+
+    overlayShader.init("../resources/shaders/spv/overlay.vert.spv",
+                       "../resources/shaders/spv/overlay.frag.spv",
+                       lightRenderPass, 1, false, false, true,
+                       pushConstantRanges, descriptors);
   }
 
-  void destroy_shaders() { g_baseShader.destroy(); }
+  void destroy_shaders() {
+    gShader.destroy();
+    ssaoShader.destroy();
+    blurShader.destroy();
+    lightShader.destroy();
+    overlayShader.destroy();
+  }
 
   void init_framebuffers() {
-    const std::vector<vk::ImageView> &attachments = Swapchain::GetImageViews();
     vk::Extent2D extent = Swapchain::GetExtent();
 
-    framebuffers.resize(Swapchain::ImageCount());
-    for (size_t i = 0; i < framebuffers.size(); i++) {
+    {
+      depthAttachment.init(
+          Swapchain::GetExtent().width, Swapchain::GetExtent().height,
+          vk::ImageTiling::eOptimal,
+          vk::ImageUsageFlagBits::eDepthStencilAttachment |
+              vk::ImageUsageFlagBits::eSampled,
+          vk::MemoryPropertyFlagBits::eDeviceLocal,
+          vk::ImageAspectFlagBits::eDepth,
+          vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
+
+      posAttachment.init(Swapchain::GetExtent().width,
+                         Swapchain::GetExtent().height);
+
+      normalAttachment.init(Swapchain::GetExtent().width,
+                            Swapchain::GetExtent().height);
+
+      colorAttachment.init(Swapchain::GetExtent().width,
+                           Swapchain::GetExtent().height);
+
+      std::array<vk::ImageView, gPassAttachmentCount> attachments;
+      attachments[depthAttachmentArrayIndex] = depthAttachment.get_image_view();
+      attachments[posAttachmentArrayIndex] = posAttachment.get_image_view();
+      attachments[normalAttachmentArrayIndex] =
+          normalAttachment.get_image_view();
+      attachments[colorAttachmentArrayIndex] = colorAttachment.get_image_view();
+
       vk::FramebufferCreateInfo framebufferInfo(
-          vk::FramebufferCreateFlags(), g_renderPass, 1, &attachments[i],
+          vk::FramebufferCreateFlags(), geomRenderPass,
+          static_cast<uint32_t>(attachments.size()), attachments.data(),
           extent.width, extent.height, 1);
 
       CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
                                                        g_allocationCallbacks,
-                                                       &framebuffers[i]),
+                                                       &geomFramebuffer),
                             "Failed to create framebuffer.");
+    }
+
+    {
+      ssaoColorAttachment.init(Swapchain::GetExtent().width,
+                               Swapchain::GetExtent().height);
+
+      std::array<vk::ImageView, 1> attachments;
+      attachments[0] = ssaoColorAttachment.get_image_view();
+
+      vk::FramebufferCreateInfo framebufferInfo(
+          vk::FramebufferCreateFlags(), ssaoRenderPass,
+          static_cast<uint32_t>(attachments.size()), attachments.data(),
+          extent.width, extent.height, 1);
+
+      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
+                                                       g_allocationCallbacks,
+                                                       &ssaoFramebuffer),
+                            "Failed to create framebuffer.");
+    }
+
+    {
+      blurColorAttachment.init(Swapchain::GetExtent().width,
+                               Swapchain::GetExtent().height);
+
+      std::array<vk::ImageView, 1> attachments;
+      attachments[0] = blurColorAttachment.get_image_view();
+
+      vk::FramebufferCreateInfo framebufferInfo(
+          vk::FramebufferCreateFlags(), blurRenderPass,
+          static_cast<uint32_t>(attachments.size()), attachments.data(),
+          extent.width, extent.height, 1);
+
+      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
+                                                       g_allocationCallbacks,
+                                                       &blurFramebuffer),
+                            "Failed to create framebuffer.");
+    }
+
+    {
+      const std::vector<vk::ImageView> &attachments =
+          Swapchain::GetImageViews();
+
+      presentFramebuffers.resize(Swapchain::ImageCount());
+      for (size_t i = 0; i < presentFramebuffers.size(); i++) {
+        std::array<vk::ImageView, 1> iattachments = {attachments[i]};
+
+        vk::FramebufferCreateInfo framebufferInfo(
+            vk::FramebufferCreateFlags(), lightRenderPass,
+            static_cast<uint32_t>(iattachments.size()), iattachments.data(),
+            extent.width, extent.height, 1);
+
+        CHECK_VK_RESULT_FATAL(
+            g_device.createFramebuffer(&framebufferInfo, g_allocationCallbacks,
+                                       &presentFramebuffers[i]),
+            "Failed to create framebuffer.");
+      }
     }
   }
 
   void destroy_framebuffers() {
-    for (size_t i = 0; i < framebuffers.size(); ++i)
-      g_device.destroyFramebuffer(framebuffers[i], g_allocationCallbacks);
+    for (size_t i = 0; i < presentFramebuffers.size(); ++i)
+      g_device.destroyFramebuffer(presentFramebuffers[i],
+                                  g_allocationCallbacks);
+
+    g_device.destroyFramebuffer(geomFramebuffer, g_allocationCallbacks);
+    g_device.destroyFramebuffer(ssaoFramebuffer, g_allocationCallbacks);
+    g_device.destroyFramebuffer(blurFramebuffer, g_allocationCallbacks);
+
+    depthAttachment.destroy();
+    posAttachment.destroy();
+    normalAttachment.destroy();
+    colorAttachment.destroy();
+
+    ssaoColorAttachment.destroy();
+    blurColorAttachment.destroy();
   }
 
   void init_commandbuffers() {
@@ -604,40 +1511,225 @@ static struct {
                                 commandbuffers.data());
   }
 
-  void update_commandbuffer(size_t index) const {
+  void update_commandbuffer(size_t index) {
     vk::CommandBufferBeginInfo beginInfo(
         vk::CommandBufferUsageFlagBits::eSimultaneousUse, nullptr);
 
     vk::Extent2D extent = Swapchain::GetExtent();
     vk::Viewport viewport(0, 0, (float)extent.width, (float)extent.height, 0,
                           1);
+    vk::Rect2D scissor({}, extent);
 
     static constexpr const std::array<float, 4> clearColorArray = {
         {0.0f, 0.0f, 0.0f, 1.0f}};
 
     vk::ClearColorValue clearColorValue = clearColorArray;
+    vk::ClearDepthStencilValue clearDepthValue = {1.0f};
 
-    vk::ClearValue clearColor(clearColorValue);
+    std::array<vk::ClearValue, 4> clearColors = {
+        clearDepthValue, clearColorValue, clearColorValue, clearColorValue};
+
     CHECK_VK_RESULT_FATAL(commandbuffers[index].begin(&beginInfo),
                           "Failed to begin recording command buffer.");
 
-    vk::RenderPassBeginInfo renderPassInfo(g_renderPass, framebuffers[index],
-                                           {{0, 0}, extent}, 1, &clearColor);
+    vk::RenderPassBeginInfo renderPassInfo(
+        geomRenderPass, geomFramebuffer, {{0, 0}, extent},
+        static_cast<uint32_t>(clearColors.size()), clearColors.data());
 
     commandbuffers[index].setViewport(
         0, 1,
         &viewport); // TODO buffers are recorded once so can't change viewport
 
+    commandbuffers[index].setScissor(
+        0, 1,
+        &scissor); // TODO buffers are recorded once so can't change scissor
+
     commandbuffers[index].beginRenderPass(&renderPassInfo,
                                           vk::SubpassContents::eInline);
 
-    // TODO mt record commands
-    for (const auto &pair : models) {
-      pair.first->bind_pipeline(commandbuffers[index]);
+    gShader.bind_pipeline(commandbuffers[index]);
 
-      for (size_t j = 0; j < pair.second.size(); ++j) {
-        pair.second[j]->record(commandbuffers[index], pair.first, index);
-      }
+    CameraUBO cam{};
+    cam.view = Camera::ViewMatrix;
+    cam.proj = Camera::ProjMatrix;
+    cam.viewPos = Maths::EigenizeVec3(Camera::Position);
+
+    camUBO.write(index, &cam, sizeof(cam), 0);
+
+    commandbuffers[index].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, gShader.get_pipeline_layout(), 0, 1,
+        &camUBO.get_descriptor_set(index), 0, nullptr);
+
+    // TODO WRAP INTO LIGHT STRUCT
+    // std::vector<LightUBO> lightsUBOData;
+    for (size_t i = 0; i < lights.size(); ++i) {
+      LightUBO ubo{};
+
+      ubo.vector.head<3>() << Maths::EigenizeVec3(lights[i]->vector);
+
+      // Apply translation only if vector represents a position
+      ubo.vector.tail<1>() << (float)lights[i]->lightType;
+
+      ubo.vector = Camera::ViewMatrix * ubo.vector;
+
+      ubo.color = Maths::EigenizeVec3(lights[i]->color);
+      ubo.ambientFactor = lights[i]->ambientFactor;
+      ubo.maxDist = lights[i]->maxDist;
+
+      lightsUBO.write(index, &ubo, sizeof(LightUBO), i);
+
+      // lightsUBOData.push_back(ubo);
+    }
+
+    // TODO Support alignment for multiple elements at once
+    // lightsUBO.write(index, lightsUBOData.data(),
+    //                sizeof(LightUBO) * lightsUBOData.size(), 0);
+
+    for (size_t j = 0; j < models.size(); ++j)
+      models[j]->record(commandbuffers[index], gShader, index);
+
+    commandbuffers[index].endRenderPass();
+
+    // ssao pass
+    if (Config::SSAOEnable) {
+      static constexpr const std::array<float, 4> ssaoClearColorArray = {
+          {1.0f, 1.0f, 1.0f, 1.0f}};
+
+      vk::ClearColorValue ssaoClearColorValue = ssaoClearColorArray;
+      vk::ClearValue ssaoClearValue = (vk::ClearValue)ssaoClearColorValue;
+
+      vk::RenderPassBeginInfo ssaoRenderPassInfo(
+          ssaoRenderPass, ssaoFramebuffer, {{0, 0}, extent}, 1,
+          &ssaoClearValue);
+
+      commandbuffers[index].beginRenderPass(&ssaoRenderPassInfo,
+                                            vk::SubpassContents::eInline);
+
+      ssaoShader.bind_pipeline(commandbuffers[index]);
+
+      commandbuffers[index].bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 0,
+          1, &camUBO.get_descriptor_set(index), 0, nullptr);
+
+      commandbuffers[index].bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 1,
+          1, &uniformSamplersSet, 0, nullptr);
+
+      commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                               ssaoShader.get_pipeline_layout(),
+                                               2, 1, &ssaoDSet, 0, nullptr);
+
+      SSAOPassPushConstant ssaoPassPushConstant{};
+      ssaoPassPushConstant.xExtent = extent.width;
+      ssaoPassPushConstant.yExtent = extent.height;
+
+      commandbuffers[index].pushConstants(
+          ssaoShader.get_pipeline_layout(),
+          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+          0, sizeof(ssaoPassPushConstant), &ssaoPassPushConstant);
+
+      // Draw scene into texture
+      commandbuffers[index].draw(6, 1, 0, 0);
+
+      commandbuffers[index].endRenderPass();
+
+      // Blur result
+      vk::RenderPassBeginInfo blurRenderPassInfo(
+          blurRenderPass, blurFramebuffer, {{0, 0}, extent}, 1,
+          &ssaoClearValue);
+
+      commandbuffers[index].beginRenderPass(&blurRenderPassInfo,
+                                            vk::SubpassContents::eInline);
+
+      blurShader.bind_pipeline(commandbuffers[index]);
+
+      commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                               blurShader.get_pipeline_layout(),
+                                               0, 1, &ssaoOutDSet, 0, nullptr);
+
+      // Draw scene into texture
+      commandbuffers[index].draw(6, 1, 0, 0);
+
+      commandbuffers[index].endRenderPass();
+    } else {
+      // TODO Clear instead of blank pass
+      static constexpr const std::array<float, 4> blurClearColorArray = {
+          {1.0f, 1.0f, 1.0f, 1.0f}};
+
+      vk::ClearColorValue blurClearColorValue = blurClearColorArray;
+      vk::ClearValue blurClearValue = (vk::ClearValue)blurClearColorValue;
+
+      vk::RenderPassBeginInfo blurRenderPassInfo(
+          blurRenderPass, blurFramebuffer, {{0, 0}, extent}, 1,
+          &blurClearValue);
+
+      commandbuffers[index].beginRenderPass(&blurRenderPassInfo,
+                                            vk::SubpassContents::eInline);
+
+      commandbuffers[index].endRenderPass();
+    }
+
+    // light pass
+    vk::ClearValue clearValue = (vk::ClearValue)clearColorValue;
+
+    vk::RenderPassBeginInfo lightRenderPassInfo(
+        lightRenderPass, presentFramebuffers[index], {{0, 0}, extent}, 1,
+        &clearValue);
+
+    commandbuffers[index].beginRenderPass(&lightRenderPassInfo,
+                                          vk::SubpassContents::eInline);
+
+    lightShader.bind_pipeline(commandbuffers[index]);
+
+    commandbuffers[index].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 0,
+        1, &camUBO.get_descriptor_set(index), 0, nullptr);
+
+    commandbuffers[index].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 1,
+        1, &uniformSamplersSet, 0, nullptr);
+
+    commandbuffers[index].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 2,
+        1, &lightsUBO.get_descriptor_set(index), 0, nullptr);
+
+    commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                             lightShader.get_pipeline_layout(),
+                                             3, 1, &blurDSet, 0, nullptr);
+
+    commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                             lightShader.get_pipeline_layout(),
+                                             4, 1, &ditherDSet, 0, nullptr);
+
+    LightPassPushConstant lightPassPushConstant{};
+    lightPassPushConstant.numLights = lights.size();
+
+    commandbuffers[index].pushConstants(
+        lightShader.get_pipeline_layout(),
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+        0, sizeof(lightPassPushConstant), &lightPassPushConstant);
+
+    // Draw scene into texture
+    commandbuffers[index].draw(6, 1, 0, 0);
+
+    if (Config::ShowGBuffer) {
+      overlayShader.bind_pipeline(commandbuffers[index]);
+      commandbuffers[index].bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, overlayShader.get_pipeline_layout(),
+          0, 1, &uniformSamplersSet, 0, nullptr);
+
+      ExtentPushConstant ePc = {};
+      ePc.xExtent = extent.width;
+      ePc.yExtent = extent.height;
+      ePc.ratio = 1.f / 6.f;
+
+      commandbuffers[index].pushConstants(
+          overlayShader.get_pipeline_layout(),
+          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+          0, sizeof(ePc), &ePc);
+
+      // Draw G-Buffer overlay
+      commandbuffers[index].draw(6 * 4, 1, 0, 0);
     }
 
     commandbuffers[index].endRenderPass();
@@ -650,15 +1742,20 @@ static struct {
   void init() {
     Swapchain::Init(requestedWidth, requestedHeight);
 
-    init_render_pass();
+    init_descriptor();
+
+    init_render_passes();
     init_shaders();
 
     init_framebuffers();
+    allocate_descriptor();
 
     init_commandbuffers();
   }
 
   void destroy(bool freeModels = true) {
+    destroy_descriptor();
+
     destroy_framebuffers();
     destroy_commandbuffers();
 
@@ -670,18 +1767,42 @@ static struct {
     if (!freeModels)
       return;
 
-    for (auto &pair : models)
-      for (size_t j = 0; j < pair.second.size(); ++j)
-        delete pair.second[j];
+    for (size_t j = 0; j < models.size(); ++j)
+      delete models[j];
 
     models.clear();
+
+    for (size_t j = 0; j < lights.size(); ++j)
+      delete lights[j];
+
+    lights.clear();
   }
 
   void refresh() {
     g_device.waitIdle();
 
-    destroy(false);
-    init();
+    destroy_descriptor();
+
+    destroy_framebuffers();
+    destroy_commandbuffers();
+
+    Swapchain::Destroy();
+    Swapchain::Init(requestedWidth, requestedHeight);
+
+    init_descriptor();
+
+    init_framebuffers();
+    init_commandbuffers();
+
+    allocate_descriptor();
+  }
+
+  Light *spawn_light(Vec3 position, Vec3 color, float ambientStrength) {
+
+    Light *light = new Light(position, color, ambientStrength);
+    lights.push_back(light);
+
+    return lights.back();
   }
 
   // void update_transforms(uint32_t imageIndex) {
@@ -691,8 +1812,9 @@ static struct {
   //    }
   //  }
   //}
+};
 
-} renderContext;
+static RenderContext renderContext;
 
 //-----------------------------------------------------------------------------
 // DEBUG UTILS
@@ -767,7 +1889,8 @@ static void Draw() {
   uint32_t imageIndex = Swapchain::GetCurrentImageIndex();
   size_t currentFrame = Swapchain::GetCurrentFrameIndex();
 
-  // renderContext.update_transforms(imageIndex);
+  Camera::UpdateMatrix();
+
   renderContext.update_commandbuffer(imageIndex);
 
   vk::SubmitInfo submitInfo(1, Swapchain::GetCurrentImageSemaphore(),
@@ -943,33 +2066,6 @@ static void InitCommandPool() {
                         "Failed to create command pool.");
 }
 
-// void InitGlobalUBOs() {
-//  for (size_t i = 0; i < g_globalDSLInfos.size(); ++i) {
-//    vk::DescriptorSetLayoutCreateInfo layoutInfo(
-//        vk::DescriptorSetLayoutCreateFlags(), 1, &g_globalDSLInfos[i]);
-//
-//    CHECK_VK_RESULT_FATAL(g_device.createDescriptorSetLayout(
-//                              &layoutInfo, g_allocationCallbacks,
-//                              &g_globalDSL[i]),
-//                          "Failed to create global descriptor set layout.");
-//  }
-//}
-
-static void InitUsualDescriptorSetLayouts() {
-  // UniformBufferInfo<UniformModelMat> info{.binding = 0};
-
-  // vk::DescriptorSetLayoutBinding layoutBinding =
-  //    info.make_descriptor_set_layout_binding();
-
-  // vk::DescriptorSetLayoutCreateInfo layoutInfo(
-  //    vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
-
-  // CHECK_VK_RESULT_FATAL(
-  //    g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-  //                                       &g_baseDescriptorSetLayout),
-  //    "Failed to create descriptor set layout.");
-}
-
 static void InitVulkan(void *windowHandle) {
   CreateInstance();
   InitSurface(windowHandle);
@@ -983,13 +2079,10 @@ static void InitVulkan(void *windowHandle) {
   InitCommandPool();
   Allocator::Init();
 
-  // InitGlobalUBOs();
-  InitUsualDescriptorSetLayouts(); // TODO Does nothing for now
-
   renderContext.init();
 
 #ifndef NDEBUG
-  SetMainObjectsDebugNames();
+  // SetMainObjectsDebugNames(); //Crash with newest drivers
 #endif
 }
 
@@ -1058,7 +2151,14 @@ void SetPresentMode(PresentMode presentMode) {
   renderContext.refresh();
 }
 
-uint64_t CreateModel(EPrimitive primitive) {
+void GetCurrentResolution(int &w, int &h) {
+  vk::Extent2D extent = Swapchain::GetExtent();
+
+  w = extent.width;
+  h = extent.height;
+}
+
+uint64_t CreateModelFromPrimitive(EPrimitive primitive) {
   Model *model = new Model();
   switch (primitive) {
   case EPrimitive::Plane:
@@ -1069,10 +2169,19 @@ uint64_t CreateModel(EPrimitive primitive) {
     break;
   }
 
-  // TODO Set different shaders
-  renderContext.models[&g_baseShader].push_back(model);
+  renderContext.models.push_back(model);
 
-  return uintptr_t(renderContext.models[&g_baseShader].back());
+  return uintptr_t(renderContext.models.back());
+}
+
+uint64_t CreateModelFromObj(const std::string &objFilename) {
+  Model *model = new Model();
+
+  model->init_from_obj_file(objFilename);
+
+  renderContext.models.push_back(model);
+
+  return uintptr_t(renderContext.models.back());
 }
 
 ModelInstance *Spawn(uint64_t modelId, Vec3 pos, Vec3 rot, Vec3 scale) {
@@ -1082,6 +2191,10 @@ ModelInstance *Spawn(uint64_t modelId, Vec3 pos, Vec3 rot, Vec3 scale) {
 void Destroy(ModelInstance *instance) {
   reinterpret_cast<Model *>(instance->get_model_id())
       ->destroy_instance(instance);
+}
+
+Light *SpawnLight(Vec3 position, Vec3 color, float ambientStrength) {
+  return renderContext.spawn_light(position, color, ambientStrength);
 }
 
 } // namespace Renderer

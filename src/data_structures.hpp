@@ -10,8 +10,17 @@
 // For compile-time primitives
 template <uint8_t N> struct LiteralVector { float members[N]; };
 
+template <uint8_t N>
+bool operator==(const LiteralVector<N> &v1, const LiteralVector<N> &v2) {
+  for (uint8_t i = 0; i < N; ++i)
+    if (v1.members[i] != v2.members[i])
+      return false;
+  return true;
+}
+
 struct LiteralVertex {
   LiteralVector<3> pos;
+  LiteralVector<3> nor;
 
   // Non-wrapped type for constexpr qualifier
   static constexpr VkVertexInputBindingDescription GetBindingDescription() {
@@ -20,10 +29,15 @@ struct LiteralVertex {
 
   // Non-wrapped type for constexpr qualifier
   static constexpr auto GetAttributeDescription() {
-    return std::array<VkVertexInputAttributeDescription, 1>{
-        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LiteralVertex, pos)}}};
+    return std::array<VkVertexInputAttributeDescription, 2>{
+        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LiteralVertex, pos)},
+         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LiteralVertex, nor)}}};
   }
 };
+
+bool operator==(const LiteralVertex &v1, const LiteralVertex &v2) {
+  return v1.pos == v2.pos && v1.nor == v2.nor;
+}
 
 // template <size_t N> struct Vertex {
 //  Eigen::Matrix<float, N, 1> pos;
@@ -77,8 +91,7 @@ template <size_t vNum, size_t iNum> struct Primitive {
 // PLANE
 DECLARE_PRIMITIVE(Plane, 4, 6)
 SET_PRIMITIVE_VERTICES(
-    Plane,
-    {{{-0.5f, -0.5f, 0}, {0.5f, -0.5f, 0}, {0.5f, 0.5f, 0}, {-0.5f, 0.5f, 0}}})
+    Plane, {{{1.f, -1.f, 0}, {-1.f, -1.f, 0}, {-1.f, 1.f, 0}, {1.f, 1.f, 0}}})
 
 SET_PRIMITIVE_INDICES(Plane, {0, 1, 2, 2, 3, 0})
 
@@ -102,10 +115,10 @@ SET_PRIMITIVE_INDICES(Cube,
 #undef SET_PRIMITIVE_INDICES
 
 //-----------------------------------------------------------------------------
-// UBO RELATED
+// UNIFORM OBJECTS
 //-----------------------------------------------------------------------------
 
-template <typename T> struct UniformBufferInfo {
+template <typename T> struct UniformObjectInfo {
   static constexpr const uint64_t Size = sizeof(T);
   static constexpr const vk::DescriptorType DescriptorType =
       vk::DescriptorType::eUniformBuffer;
@@ -124,23 +137,100 @@ template <typename T> struct UniformBufferInfo {
   }
 };
 
-#define DEFINE_UBO(type, descType, shaderStageFlags)                           \
+#define DEFINE_UNIFORM_OBJECT(type, descType, shaderStageFlags)                \
   template <>                                                                  \
-  constexpr const vk::DescriptorType UniformBufferInfo<type>::DescriptorType = \
+  constexpr const vk::DescriptorType UniformObjectInfo<type>::DescriptorType = \
       descType;                                                                \
                                                                                \
   template <>                                                                  \
-  constexpr const VkShaderStageFlags UniformBufferInfo<type>::ShaderStage =    \
+  constexpr const VkShaderStageFlags UniformObjectInfo<type>::ShaderStage =    \
       (VkShaderStageFlags)shaderStageFlags;
 
 // UNIFORMBUFFERINFO SPECIALIZATIONS
 
-// UniformModelMat
-// struct UniformModelMat {
-//  Eigen::Matrix4f model;
-//};
-//
-// DEFINE_UBO(UniformModelMat, vk::DescriptorType::eUniformBufferDynamic,
-//           vk::ShaderStageFlagBits::eVertex)
+// UniformSampler2D
+struct UniformSampler2D {};
 
-#undef DEFINE_UBO
+DEFINE_UNIFORM_OBJECT(UniformSampler2D,
+                      vk::DescriptorType::eCombinedImageSampler,
+                      vk::ShaderStageFlagBits::eFragment)
+
+struct CameraUBO {
+  Eigen::Matrix4f view;
+  Eigen::Matrix4f proj;
+  Eigen::Vector3f viewPos;
+};
+
+DEFINE_UNIFORM_OBJECT(CameraUBO, vk::DescriptorType::eUniformBuffer,
+                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+
+struct LightUBO {
+  Eigen::Vector4f vector;
+
+  Eigen::Vector3f color;
+  float ambientFactor;
+
+  float maxDist;
+};
+
+DEFINE_UNIFORM_OBJECT(LightUBO, vk::DescriptorType::eUniformBuffer,
+                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+
+#undef DEFINE_UNIFORM_OBJECT
+
+//-----------------------------------------------------------------------------
+// PUSH CONSTANTS
+//-----------------------------------------------------------------------------
+
+template <typename PushConstantStruct> struct PushConstantDescriptor {
+  static constexpr uint32_t Size = sizeof(PushConstantStruct);
+  static constexpr VkShaderStageFlags ShaderStageFlags = 0;
+  uint32_t Offset = 0;
+
+  vk::PushConstantRange make_push_constant_range() {
+    return vk::PushConstantRange(vk::ShaderStageFlags(ShaderStageFlags), Offset,
+                                 Size);
+  }
+};
+
+#define DEFINE_PUSH_CONSTANT(PushConstantStructType, stageFlags)               \
+  template <>                                                                  \
+  constexpr VkShaderStageFlags                                                 \
+      PushConstantDescriptor<PushConstantStructType>::ShaderStageFlags =       \
+          (VkShaderStageFlags)stageFlags;                                      \
+  static_assert(sizeof(PushConstantStructType) <= 128);
+
+struct ModelInstancePushConstant {
+  Eigen::Matrix4f model;
+  Eigen::Vector4f color;
+};
+
+DEFINE_PUSH_CONSTANT(ModelInstancePushConstant,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+struct ExtentPushConstant {
+  float xExtent;
+  float yExtent;
+  float ratio = 6;
+};
+
+DEFINE_PUSH_CONSTANT(ExtentPushConstant,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+struct LightPassPushConstant {
+  uint32_t numLights;
+};
+
+DEFINE_PUSH_CONSTANT(LightPassPushConstant,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+struct SSAOPassPushConstant
+{
+	float xExtent;
+	float yExtent;
+};
+
+DEFINE_PUSH_CONSTANT(SSAOPassPushConstant,
+	VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+#undef DEFINE_PUSH_CONSTANT

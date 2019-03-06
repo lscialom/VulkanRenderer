@@ -18,6 +18,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${OUTPUT_DIRECTORY}/archive")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${OUTPUT_DIRECTORY}/archive")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${OUTPUT_DIRECTORY}/archive")
 
+set(CMAKE_CXX_STANDARD 17)
+
 #Compile flags
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -std=c++17 -Xclang -fcxx-exceptions /fp:fast /arch:AVX -Xclang -O0") # /FA for asm, -Rpass-analysis=loop-vectorize for vectorization check
@@ -29,6 +31,8 @@ endif()
 
 message(STATUS "Using ${CMAKE_CXX_COMPILER_ID} in ${CMAKE_BUILD_TYPE} mode")
 message(STATUS "Flags: ${CMAKE_CXX_FLAGS}")
+
+link_directories(libs/${CMAKE_BUILD_TYPE})
 
 #Global includes
 #include_directories(${PROJECT_SOURCE_DIR} / include)
@@ -42,6 +46,11 @@ file(GLOB sources main.cpp)
 
 add_executable(TestExe ${sources})
 target_include_directories(TestExe PRIVATE ${PROJECT_SOURCE_DIR}/include
-                                           ${PROJECT_SOURCE_DIR}/deps/WindowHandler/include)
+                                           ${PROJECT_SOURCE_DIR}/deps/WindowHandler/include
+										   ${PROJECT_SOURCE_DIR}/deps/eigen
+										   ${PROJECT_SOURCE_DIR}/deps/ExtImGui)
 
-target_link_libraries(TestExe window_handler vulkan_renderer) #Replace with your own window handler if needed
+target_link_libraries(TestExe window_handler vulkan_renderer ext_imgui) #Replace with your own window handler if needed
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/${CMAKE_BUILD_TYPE}/ext_imgui.dll
+        DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/bin)

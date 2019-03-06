@@ -12,8 +12,6 @@ vk::CommandPool g_commandPool = nullptr;
 
 // vk::DescriptorSetLayout g_baseDescriptorSetLayout;
 
-vk::RenderPass g_renderPass = nullptr;
-
 vk::AllocationCallbacks *g_allocationCallbacks = nullptr;
 
 vk::DispatchLoaderDynamic g_dldy = {};

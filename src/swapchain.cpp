@@ -28,7 +28,9 @@ vk::AttachmentDescription GetAttachmentDescription() {
       vk::AttachmentDescriptionFlags(), imageFormat,
       vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eClear,
       vk::AttachmentStoreOp::eStore, vk::AttachmentLoadOp::eDontCare,
-      vk::AttachmentStoreOp::eDontCare, vk::ImageLayout::eUndefined,
+      vk::AttachmentStoreOp::eDontCare,
+      vk::ImageLayout::eUndefined, // TODO transition swapchain images to
+                                   // present
       vk::ImageLayout::ePresentSrcKHR);
 }
 
