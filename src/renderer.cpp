@@ -564,9 +564,8 @@ struct RenderContext {
   // Image sdfImage;
 
   Image ssaoNoiseTex;
-  vk::DescriptorSetLayout ssaoLayout;
-  vk::DescriptorPool ssaoDPool;
-  vk::DescriptorSet ssaoDSet;
+  Buffer ssaoKernel;
+  DescriptorSet ssaoSet;
 
   // TODO Rename as Repeat Sampler
   vk::Sampler ssaoSampler;
@@ -574,8 +573,6 @@ struct RenderContext {
   vk::DescriptorSetLayout ssaoOutLayout;
   vk::DescriptorPool ssaoOutDPool;
   vk::DescriptorSet ssaoOutDSet;
-
-  Buffer ssaoKernel;
 
   Image ditherTex;
   vk::DescriptorSetLayout ditherLayout;
@@ -659,7 +656,7 @@ struct RenderContext {
     }
 
     {
-		CREATE_DESCRIPTOR_SET_LAYOUT(SSAOLayoutInfo, ssaoLayout);
+      ssaoSet.init(SSAOLayoutInfo);
     }
 
     {
@@ -850,26 +847,6 @@ struct RenderContext {
 
     // ssao set
     {
-      vk::DescriptorPoolSize size;
-      size.descriptorCount = 1;
-      size.type = vk::DescriptorType::eCombinedImageSampler;
-
-      vk::DescriptorPoolCreateInfo poolInfo;
-      poolInfo.maxSets = 1;
-      poolInfo.poolSizeCount = 1;
-      poolInfo.pPoolSizes = &size;
-
-      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
-                                &poolInfo, g_allocationCallbacks, &ssaoDPool),
-                            "Failed to create descriptor pool.");
-
-      vk::DescriptorSetAllocateInfo allocInfo;
-      allocInfo.descriptorPool = ssaoDPool;
-      allocInfo.descriptorSetCount = 1;
-      allocInfo.pSetLayouts = &ssaoLayout;
-
-      g_device.allocateDescriptorSets(&allocInfo, &ssaoDSet);
-
       vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo(
           vk::SamplerCreateFlags(), vk::Filter::eNearest, vk::Filter::eNearest,
           vk::SamplerMipmapMode::eNearest, vk::SamplerAddressMode::eRepeat,
@@ -918,35 +895,7 @@ struct RenderContext {
       ssaoKernel.write(ssaoKernelData.data(),
                        ssaoKernelData.size() * sizeof(*ssaoKernelData.data()));
 
-      vk::DescriptorBufferInfo bufferInfo;
-      bufferInfo.buffer = ssaoKernel.get_handle();
-      bufferInfo.offset = 0;
-      bufferInfo.range = ssaoKernelData.size() * sizeof(*ssaoKernelData.data());
-
-      vk::DescriptorImageInfo imageInfo;
-      imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-      imageInfo.imageView = ssaoNoiseTex.get_view();
-      imageInfo.sampler = ssaoSampler;
-
-      std::array<vk::WriteDescriptorSet, 2> descriptorWrites;
-
-      descriptorWrites[0] =
-          vk::WriteDescriptorSet{ssaoDSet,
-                                 0,
-                                 0,
-                                 1,
-                                 vk::DescriptorType::eCombinedImageSampler,
-                                 &imageInfo,
-                                 nullptr,
-                                 nullptr};
-
-      descriptorWrites[1] = vk::WriteDescriptorSet{
-          ssaoDSet, 1,           0,      1, vk::DescriptorType::eUniformBuffer,
-          nullptr,  &bufferInfo, nullptr};
-
-      g_device.updateDescriptorSets(
-          static_cast<uint32_t>(descriptorWrites.size()),
-          descriptorWrites.data(), 0, nullptr);
+      ssaoSet.update(&ssaoKernel, &ssaoNoiseTex, &ssaoSampler);
     }
 
     // blur set
@@ -1072,14 +1021,12 @@ struct RenderContext {
     g_device.destroyDescriptorSetLayout(lightsUBOLayout, g_allocationCallbacks);
     lightsUBO.~UniformBufferObject();
 
-    g_device.destroyDescriptorSetLayout(ssaoLayout, g_allocationCallbacks);
-
     ssaoNoiseTex.free();
     g_device.destroySampler(ssaoSampler, g_allocationCallbacks);
 
     ssaoKernel.~Buffer();
 
-    g_device.destroyDescriptorPool(ssaoDPool, g_allocationCallbacks);
+    ssaoSet.destroy();
 
     g_device.destroyDescriptorSetLayout(ssaoOutLayout, g_allocationCallbacks);
     g_device.destroyDescriptorPool(ssaoOutDPool, g_allocationCallbacks);
@@ -1324,7 +1271,7 @@ struct RenderContext {
         ssaoPassPushConstantRange.make_push_constant_range());
 
     descriptors.push_back(uniformSamplersLayout);
-    descriptors.push_back(ssaoLayout);
+    descriptors.push_back(ssaoSet.get_layout());
 
     ssaoShader.init("../resources/shaders/spv/ssao.vert.spv",
                     "../resources/shaders/spv/ssao.frag.spv", ssaoRenderPass, 1,
@@ -1615,9 +1562,9 @@ struct RenderContext {
           vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 1,
           1, &uniformSamplersSet, 0, nullptr);
 
-      commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                               ssaoShader.get_pipeline_layout(),
-                                               2, 1, &ssaoDSet, 0, nullptr);
+      commandbuffers[index].bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 2,
+          1, &ssaoSet.get_handle(), 0, nullptr);
 
       SSAOPassPushConstant ssaoPassPushConstant{};
       ssaoPassPushConstant.xExtent = extent.width;

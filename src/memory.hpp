@@ -48,6 +48,8 @@ public:
   void write(const void *data, VkDeviceSize writeSize,
              VkDeviceSize offset = 0) const;
 
+  size_t get_size() const { return size; }
+
   Buffer &operator=(const Buffer &o) = delete;
   Buffer &operator=(Buffer &&other);
 };
