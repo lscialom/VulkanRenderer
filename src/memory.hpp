@@ -77,6 +77,7 @@ public:
 
   const vk::Image &get_handle() const { return handle; }
   const vk::ImageView &get_view() const { return view; }
+  vk::ImageAspectFlags get_aspect() const { return aspect; }
 
   void
   allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
@@ -138,6 +139,8 @@ public:
   void destroy() { image.free(); }
 
   const vk::ImageView &get_image_view() const { return image.get_view(); }
+  const Image &get_image() const { return image; }
+
   vk::AttachmentDescription
   make_attachment_description(vk::ImageLayout initialLayout,
                               vk::ImageLayout finalLayout) {

@@ -15,6 +15,27 @@ namespace Renderer {
 
 // clang-format off
 
+DEFINE_LAYOUT(UniqueTexture, 1,
+	{
+		DEFINE_LAYOUT_BINDING(
+			.binding = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		)
+	})
+
+DEFINE_LAYOUT(GBuffer, 1,
+	{
+		// G-Buffer attachments
+		DEFINE_LAYOUT_BINDING(
+			.binding = 0,
+			.descriptorCount = G_BUFFER_SIZE,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		)
+	})
+
 DEFINE_LAYOUT(SSAO, 2,
 	{
 		// SSAO Noise Rotations
@@ -56,6 +77,8 @@ private:
   // TODO Optimize
   vk::DescriptorPool pool;
   vk::DescriptorSet set;
+
+  // TODO Optimize (Descriptors can share the same layout)
   vk::DescriptorSetLayout layout;
 
   std::vector<vk::DescriptorSetLayoutBinding> bindingsInfo;
@@ -105,8 +128,9 @@ public:
     g_device.allocateDescriptorSets(&allocInfo, &set);
   }
 
-  void update(Buffer *buffers, Image *images = nullptr,
-              vk::Sampler *samplers = nullptr) {
+  void update(const std::vector<const Buffer *> &buffers,
+              const std::vector<const Image *> &images = {},
+              const std::vector<const vk::Sampler *> &samplers = {}) {
 
     std::vector<vk::WriteDescriptorSet> writes;
     uint32_t currentBufferIndex = 0;
@@ -134,9 +158,9 @@ public:
         infosToDestroy.push_back(infos);
 
         for (uint32_t j = 0; j < bindingsInfo[i].descriptorCount; ++j) {
-          infos[j].buffer = buffers[currentBufferIndex].get_handle();
+          infos[j].buffer = buffers[currentBufferIndex]->get_handle();
           infos[j].offset = 0; // TODO manage offsets
-          infos[j].range = buffers[currentBufferIndex].get_size();
+          infos[j].range = buffers[currentBufferIndex]->get_size();
 
           currentBufferIndex++;
         }
@@ -158,11 +182,32 @@ public:
         infosToDestroy.push_back(infos);
 
         for (uint32_t j = 0; j < bindingsInfo[i].descriptorCount; ++j) {
-          infos[j].imageLayout =
-              vk::ImageLayout::eShaderReadOnlyOptimal; // TODO Support other
-                                                       // layouts
-          infos[j].imageView = images[currentImageIndex].get_view();
-          infos[j].sampler = samplers[currentImageIndex];
+
+          if ((images[currentImageIndex]->get_aspect() &
+               vk::ImageAspectFlagBits::eColor) ==
+              vk::ImageAspectFlagBits::eColor) {
+
+            infos[j].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+          } else if ((images[currentImageIndex]->get_aspect() &
+                      vk::ImageAspectFlagBits::eDepth) ==
+                     vk::ImageAspectFlagBits::eDepth) {
+            infos[j].imageLayout =
+                vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal;
+
+          } else {
+
+            // TODO Support other
+            // layouts
+
+            std::string err = "Unmanaged Image Aspect used in descriptor. (";
+            err += vk::to_string(images[currentImageIndex]->get_aspect());
+            err += ")";
+            throw std::runtime_error(err.c_str());
+          }
+
+          infos[j].imageView = images[currentImageIndex]->get_view();
+          infos[j].sampler = *samplers[currentImageIndex];
 
           currentImageIndex++;
         }

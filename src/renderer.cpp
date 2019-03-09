@@ -524,12 +524,13 @@ struct RenderContext {
   Attachment normalAttachment;
   Attachment colorAttachment;
 
+  DescriptorSet gBufferSet;
+
   Attachment ssaoColorAttachment;
   Attachment blurColorAttachment;
 
-  vk::DescriptorSetLayout blurLayout;
-  vk::DescriptorPool blurDPool;
-  vk::DescriptorSet blurDSet;
+  DescriptorSet ssaoResTexSet;
+  DescriptorSet blurResTexSet;
 
   static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
 
@@ -545,10 +546,6 @@ struct RenderContext {
   Shader lightShader;
   Shader overlayShader;
 
-  vk::DescriptorPool descriptorPool;
-  vk::DescriptorSetLayout uniformSamplersLayout;
-  vk::DescriptorSet uniformSamplersSet;
-
   vk::Sampler sampler;
 
   vk::DescriptorSetLayout camUBOLayout;
@@ -557,12 +554,6 @@ struct RenderContext {
   vk::DescriptorSetLayout lightsUBOLayout;
   UniformBufferObject lightsUBO;
 
-  vk::DescriptorSetLayout sdfDLayout;
-  vk::DescriptorPool sdfDPool;
-  vk::DescriptorSet sdfDSet;
-
-  // Image sdfImage;
-
   Image ssaoNoiseTex;
   Buffer ssaoKernel;
   DescriptorSet ssaoSet;
@@ -570,37 +561,15 @@ struct RenderContext {
   // TODO Rename as Repeat Sampler
   vk::Sampler ssaoSampler;
 
-  vk::DescriptorSetLayout ssaoOutLayout;
-  vk::DescriptorPool ssaoOutDPool;
-  vk::DescriptorSet ssaoOutDSet;
-
   Image ditherTex;
-  vk::DescriptorSetLayout ditherLayout;
-  vk::DescriptorPool ditherDPool;
-  vk::DescriptorSet ditherDSet;
+  DescriptorSet ditherTexSet;
 
   std::vector<Model *> models;
   std::vector<Light *> lights;
 
   void init_descriptor() {
 
-    {
-      UniformObjectInfo<UniformSampler2D> info;
-      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
-
-      info.binding = 0;
-      info.arraySize = gPassAttachmentCount;
-      layoutBindings[0] = info.make_descriptor_set_layout_binding();
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(),
-          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &uniformSamplersLayout),
-          "Failed to create descriptor set layout.");
-    }
+    gBufferSet.init(GBufferLayoutInfo);
 
     {
       UniformObjectInfo<CameraUBO> info;
@@ -639,210 +608,36 @@ struct RenderContext {
       lightsUBO.init<decltype(info)>(lightsUBOLayout, MAX_LIGHTS);
     }
 
-    {
-      vk::DescriptorSetLayoutBinding layoutBinding;
-      layoutBinding.binding = 0;
-      layoutBinding.descriptorCount = 1;
-      layoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-      layoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &sdfDLayout),
-          "Failed to create descriptor set layout.");
-    }
-
-    {
-      ssaoSet.init(SSAOLayoutInfo);
-    }
-
-    {
-      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
-
-      layoutBindings[0].binding = 0;
-      layoutBindings[0].descriptorCount = 1;
-      layoutBindings[0].descriptorType =
-          vk::DescriptorType::eCombinedImageSampler;
-      layoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(),
-          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &ssaoOutLayout),
-          "Failed to create descriptor set layout.");
-    }
-
-    {
-      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
-
-      layoutBindings[0].binding = 0;
-      layoutBindings[0].descriptorCount = 1;
-      layoutBindings[0].descriptorType =
-          vk::DescriptorType::eCombinedImageSampler;
-      layoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(),
-          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &blurLayout),
-          "Failed to create descriptor set layout.");
-    }
-
-    {
-      std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings;
-
-      layoutBindings[0].binding = 0;
-      layoutBindings[0].descriptorCount = 1;
-      layoutBindings[0].descriptorType =
-          vk::DescriptorType::eCombinedImageSampler;
-      layoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(),
-          static_cast<uint32_t>(layoutBindings.size()), layoutBindings.data());
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &ditherLayout),
-          "Failed to create descriptor set layout.");
-    }
+    ssaoSet.init(SSAOLayoutInfo);
+    ssaoResTexSet.init(UniqueTextureLayoutInfo);
+    blurResTexSet.init(UniqueTextureLayoutInfo);
+    ditherTexSet.init(UniqueTextureLayoutInfo);
   }
 
   void allocate_descriptor() {
-    vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
-                                    1u};
-
-    vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(), 1, 1,
-                                          &poolSize};
-
-    CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(&poolInfo,
-                                                        g_allocationCallbacks,
-                                                        &descriptorPool),
-                          "Failed to create descriptor pool.");
-
-    vk::DescriptorSetAllocateInfo allocInfo{descriptorPool, 1,
-                                            &uniformSamplersLayout};
-
-    CHECK_VK_RESULT_FATAL(
-        g_device.allocateDescriptorSets(&allocInfo, &uniformSamplersSet),
-        "Failed to allocate descriptor sets.");
-
-    vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo(
-        vk::SamplerCreateFlags(), vk::Filter::eNearest, vk::Filter::eNearest,
-        vk::SamplerMipmapMode::eNearest, vk::SamplerAddressMode::eClampToBorder,
-        vk::SamplerAddressMode::eClampToBorder,
-        vk::SamplerAddressMode::eClampToBorder, 0.f, false, 0, false,
-        vk::CompareOp::eAlways, 0, 0, vk::BorderColor::eFloatOpaqueBlack,
-        false);
-
-    g_device.createSampler(&samplerInfo, g_allocationCallbacks, &sampler);
-
-    std::array<vk::DescriptorImageInfo, gPassAttachmentCount> imageInfos;
-
-    imageInfos[posAttachmentArrayIndex] =
-        vk::DescriptorImageInfo(sampler, posAttachment.get_image_view(),
-                                vk::ImageLayout::eShaderReadOnlyOptimal);
-
-    imageInfos[normalAttachmentArrayIndex] =
-        vk::DescriptorImageInfo(sampler, normalAttachment.get_image_view(),
-                                vk::ImageLayout::eShaderReadOnlyOptimal);
-
-    imageInfos[colorAttachmentArrayIndex] =
-        vk::DescriptorImageInfo(sampler, colorAttachment.get_image_view(),
-                                vk::ImageLayout::eShaderReadOnlyOptimal);
-
-    imageInfos[depthAttachmentArrayIndex] = vk::DescriptorImageInfo(
-        sampler, depthAttachment.get_image_view(),
-        vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
-
-    std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
-
-    descriptorWrites[0] = vk::WriteDescriptorSet{
-        uniformSamplersSet,
-        0,
-        0,
-        static_cast<uint32_t>(imageInfos.size()),
-        UniformObjectInfo<UniformSampler2D>::DescriptorType,
-        imageInfos.data(),
-        nullptr,
-        nullptr};
-
-    g_device.updateDescriptorSets(
-        static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(),
-        0, nullptr);
-
-    // sdf set
     {
-      vk::DescriptorPoolSize size;
-      size.descriptorCount = 1;
-      size.type = vk::DescriptorType::eCombinedImageSampler;
+      vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo(
+          vk::SamplerCreateFlags(), vk::Filter::eNearest, vk::Filter::eNearest,
+          vk::SamplerMipmapMode::eNearest,
+          vk::SamplerAddressMode::eClampToBorder,
+          vk::SamplerAddressMode::eClampToBorder,
+          vk::SamplerAddressMode::eClampToBorder, 0.f, false, 0, false,
+          vk::CompareOp::eAlways, 0, 0, vk::BorderColor::eFloatOpaqueBlack,
+          false);
 
-      vk::DescriptorPoolCreateInfo poolInfo;
-      poolInfo.maxSets = 1;
-      poolInfo.poolSizeCount = 1;
-      poolInfo.pPoolSizes = &size;
+      g_device.createSampler(&samplerInfo, g_allocationCallbacks, &sampler);
 
-      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
-                                &poolInfo, g_allocationCallbacks, &sdfDPool),
-                            "Failed to create descriptor pool.");
+      std::vector<const Image *> images;
+	  images.resize(G_BUFFER_SIZE);
 
-      vk::DescriptorSetAllocateInfo allocInfo;
-      allocInfo.descriptorPool = sdfDPool;
-      allocInfo.descriptorSetCount = 1;
-      allocInfo.pSetLayouts = &sdfDLayout;
+      images[posAttachmentArrayIndex] = &posAttachment.get_image();
+      images[normalAttachmentArrayIndex] = &normalAttachment.get_image();
+      images[colorAttachmentArrayIndex] = &colorAttachment.get_image();
+      images[depthAttachmentArrayIndex] = &depthAttachment.get_image();
 
-      g_device.allocateDescriptorSets(&allocInfo, &sdfDSet);
-    }
+      std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE, &sampler);
 
-    // ssao out set
-    {
-      vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
-                                      1u};
-
-      vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(), 1,
-                                            1, &poolSize};
-
-      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(&poolInfo,
-                                                          g_allocationCallbacks,
-                                                          &ssaoOutDPool),
-                            "Failed to create descriptor pool.");
-
-      vk::DescriptorSetAllocateInfo allocInfo{ssaoOutDPool, 1, &ssaoOutLayout};
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.allocateDescriptorSets(&allocInfo, &ssaoOutDSet),
-          "Failed to allocate descriptor sets.");
-
-      std::array<vk::DescriptorImageInfo, 1> imageInfos;
-
-      imageInfos[0] =
-          vk::DescriptorImageInfo(sampler, ssaoColorAttachment.get_image_view(),
-                                  vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
-
-      descriptorWrites[0] = vk::WriteDescriptorSet{
-          ssaoOutDSet,
-          0,
-          0,
-          static_cast<uint32_t>(imageInfos.size()),
-          UniformObjectInfo<UniformSampler2D>::DescriptorType,
-          imageInfos.data(),
-          nullptr,
-          nullptr};
-
-      g_device.updateDescriptorSets(
-          static_cast<uint32_t>(descriptorWrites.size()),
-          descriptorWrites.data(), 0, nullptr);
+      gBufferSet.update({}, images, samplers);
     }
 
     // ssao set
@@ -895,72 +690,14 @@ struct RenderContext {
       ssaoKernel.write(ssaoKernelData.data(),
                        ssaoKernelData.size() * sizeof(*ssaoKernelData.data()));
 
-      ssaoSet.update(&ssaoKernel, &ssaoNoiseTex, &ssaoSampler);
+      ssaoSet.update({&ssaoKernel}, {&ssaoNoiseTex}, {&ssaoSampler});
     }
 
-    // blur set
-    {
-      vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
-                                      1u};
-
-      vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(), 1,
-                                            1, &poolSize};
-
-      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
-                                &poolInfo, g_allocationCallbacks, &blurDPool),
-                            "Failed to create descriptor pool.");
-
-      vk::DescriptorSetAllocateInfo allocInfo{blurDPool, 1, &blurLayout};
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.allocateDescriptorSets(&allocInfo, &blurDSet),
-          "Failed to allocate descriptor sets.");
-
-      std::array<vk::DescriptorImageInfo, 1> imageInfos;
-
-      imageInfos[0] =
-          vk::DescriptorImageInfo(sampler, blurColorAttachment.get_image_view(),
-                                  vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
-
-      descriptorWrites[0] = vk::WriteDescriptorSet{
-          blurDSet,
-          0,
-          0,
-          static_cast<uint32_t>(imageInfos.size()),
-          UniformObjectInfo<UniformSampler2D>::DescriptorType,
-          imageInfos.data(),
-          nullptr,
-          nullptr};
-
-      g_device.updateDescriptorSets(
-          static_cast<uint32_t>(descriptorWrites.size()),
-          descriptorWrites.data(), 0, nullptr);
-    }
+    ssaoResTexSet.update({}, {&ssaoColorAttachment.get_image()}, {&sampler});
+    blurResTexSet.update({}, {&blurColorAttachment.get_image()}, {&sampler});
 
     // dither set
     {
-      vk::DescriptorPoolSize size;
-      size.descriptorCount = 1;
-      size.type = vk::DescriptorType::eCombinedImageSampler;
-
-      vk::DescriptorPoolCreateInfo poolInfo;
-      poolInfo.maxSets = 1;
-      poolInfo.poolSizeCount = 1;
-      poolInfo.pPoolSizes = &size;
-
-      CHECK_VK_RESULT_FATAL(g_device.createDescriptorPool(
-                                &poolInfo, g_allocationCallbacks, &ditherDPool),
-                            "Failed to create descriptor pool.");
-
-      vk::DescriptorSetAllocateInfo allocInfo;
-      allocInfo.descriptorPool = ditherDPool;
-      allocInfo.descriptorSetCount = 1;
-      allocInfo.pSetLayouts = &ditherLayout;
-
-      g_device.allocateDescriptorSets(&allocInfo, &ditherDSet);
-
       ditherTex.allocate(Maths::DitheringPatternDim, Maths::DitheringPatternDim,
                          vk::Format::eR32Sfloat, vk::ImageTiling::eOptimal,
                          vk::ImageUsageFlagBits::eTransferDst |
@@ -988,32 +725,12 @@ struct RenderContext {
       ditherTex.transition_layout(vk::ImageLayout::eTransferDstOptimal,
                                   vk::ImageLayout::eShaderReadOnlyOptimal);
 
-      vk::DescriptorImageInfo imageInfo;
-      imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-      imageInfo.imageView = ditherTex.get_view();
-      imageInfo.sampler = ssaoSampler;
-
-      std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
-
-      descriptorWrites[0] =
-          vk::WriteDescriptorSet{ditherDSet,
-                                 0,
-                                 0,
-                                 1,
-                                 vk::DescriptorType::eCombinedImageSampler,
-                                 &imageInfo,
-                                 nullptr,
-                                 nullptr};
-
-      g_device.updateDescriptorSets(
-          static_cast<uint32_t>(descriptorWrites.size()),
-          descriptorWrites.data(), 0, nullptr);
+      ditherTexSet.update({}, {&ditherTex}, {&ssaoSampler});
     }
   }
 
   void destroy_descriptor() {
-    g_device.destroyDescriptorSetLayout(uniformSamplersLayout,
-                                        g_allocationCallbacks);
+    gBufferSet.destroy();
 
     g_device.destroyDescriptorSetLayout(camUBOLayout, g_allocationCallbacks);
     camUBO.~UniformBufferObject();
@@ -1028,22 +745,13 @@ struct RenderContext {
 
     ssaoSet.destroy();
 
-    g_device.destroyDescriptorSetLayout(ssaoOutLayout, g_allocationCallbacks);
-    g_device.destroyDescriptorPool(ssaoOutDPool, g_allocationCallbacks);
+    ssaoResTexSet.destroy();
+    blurResTexSet.destroy();
 
-    g_device.destroyDescriptorSetLayout(ditherLayout, g_allocationCallbacks);
-    g_device.destroyDescriptorPool(ditherDPool, g_allocationCallbacks);
     ditherTex.free();
-
-    g_device.destroyDescriptorSetLayout(blurLayout, g_allocationCallbacks);
-    g_device.destroyDescriptorPool(blurDPool, g_allocationCallbacks);
+    ditherTexSet.destroy();
 
     g_device.destroySampler(sampler, g_allocationCallbacks);
-
-    g_device.destroyDescriptorPool(descriptorPool, g_allocationCallbacks);
-
-    g_device.destroy(sdfDPool);
-    g_device.destroy(sdfDLayout);
   }
 
   void init_render_passes() {
@@ -1270,7 +978,7 @@ struct RenderContext {
     pushConstantRanges.push_back(
         ssaoPassPushConstantRange.make_push_constant_range());
 
-    descriptors.push_back(uniformSamplersLayout);
+    descriptors.push_back(gBufferSet.get_layout());
     descriptors.push_back(ssaoSet.get_layout());
 
     ssaoShader.init("../resources/shaders/spv/ssao.vert.spv",
@@ -1280,7 +988,7 @@ struct RenderContext {
     pushConstantRanges.clear();
 
     descriptors.clear();
-    descriptors.push_back(ssaoOutLayout);
+    descriptors.push_back(ssaoResTexSet.get_layout());
 
     blurShader.init("../resources/shaders/spv/blur.vert.spv",
                     "../resources/shaders/spv/blur.frag.spv", blurRenderPass, 1,
@@ -1293,10 +1001,10 @@ struct RenderContext {
 
     descriptors.clear();
     descriptors.push_back(camUBOLayout);
-    descriptors.push_back(uniformSamplersLayout);
+    descriptors.push_back(gBufferSet.get_layout());
     descriptors.push_back(lightsUBOLayout);
-    descriptors.push_back(blurLayout);
-    descriptors.push_back(ditherLayout);
+    descriptors.push_back(blurResTexSet.get_layout());
+    descriptors.push_back(ditherTexSet.get_layout());
 
     lightShader.init("../resources/shaders/spv/light.vert.spv",
                      "../resources/shaders/spv/light.frag.spv", lightRenderPass,
@@ -1309,7 +1017,7 @@ struct RenderContext {
         extentPushConstantRange.make_push_constant_range());
 
     descriptors.clear();
-    descriptors.push_back(uniformSamplersLayout);
+    descriptors.push_back(gBufferSet.get_layout());
 
     overlayShader.init("../resources/shaders/spv/overlay.vert.spv",
                        "../resources/shaders/spv/overlay.frag.spv",
@@ -1560,7 +1268,7 @@ struct RenderContext {
 
       commandbuffers[index].bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 1,
-          1, &uniformSamplersSet, 0, nullptr);
+          1, &gBufferSet.get_handle(), 0, nullptr);
 
       commandbuffers[index].bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 2,
@@ -1590,9 +1298,9 @@ struct RenderContext {
 
       blurShader.bind_pipeline(commandbuffers[index]);
 
-      commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                               blurShader.get_pipeline_layout(),
-                                               0, 1, &ssaoOutDSet, 0, nullptr);
+      commandbuffers[index].bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, blurShader.get_pipeline_layout(), 0,
+          1, &ssaoResTexSet.get_handle(), 0, nullptr);
 
       // Draw scene into texture
       commandbuffers[index].draw(6, 1, 0, 0);
@@ -1634,19 +1342,19 @@ struct RenderContext {
 
     commandbuffers[index].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 1,
-        1, &uniformSamplersSet, 0, nullptr);
+        1, &gBufferSet.get_handle(), 0, nullptr);
 
     commandbuffers[index].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 2,
         1, &lightsUBO.get_descriptor_set(index), 0, nullptr);
 
-    commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                             lightShader.get_pipeline_layout(),
-                                             3, 1, &blurDSet, 0, nullptr);
+    commandbuffers[index].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 3,
+        1, &blurResTexSet.get_handle(), 0, nullptr);
 
-    commandbuffers[index].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                             lightShader.get_pipeline_layout(),
-                                             4, 1, &ditherDSet, 0, nullptr);
+    commandbuffers[index].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 4,
+        1, &ditherTexSet.get_handle(), 0, nullptr);
 
     LightPassPushConstant lightPassPushConstant{};
     lightPassPushConstant.numLights = lights.size();
@@ -1663,7 +1371,7 @@ struct RenderContext {
       overlayShader.bind_pipeline(commandbuffers[index]);
       commandbuffers[index].bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics, overlayShader.get_pipeline_layout(),
-          0, 1, &uniformSamplersSet, 0, nullptr);
+          0, 1, &gBufferSet.get_handle(), 0, nullptr);
 
       ExtentPushConstant ePc = {};
       ePc.xExtent = extent.width;
