@@ -4,73 +4,6 @@
 #include <map>
 
 namespace Renderer {
-// TODO Array of layouts for Passes
-
-#define DEFINE_LAYOUT(name, bindingCount, ...)                                 \
-  static constexpr std::array<VkDescriptorSetLayoutBinding, bindingCount>      \
-      name##LayoutInfo = {__VA_ARGS__};
-
-#define DEFINE_LAYOUT_BINDING(...)                                             \
-  { __VA_ARGS__ }
-
-// clang-format off
-
-DEFINE_LAYOUT(UniqueTexture, 1,
-	{
-		DEFINE_LAYOUT_BINDING(
-			.binding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		)
-	})
-
-DEFINE_LAYOUT(GBuffer, 1,
-	{
-		// G-Buffer attachments
-		DEFINE_LAYOUT_BINDING(
-			.binding = 0,
-			.descriptorCount = G_BUFFER_SIZE,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		)
-	})
-
-DEFINE_LAYOUT(SSAO, 2,
-	{
-		// SSAO Noise Rotations
-		DEFINE_LAYOUT_BINDING(
-			.binding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-		),
-
-		// SSAO Sample Kernel
-        DEFINE_LAYOUT_BINDING(
-			.binding = 1,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-		),
-	});
-
-// clang-format on
-
-#undef DEFINE_LAYOUT
-#undef DEFINE_LAYOUT_BINDING
-
-#define CREATE_DESCRIPTOR_SET_LAYOUT(layoutBindings, dstLayout)                \
-  vk::DescriptorSetLayoutCreateInfo layoutBindings##layoutInfo(                \
-      vk::DescriptorSetLayoutCreateFlags(),                                    \
-      static_cast<uint32_t>(layoutBindings.size()),                            \
-      reinterpret_cast<const vk::DescriptorSetLayoutBinding *>(                \
-          layoutBindings.data()));                                             \
-                                                                               \
-  CHECK_VK_RESULT_FATAL(                                                       \
-      g_device.createDescriptorSetLayout(&layoutBindings##layoutInfo,          \
-                                         g_allocationCallbacks, &dstLayout),   \
-      "Failed to create descriptor set layout.");
 
 struct DescriptorSet {
 private:
@@ -78,7 +11,7 @@ private:
   vk::DescriptorPool pool;
   vk::DescriptorSet set;
 
-  // TODO Optimize (Descriptors can share the same layout)
+  // Does not own it
   vk::DescriptorSetLayout layout;
 
   std::vector<vk::DescriptorSetLayoutBinding> bindingsInfo;
@@ -88,13 +21,14 @@ public:
 
   template <size_t NumBindings>
   void
-  init(const std::array<VkDescriptorSetLayoutBinding, NumBindings> &bindings) {
+  init(const std::array<VkDescriptorSetLayoutBinding, NumBindings> &bindings,
+       vk::DescriptorSetLayout newLayout) {
 
     bindingsInfo.resize(bindings.size());
     memcpy(bindingsInfo.data(), bindings.data(),
            bindings.size() * sizeof(VkDescriptorSetLayoutBinding));
 
-    CREATE_DESCRIPTOR_SET_LAYOUT(bindings, layout);
+    layout = newLayout;
 
     std::map<vk::DescriptorType, uint32_t> poolSizesInfo;
 
@@ -240,10 +174,6 @@ public:
   }
 
   void destroy() {
-    if (layout) {
-      g_device.destroyDescriptorSetLayout(layout, g_allocationCallbacks);
-      layout = nullptr;
-    }
 
     if (pool) {
       g_device.destroyDescriptorPool(pool, g_allocationCallbacks);
@@ -254,8 +184,6 @@ public:
   const vk::DescriptorSet &get_handle() const { return set; }
   vk::DescriptorSetLayout get_layout() const { return layout; }
 };
-
-#undef CREATE_DESCRIPTOR_SET_LAYOUT
 
 struct Shader {
 private:

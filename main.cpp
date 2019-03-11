@@ -304,7 +304,7 @@ int main() {
   inst2->color = Renderer::Color::Green;
   inst3->color = Renderer::Color::Blue;
 
-  map->color = Renderer::Color::White;
+  map->color = Renderer::Color::Grey;
 
   auto startTime = std::chrono::high_resolution_clock::now();
   auto frameTimestamp = startTime;

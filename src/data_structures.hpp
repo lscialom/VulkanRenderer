@@ -148,13 +148,6 @@ template <typename T> struct UniformObjectInfo {
 
 // UNIFORMBUFFERINFO SPECIALIZATIONS
 
-// UniformSampler2D
-struct UniformSampler2D {};
-
-DEFINE_UNIFORM_OBJECT(UniformSampler2D,
-                      vk::DescriptorType::eCombinedImageSampler,
-                      vk::ShaderStageFlagBits::eFragment)
-
 struct CameraUBO {
   Eigen::Matrix4f view;
   Eigen::Matrix4f proj;

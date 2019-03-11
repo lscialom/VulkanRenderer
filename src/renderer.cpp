@@ -9,6 +9,7 @@
 #include "maths.hpp"
 #include "memory.hpp"
 
+#include "common_resources.hpp"
 #include "pass.hpp"
 
 #include "obj_loader.hpp"
@@ -569,7 +570,7 @@ struct RenderContext {
 
   void init_descriptor() {
 
-    gBufferSet.init(GBufferLayoutInfo);
+    gBufferSet.init(DESCRIPTOR_INFO(CommonResources::GBufferLayout));
 
     {
       UniformObjectInfo<CameraUBO> info;
@@ -608,10 +609,10 @@ struct RenderContext {
       lightsUBO.init<decltype(info)>(lightsUBOLayout, MAX_LIGHTS);
     }
 
-    ssaoSet.init(SSAOLayoutInfo);
-    ssaoResTexSet.init(UniqueTextureLayoutInfo);
-    blurResTexSet.init(UniqueTextureLayoutInfo);
-    ditherTexSet.init(UniqueTextureLayoutInfo);
+    ssaoSet.init(DESCRIPTOR_INFO(CommonResources::SSAOLayout));
+    ssaoResTexSet.init(DESCRIPTOR_INFO(CommonResources::UniqueTextureLayout));
+    blurResTexSet.init(DESCRIPTOR_INFO(CommonResources::UniqueTextureLayout));
+    ditherTexSet.init(DESCRIPTOR_INFO(CommonResources::UniqueTextureLayout));
   }
 
   void allocate_descriptor() {
@@ -628,7 +629,7 @@ struct RenderContext {
       g_device.createSampler(&samplerInfo, g_allocationCallbacks, &sampler);
 
       std::vector<const Image *> images;
-	  images.resize(G_BUFFER_SIZE);
+      images.resize(G_BUFFER_SIZE);
 
       images[posAttachmentArrayIndex] = &posAttachment.get_image();
       images[normalAttachmentArrayIndex] = &normalAttachment.get_image();
@@ -1397,6 +1398,7 @@ struct RenderContext {
   void init() {
     Swapchain::Init(requestedWidth, requestedHeight);
 
+	CommonResources::InitDescriptorLayouts();
     init_descriptor();
 
     init_render_passes();
@@ -1409,6 +1411,8 @@ struct RenderContext {
   }
 
   void destroy(bool freeModels = true) {
+
+    CommonResources::DestroyDescriptorLayouts();
     destroy_descriptor();
 
     destroy_framebuffers();
