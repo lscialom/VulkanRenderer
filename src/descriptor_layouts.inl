@@ -5,8 +5,9 @@
 //-----------------------------------------------------------------------------
 
 #define DEFINE_LAYOUT(name, bindingCount, ...)                                 \
+  vk::DescriptorSetLayout name;                                                \
   static constexpr std::array<VkDescriptorSetLayoutBinding, bindingCount>      \
-      name##LayoutInfo = {__VA_ARGS__};
+      name##Info = {__VA_ARGS__};
 
 #define DEFINE_LAYOUT_BINDING(...)                                             \
   { __VA_ARGS__ }
@@ -32,8 +33,7 @@
 
 // clang-format off
 
-vk::DescriptorSetLayout UniqueTextureLayout;
-DEFINE_LAYOUT(UniqueTexture, 1,
+DEFINE_LAYOUT(UniqueTextureLayout, 1,
 	{
 		DEFINE_LAYOUT_BINDING(
 			.binding = 0,
@@ -43,8 +43,7 @@ DEFINE_LAYOUT(UniqueTexture, 1,
 		)
 	})
 
-vk::DescriptorSetLayout GBufferLayout;
-DEFINE_LAYOUT(GBuffer, 1,
+DEFINE_LAYOUT(GBufferLayout, 1,
 	{
 		// G-Buffer attachments
 		DEFINE_LAYOUT_BINDING(
@@ -55,8 +54,7 @@ DEFINE_LAYOUT(GBuffer, 1,
 		)
 	})
 
-vk::DescriptorSetLayout SSAOLayout;
-DEFINE_LAYOUT(SSAO, 2,
+DEFINE_LAYOUT(SSAOLayout, 2,
 	{
 		// SSAO Noise Rotations
 		DEFINE_LAYOUT_BINDING(

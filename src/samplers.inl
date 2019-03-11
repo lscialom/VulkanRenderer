@@ -1,3 +1,7 @@
+//-----------------------------------------------------------------------------
+// MACROS
+//-----------------------------------------------------------------------------
+
 #define DEFINE_SAMPLER(name, ...)                                              \
   vk::Sampler name;                                                            \
   static constexpr VkSamplerCreateInfo name##Info = {                          \
@@ -10,6 +14,10 @@
 
 #define DESTROY_SAMPLER(sampler)                                               \
   g_device.destroySampler(sampler, g_allocationCallbacks);
+
+//-----------------------------------------------------------------------------
+// DEFINITIONS
+//-----------------------------------------------------------------------------
 
 // clang-format off
 
@@ -52,6 +60,10 @@ DEFINE_SAMPLER(RepeatSampler,
 // clang-format on
 
 #undef DEFINE_SAMPLER
+
+//-----------------------------------------------------------------------------
+// INITIALIZER - DESTROYER
+//-----------------------------------------------------------------------------
 
 void InitSamplers() {
   CREATE_SAMPLER(BaseSampler);
