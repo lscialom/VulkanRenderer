@@ -9,5 +9,6 @@ namespace Renderer
 	namespace CommonResources
 	{
 		#include "descriptor_layouts.inl"
+		#include "samplers.inl"
 	}
 }

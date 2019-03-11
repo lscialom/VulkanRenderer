@@ -547,8 +547,6 @@ struct RenderContext {
   Shader lightShader;
   Shader overlayShader;
 
-  vk::Sampler sampler;
-
   vk::DescriptorSetLayout camUBOLayout;
   UniformBufferObject camUBO;
 
@@ -558,9 +556,6 @@ struct RenderContext {
   Image ssaoNoiseTex;
   Buffer ssaoKernel;
   DescriptorSet ssaoSet;
-
-  // TODO Rename as Repeat Sampler
-  vk::Sampler ssaoSampler;
 
   Image ditherTex;
   DescriptorSet ditherTexSet;
@@ -617,17 +612,6 @@ struct RenderContext {
 
   void allocate_descriptor() {
     {
-      vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo(
-          vk::SamplerCreateFlags(), vk::Filter::eNearest, vk::Filter::eNearest,
-          vk::SamplerMipmapMode::eNearest,
-          vk::SamplerAddressMode::eClampToBorder,
-          vk::SamplerAddressMode::eClampToBorder,
-          vk::SamplerAddressMode::eClampToBorder, 0.f, false, 0, false,
-          vk::CompareOp::eAlways, 0, 0, vk::BorderColor::eFloatOpaqueBlack,
-          false);
-
-      g_device.createSampler(&samplerInfo, g_allocationCallbacks, &sampler);
-
       std::vector<const Image *> images;
       images.resize(G_BUFFER_SIZE);
 
@@ -636,22 +620,14 @@ struct RenderContext {
       images[colorAttachmentArrayIndex] = &colorAttachment.get_image();
       images[depthAttachmentArrayIndex] = &depthAttachment.get_image();
 
-      std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE, &sampler);
+      std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
+                                                &CommonResources::BaseSampler);
 
       gBufferSet.update({}, images, samplers);
     }
 
     // ssao set
     {
-      vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo(
-          vk::SamplerCreateFlags(), vk::Filter::eNearest, vk::Filter::eNearest,
-          vk::SamplerMipmapMode::eNearest, vk::SamplerAddressMode::eRepeat,
-          vk::SamplerAddressMode::eRepeat, vk::SamplerAddressMode::eRepeat, 0.f,
-          false, 0, false, vk::CompareOp::eAlways, 0, 0,
-          vk::BorderColor::eFloatOpaqueBlack, false);
-
-      g_device.createSampler(&samplerInfo, g_allocationCallbacks, &ssaoSampler);
-
       ssaoNoiseTex.allocate(SSAO_NOISE_DIM, SSAO_NOISE_DIM,
                             vk::Format::eR32G32B32A32Sfloat,
                             vk::ImageTiling::eOptimal,
@@ -691,11 +667,14 @@ struct RenderContext {
       ssaoKernel.write(ssaoKernelData.data(),
                        ssaoKernelData.size() * sizeof(*ssaoKernelData.data()));
 
-      ssaoSet.update({&ssaoKernel}, {&ssaoNoiseTex}, {&ssaoSampler});
+      ssaoSet.update({&ssaoKernel}, {&ssaoNoiseTex},
+                     {&CommonResources::RepeatSampler});
     }
 
-    ssaoResTexSet.update({}, {&ssaoColorAttachment.get_image()}, {&sampler});
-    blurResTexSet.update({}, {&blurColorAttachment.get_image()}, {&sampler});
+    ssaoResTexSet.update({}, {&ssaoColorAttachment.get_image()},
+                         {&CommonResources::BaseSampler});
+    blurResTexSet.update({}, {&blurColorAttachment.get_image()},
+                         {&CommonResources::BaseSampler});
 
     // dither set
     {
@@ -726,7 +705,7 @@ struct RenderContext {
       ditherTex.transition_layout(vk::ImageLayout::eTransferDstOptimal,
                                   vk::ImageLayout::eShaderReadOnlyOptimal);
 
-      ditherTexSet.update({}, {&ditherTex}, {&ssaoSampler});
+      ditherTexSet.update({}, {&ditherTex}, {&CommonResources::RepeatSampler});
     }
   }
 
@@ -740,7 +719,6 @@ struct RenderContext {
     lightsUBO.~UniformBufferObject();
 
     ssaoNoiseTex.free();
-    g_device.destroySampler(ssaoSampler, g_allocationCallbacks);
 
     ssaoKernel.~Buffer();
 
@@ -751,8 +729,6 @@ struct RenderContext {
 
     ditherTex.free();
     ditherTexSet.destroy();
-
-    g_device.destroySampler(sampler, g_allocationCallbacks);
   }
 
   void init_render_passes() {
@@ -1398,13 +1374,15 @@ struct RenderContext {
   void init() {
     Swapchain::Init(requestedWidth, requestedHeight);
 
-	CommonResources::InitDescriptorLayouts();
+    CommonResources::InitDescriptorLayouts();
     init_descriptor();
 
     init_render_passes();
     init_shaders();
 
     init_framebuffers();
+
+    CommonResources::InitSamplers();
     allocate_descriptor();
 
     init_commandbuffers();
@@ -1413,6 +1391,8 @@ struct RenderContext {
   void destroy(bool freeModels = true) {
 
     CommonResources::DestroyDescriptorLayouts();
+    CommonResources::DestroySamplers();
+
     destroy_descriptor();
 
     destroy_framebuffers();
