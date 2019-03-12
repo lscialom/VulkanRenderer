@@ -553,8 +553,6 @@ struct RenderContext {
   vk::DescriptorSetLayout lightsUBOLayout;
   UniformBufferObject lightsUBO;
 
-  Image ssaoNoiseTex;
-  Buffer ssaoKernel;
   DescriptorSet ssaoSet;
 
   Image ditherTex;
@@ -626,50 +624,9 @@ struct RenderContext {
       gBufferSet.update({}, images, samplers);
     }
 
-    // ssao set
-    {
-      ssaoNoiseTex.allocate(SSAO_NOISE_DIM, SSAO_NOISE_DIM,
-                            vk::Format::eR32G32B32A32Sfloat,
-                            vk::ImageTiling::eOptimal,
-                            vk::ImageUsageFlagBits::eTransferDst |
-                                vk::ImageUsageFlagBits::eSampled,
-                            vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-      ssaoNoiseTex.transition_layout(vk::ImageLayout::eUndefined,
-                                     vk::ImageLayout::eTransferDstOptimal);
-
-      std::vector<Eigen::Vector4f> ssaoNoise =
-          Maths::GenerateSSAONoise(SSAO_NOISE_DIM);
-      Buffer stagingBuffer;
-      stagingBuffer.allocate(ssaoNoise.size() * sizeof(*ssaoNoise.data()),
-                             vk::BufferUsageFlagBits::eTransferSrc,
-                             vk::MemoryPropertyFlagBits::eHostVisible |
-                                 vk::MemoryPropertyFlagBits::eHostCoherent);
-
-      stagingBuffer.write(ssaoNoise.data(),
-                          ssaoNoise.size() * sizeof(*ssaoNoise.data()));
-
-      ssaoNoiseTex.write_from_buffer(stagingBuffer.get_handle(), SSAO_NOISE_DIM,
-                                     SSAO_NOISE_DIM);
-
-      ssaoNoiseTex.transition_layout(vk::ImageLayout::eTransferDstOptimal,
-                                     vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      std::vector<Eigen::Vector4f> ssaoKernelData =
-          Maths::GenerateSSAOKernel(SSAO_NUM_SAMPLES);
-      // TODO DeviceLocal
-      ssaoKernel.allocate(ssaoKernelData.size() *
-                              sizeof(*ssaoKernelData.data()),
-                          vk::BufferUsageFlagBits::eUniformBuffer,
-                          vk::MemoryPropertyFlagBits::eHostVisible |
-                              vk::MemoryPropertyFlagBits::eHostCoherent);
-
-      ssaoKernel.write(ssaoKernelData.data(),
-                       ssaoKernelData.size() * sizeof(*ssaoKernelData.data()));
-
-      ssaoSet.update({&ssaoKernel}, {&ssaoNoiseTex},
-                     {&CommonResources::RepeatSampler});
-    }
+    ssaoSet.update({&CommonResources::SSAOKernel},
+                   {&CommonResources::SSAONoiseTex},
+                   {&CommonResources::RepeatSampler});
 
     ssaoResTexSet.update({}, {&ssaoColorAttachment.get_image()},
                          {&CommonResources::BaseSampler});
@@ -717,10 +674,6 @@ struct RenderContext {
 
     g_device.destroyDescriptorSetLayout(lightsUBOLayout, g_allocationCallbacks);
     lightsUBO.~UniformBufferObject();
-
-    ssaoNoiseTex.free();
-
-    ssaoKernel.~Buffer();
 
     ssaoSet.destroy();
 
@@ -1382,7 +1335,10 @@ struct RenderContext {
 
     init_framebuffers();
 
+    // Resources for descriptors
     CommonResources::InitSamplers();
+    CommonResources::InitSSAOResources();
+
     allocate_descriptor();
 
     init_commandbuffers();
@@ -1392,6 +1348,7 @@ struct RenderContext {
 
     CommonResources::DestroyDescriptorLayouts();
     CommonResources::DestroySamplers();
+	CommonResources::DestroySSAOResources();
 
     destroy_descriptor();
 
