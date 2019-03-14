@@ -38,7 +38,7 @@ layout(location = 0) in vec2 fragUV;
 layout(location = 0) out vec4 fragColor;
 
 //TODO Push constant
-const float ssaoStrength = 1;
+const float ssaoStrength = 0.5;
 const float gamma = 2.2;
 const float exposure = 1;
 // const float ditherFactor = 768;
@@ -65,6 +65,7 @@ void main() {
 
   // rgb = color; a = specular intensity
   vec4 fragColorProps = vec4(texture(gBuffer[COLOR_BUFFER_INDEX], fragUV));
+  fragColorProps *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
   for(int i = 0; i<u_pushConstant.numLights; ++i)
   {
@@ -116,7 +117,7 @@ void main() {
   // fragColor.rgb = vec3(computeSSAO(p, n));
   // fragColor.rgb *= vdn * computeSSAO(p, n);
 
-  fragColor.rgb *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
+  // fragColor.rgb *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
   vec3 tonemap = vec3(1.0) - exp(-fragColor.rgb * exposure);
   tonemap = pow(tonemap, vec3(1.0 / gamma));

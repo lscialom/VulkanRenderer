@@ -58,6 +58,16 @@ public:
 // IMAGE
 //-----------------------------------------------------------------------------
 
+struct Texture2DInfo {
+  uint32_t texWidth;
+  uint32_t texHeight;
+  vk::Format format;
+  vk::ImageTiling tiling;
+  vk::ImageUsageFlags usage;
+  vk::MemoryPropertyFlags memProperties;
+  vk::ImageAspectFlags aspectFlags;
+};
+
 struct Image {
 private:
   vk::Image handle;
@@ -84,6 +94,12 @@ public:
            vk::ImageTiling tiling, vk::ImageUsageFlags usage,
            vk::MemoryPropertyFlags properties,
            vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor);
+
+  void allocate(Texture2DInfo info) {
+    allocate(info.texWidth, info.texHeight, info.format, info.tiling,
+             info.usage, info.memProperties, info.aspectFlags);
+  }
+
   void free();
 
   void transition_layout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout);

@@ -1,13 +1,40 @@
-::Renderer::Image SSAONoiseTex;
+//-----------------------------------------------------------------------------
+// MACROS
+//-----------------------------------------------------------------------------
+
+#define DEFINE_TEXTURE2D(name, ...)                                            \
+  ::Renderer::Image name;                                                      \
+  static const Texture2DInfo name##Info = {__VA_ARGS__};
+
+//-----------------------------------------------------------------------------
+// DEFINITIONS
+//-----------------------------------------------------------------------------
+
 ::Renderer::Buffer SSAOKernel;
+
+// clang-format off
+
+DEFINE_TEXTURE2D(SSAONoiseTex, 
+	.texWidth = SSAO_NOISE_DIM,
+	.texHeight = SSAO_NOISE_DIM,
+	.format = vk::Format::eR32G32B32A32Sfloat,
+	.tiling = vk::ImageTiling::eOptimal,
+	.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+	.memProperties = vk::MemoryPropertyFlagBits::eDeviceLocal,
+	.aspectFlags = vk::ImageAspectFlagBits::eColor
+)
+
+// clang-format on
+
+#undef DEFINE_TEXTURE2D
+
+//-----------------------------------------------------------------------------
+// INITIALIZER - DESTROYER
+//-----------------------------------------------------------------------------
 
 void InitSSAOResources() {
 
-  SSAONoiseTex.allocate(
-      SSAO_NOISE_DIM, SSAO_NOISE_DIM, vk::Format::eR32G32B32A32Sfloat,
-      vk::ImageTiling::eOptimal,
-      vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-      vk::MemoryPropertyFlagBits::eDeviceLocal);
+  SSAONoiseTex.allocate(SSAONoiseTexInfo);
 
   SSAONoiseTex.transition_layout(vk::ImageLayout::eUndefined,
                                  vk::ImageLayout::eTransferDstOptimal);
@@ -32,6 +59,7 @@ void InitSSAOResources() {
 
   std::vector<Eigen::Vector4f> ssaoKernelData =
       Maths::GenerateSSAOKernel(SSAO_NUM_SAMPLES);
+
   // TODO DeviceLocal
   SSAOKernel.allocate(ssaoKernelData.size() * sizeof(*ssaoKernelData.data()),
                       vk::BufferUsageFlagBits::eUniformBuffer,
