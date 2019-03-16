@@ -23,11 +23,19 @@ void Destroy();
 // BUFFER
 //-----------------------------------------------------------------------------
 
+struct BufferInfo {
+  VkDeviceSize size;
+  vk::BufferUsageFlags usage;
+  vk::MemoryPropertyFlags memProperties;
+};
+
 struct Buffer {
 private:
   vk::Buffer handle;
   VmaAllocation allocation;
   size_t size = 0;
+
+  vk::MemoryPropertyFlags memProperties;
 
 public:
   Buffer() = default;
@@ -42,8 +50,13 @@ public:
   void allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
                 vk::MemoryPropertyFlags properties);
 
+  void allocate(BufferInfo info) {
+    allocate(info.size, info.usage, info.memProperties);
+  }
+
   // TODO Staging queue (TRANSFER_BIT)
-  void copy_to(Buffer &dstBuffer, VkDeviceSize copySize) const;
+  void copy_to(const Buffer &dstBuffer, VkDeviceSize copySize,
+               VkDeviceSize dstOffset = 0) const;
 
   void write(const void *data, VkDeviceSize writeSize,
              VkDeviceSize offset = 0) const;

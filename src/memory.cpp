@@ -150,6 +150,7 @@ void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
 #endif
 
   size = allocationSize;
+  memProperties = properties;
 
   VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   bufferInfo.size = size;
@@ -158,19 +159,20 @@ void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
 
   VmaAllocationCreateInfo allocInfo = {};
   allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
-  allocInfo.requiredFlags = (VkMemoryPropertyFlags)properties;
+  allocInfo.requiredFlags = (VkMemoryPropertyFlags)memProperties;
 
   CHECK_VK_RESULT_FATAL(vmaCreateBuffer(vmaAllocator, &bufferInfo, &allocInfo,
                                         (VkBuffer *)&handle, &allocation,
                                         nullptr),
-                        "Failed to create vertex buffer.");
+                        "Failed to create buffer.");
 }
 
 // TODO Staging queue (TRANSFER_BIT)
-void Buffer::copy_to(Buffer &dstBuffer, VkDeviceSize copySize) const {
+void Buffer::copy_to(const Buffer &dstBuffer, VkDeviceSize copySize,
+                     VkDeviceSize dstOffset) const {
+
   vk::BufferCopy copyRegion(0, // TODO src offset
-                            0, // TODO dst offset
-                            copySize);
+                            dstOffset, copySize);
 
   vk::CommandBuffer commandbuffer = BeginSingleTimeCommand();
   commandbuffer.copyBuffer(handle, dstBuffer.handle, 1, &copyRegion);
@@ -193,10 +195,27 @@ void Buffer::write(const void *data, VkDeviceSize writeSize,
     writeSize = size - offset;
   }
 
-  void *mappedMemory;
-  vmaMapMemory(vmaAllocator, allocation, &mappedMemory);
-  memcpy((char *)mappedMemory + offset, data, (size_t)writeSize);
-  vmaUnmapMemory(vmaAllocator, allocation);
+  // TODO Support other vk::MemoryPropertyFlagBits
+  if ((memProperties & vk::MemoryPropertyFlagBits::eDeviceLocal) !=
+      vk::MemoryPropertyFlagBits::eDeviceLocal) {
+
+    void *mappedMemory;
+
+    vmaMapMemory(vmaAllocator, allocation, &mappedMemory);
+    memcpy((char *)mappedMemory + offset, data, (size_t)writeSize);
+    vmaUnmapMemory(vmaAllocator, allocation);
+
+  } else {
+
+    Buffer stagingBuffer;
+    stagingBuffer.allocate(writeSize, vk::BufferUsageFlagBits::eTransferSrc,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    stagingBuffer.write(data, writeSize);
+
+    stagingBuffer.copy_to(*this, writeSize, offset);
+  }
 }
 
 Buffer &Buffer::operator=(Buffer &&other) {
@@ -421,8 +440,7 @@ void Image::transition_layout(vk::ImageLayout oldLayout,
 }
 
 // TODO Make it more flexible
-void Image::write_from_buffer(vk::Buffer buffer, uint32_t dimX,
-                              uint32_t dimY) {
+void Image::write_from_buffer(vk::Buffer buffer, uint32_t dimX, uint32_t dimY) {
   vk::CommandBuffer commandbuffer = BeginSingleTimeCommand();
 
   vk::BufferImageCopy region;

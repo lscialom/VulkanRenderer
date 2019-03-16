@@ -301,6 +301,9 @@ private:
     constexpr const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
     constexpr const VkDeviceSize offset = iBufferSize;
 
+    // Making the staging by ourselves is more optimized than the auto one in
+    // Buffer::write in this case (because ATM we would need 2 calls)
+
     Buffer stagingBuffer;
     stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
                            vk::MemoryPropertyFlagBits::eHostVisible |
@@ -330,6 +333,9 @@ private:
 
     const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
     const VkDeviceSize offset = iBufferSize;
+
+    // Making the staging by ourselves is more optimized than the auto one in
+    // Buffer::write in this case (because ATM we would need 2 calls)
 
     Buffer stagingBuffer;
     stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
@@ -607,7 +613,7 @@ struct RenderContext {
       gBufferSet.update({}, images, samplers);
     }
 
-    ssaoSet.update({&CommonResources::SSAOKernel},
+    ssaoSet.update({&CommonResources::SSAOKernelBuffer},
                    {&CommonResources::SSAONoiseTex},
                    {&CommonResources::RepeatSampler});
 

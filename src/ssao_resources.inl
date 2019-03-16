@@ -2,6 +2,10 @@
 // MACROS
 //-----------------------------------------------------------------------------
 
+#define DEFINE_BUFFER(name, ...)                                               \
+  ::Renderer::Buffer name;                                                     \
+  static const BufferInfo name##Info = {__VA_ARGS__};
+
 #define DEFINE_TEXTURE2D(name, ...)                                            \
   ::Renderer::Image name;                                                      \
   static const Texture2DInfo name##Info = {__VA_ARGS__};
@@ -10,9 +14,14 @@
 // DEFINITIONS
 //-----------------------------------------------------------------------------
 
-::Renderer::Buffer SSAOKernel;
-
 // clang-format off
+
+DEFINE_BUFFER(SSAOKernelBuffer,
+	.size = SSAO_NUM_SAMPLES * sizeof(Eigen::Vector4f),
+	.usage = vk::BufferUsageFlagBits::eTransferDst
+				| vk::BufferUsageFlagBits::eUniformBuffer,
+	.memProperties = vk::MemoryPropertyFlagBits::eDeviceLocal
+)
 
 DEFINE_TEXTURE2D(SSAONoiseTex, 
 	.texWidth = SSAO_NOISE_DIM,
@@ -27,6 +36,7 @@ DEFINE_TEXTURE2D(SSAONoiseTex,
 // clang-format on
 
 #undef DEFINE_TEXTURE2D
+#undef DEFINE_BUFFER
 
 //-----------------------------------------------------------------------------
 // INITIALIZER - DESTROYER
@@ -47,17 +57,15 @@ void InitSSAOResources() {
       Maths::GenerateSSAOKernel(SSAO_NUM_SAMPLES);
 
   // TODO DeviceLocal
-  SSAOKernel.allocate(ssaoKernelData.size() * sizeof(*ssaoKernelData.data()),
-                      vk::BufferUsageFlagBits::eUniformBuffer,
-                      vk::MemoryPropertyFlagBits::eHostVisible |
-                          vk::MemoryPropertyFlagBits::eHostCoherent);
+  SSAOKernelBuffer.allocate(SSAOKernelBufferInfo);
 
-  SSAOKernel.write(ssaoKernelData.data(),
-                   ssaoKernelData.size() * sizeof(*ssaoKernelData.data()));
+  SSAOKernelBuffer.write(ssaoKernelData.data(),
+                         ssaoKernelData.size() *
+                             sizeof(*ssaoKernelData.data()));
 }
 
 void DestroySSAOResources() {
   SSAONoiseTex.free();
 
-  SSAOKernel.~Buffer();
+  SSAOKernelBuffer.~Buffer();
 }

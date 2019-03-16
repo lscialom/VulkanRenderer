@@ -54,6 +54,7 @@ DEFINE_LAYOUT(GBufferLayout, 1,
 		)
 	})
 
+// TODO Move to ssao_resources.inl (or along passes when done)
 DEFINE_LAYOUT(SSAOLayout, 2,
 	{
 		// SSAO Noise Rotations
