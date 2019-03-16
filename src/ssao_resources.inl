@@ -44,11 +44,10 @@ DEFINE_TEXTURE2D(SSAONoiseTex,
 
 void InitSSAOResources() {
 
-  SSAONoiseTex.allocate(SSAONoiseTexInfo);
-
   std::vector<Eigen::Vector4f> ssaoNoise =
       Maths::GenerateSSAONoise(SSAO_NOISE_DIM);
 
+  SSAONoiseTex.allocate(SSAONoiseTexInfo);
   SSAONoiseTex.write_from_raw_data(ssaoNoise.data(),
                                    vk::ImageLayout::eUndefined,
                                    vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -56,12 +55,8 @@ void InitSSAOResources() {
   std::vector<Eigen::Vector4f> ssaoKernelData =
       Maths::GenerateSSAOKernel(SSAO_NUM_SAMPLES);
 
-  // TODO DeviceLocal
   SSAOKernelBuffer.allocate(SSAOKernelBufferInfo);
-
-  SSAOKernelBuffer.write(ssaoKernelData.data(),
-                         ssaoKernelData.size() *
-                             sizeof(*ssaoKernelData.data()));
+  SSAOKernelBuffer.write(ssaoKernelData.data(), SSAOKernelBufferInfo.size);
 }
 
 void DestroySSAOResources() {
