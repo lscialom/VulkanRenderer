@@ -36,26 +36,12 @@ void InitSSAOResources() {
 
   SSAONoiseTex.allocate(SSAONoiseTexInfo);
 
-  SSAONoiseTex.transition_layout(vk::ImageLayout::eUndefined,
-                                 vk::ImageLayout::eTransferDstOptimal);
-
   std::vector<Eigen::Vector4f> ssaoNoise =
       Maths::GenerateSSAONoise(SSAO_NOISE_DIM);
 
-  ::Renderer::Buffer stagingBuffer;
-  stagingBuffer.allocate(ssaoNoise.size() * sizeof(*ssaoNoise.data()),
-                         vk::BufferUsageFlagBits::eTransferSrc,
-                         vk::MemoryPropertyFlagBits::eHostVisible |
-                             vk::MemoryPropertyFlagBits::eHostCoherent);
-
-  stagingBuffer.write(ssaoNoise.data(),
-                      ssaoNoise.size() * sizeof(*ssaoNoise.data()));
-
-  SSAONoiseTex.write_from_buffer(stagingBuffer.get_handle(), SSAO_NOISE_DIM,
-                                 SSAO_NOISE_DIM);
-
-  SSAONoiseTex.transition_layout(vk::ImageLayout::eTransferDstOptimal,
-                                 vk::ImageLayout::eShaderReadOnlyOptimal);
+  SSAONoiseTex.write_from_raw_data(ssaoNoise.data(),
+                                   vk::ImageLayout::eUndefined,
+                                   vk::ImageLayout::eShaderReadOnlyOptimal);
 
   std::vector<Eigen::Vector4f> ssaoKernelData =
       Maths::GenerateSSAOKernel(SSAO_NUM_SAMPLES);

@@ -103,40 +103,23 @@ public:
         stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels,
                   STBI_rgb_alpha); // TODO Support multiple pixel formats
 
-    VkDeviceSize imageSize =
-        texWidth * texHeight * 4; // TODO Support multiple pixel formats
-
     if (!pixels) {
       printf("[Error] Failed to load texture image %s\n", path.c_str());
       return;
     }
 
-    Buffer stagingBuffer;
-    stagingBuffer.allocate(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
-                           vk::MemoryPropertyFlagBits::eHostVisible |
-                               vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    stagingBuffer.write(pixels, imageSize);
-    stbi_image_free(pixels);
-
-    vk::Format imageFormat = vk::Format::eR8G8B8A8Unorm;
-    image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
+    image.allocate(texWidth, texHeight, vk::Format::eR8G8B8A8Unorm,
+                   vk::ImageTiling::eOptimal,
                    vk::ImageUsageFlagBits::eTransferDst |
                        vk::ImageUsageFlagBits::eSampled,
                    vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    // TODO pack these 3 statements into one function helper ?
-    image.transition_layout(vk::ImageLayout::eUndefined,
-                            vk::ImageLayout::eTransferDstOptimal);
-
-    image.write_from_buffer(stagingBuffer.get_handle(),
-                            static_cast<uint32_t>(texWidth),
-                            static_cast<uint32_t>(texHeight));
-
-    image.transition_layout(vk::ImageLayout::eTransferDstOptimal,
-                            vk::ImageLayout::eShaderReadOnlyOptimal);
-
-    Allocator::WaitForTransferQueue();
+    // cast for correct template deduction (for inner staging buffer size
+    // deduction)
+    // TODO Support multiple image formats
+    image.write_from_raw_data(reinterpret_cast<uint32_t *>(pixels),
+                              vk::ImageLayout::eUndefined,
+                              vk::ImageLayout::eShaderReadOnlyOptimal);
   }
 };
 
@@ -641,26 +624,9 @@ struct RenderContext {
                              vk::ImageUsageFlagBits::eSampled,
                          vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-      ditherTex.transition_layout(vk::ImageLayout::eUndefined,
-                                  vk::ImageLayout::eTransferDstOptimal);
-
-      Buffer stagingBuffer;
-      stagingBuffer.allocate(Maths::DitheringPattern.size() *
-                                 sizeof(*Maths::DitheringPattern.data()),
-                             vk::BufferUsageFlagBits::eTransferSrc,
-                             vk::MemoryPropertyFlagBits::eHostVisible |
-                                 vk::MemoryPropertyFlagBits::eHostCoherent);
-
-      stagingBuffer.write(Maths::DitheringPattern.data(),
-                          Maths::DitheringPattern.size() *
-                              sizeof(*Maths::DitheringPattern.data()));
-
-      ditherTex.write_from_buffer(stagingBuffer.get_handle(),
-                                  Maths::DitheringPatternDim,
-                                  Maths::DitheringPatternDim);
-
-      ditherTex.transition_layout(vk::ImageLayout::eTransferDstOptimal,
-                                  vk::ImageLayout::eShaderReadOnlyOptimal);
+      ditherTex.write_from_raw_data(Maths::DitheringPattern.data(),
+                                    vk::ImageLayout::eUndefined,
+                                    vk::ImageLayout::eShaderReadOnlyOptimal);
 
       ditherTexSet.update({}, {&ditherTex}, {&CommonResources::RepeatSampler});
     }
@@ -1348,7 +1314,7 @@ struct RenderContext {
 
     CommonResources::DestroyDescriptorLayouts();
     CommonResources::DestroySamplers();
-	CommonResources::DestroySSAOResources();
+    CommonResources::DestroySSAOResources();
 
     destroy_descriptor();
 

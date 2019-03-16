@@ -77,6 +77,9 @@ private:
 
   vk::ImageAspectFlags aspect;
 
+  uint32_t width;
+  uint32_t height;
+
 public:
   Image() = default;
 
@@ -104,7 +107,40 @@ public:
 
   void transition_layout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 
-  void write_from_buffer(vk::Buffer buffer, uint32_t width, uint32_t height);
+  void write_from_buffer(vk::Buffer buffer, uint32_t dimX, uint32_t dimY);
+
+  void write_from_buffer(vk::Buffer buffer) {
+    write_from_buffer(buffer, width, height);
+  }
+
+  template <typename T>
+  void write_from_raw_data(
+      const T *data, uint32_t dimX, uint32_t dimY,
+      vk::ImageLayout srcLayout = vk::ImageLayout::eUndefined,
+      vk::ImageLayout dstLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
+
+    transition_layout(srcLayout, vk::ImageLayout::eTransferDstOptimal);
+
+    size_t bufferSize = dimX * dimY * sizeof(T);
+
+    Buffer stagingBuffer;
+    stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    stagingBuffer.write(data, bufferSize);
+
+    write_from_buffer(stagingBuffer.get_handle(), dimX, dimY);
+
+    transition_layout(vk::ImageLayout::eTransferDstOptimal, dstLayout);
+  }
+
+  template <typename T>
+  void write_from_raw_data(
+      const T *data, vk::ImageLayout srcLayout = vk::ImageLayout::eUndefined,
+      vk::ImageLayout dstLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
+    write_from_raw_data(data, width, height, srcLayout, dstLayout);
+  }
 
   Image &operator=(const Image &o) = delete;
   Image &operator=(Image &&other);

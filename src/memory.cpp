@@ -261,7 +261,10 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
            (VkImage)handle);
 #endif
 
-  size = texWidth * texHeight * GetPixelSizeFromFormat(format);
+  width = texWidth;
+  height = texHeight;
+
+  size = width * height * GetPixelSizeFromFormat(format);
   aspect = aspectFlags;
 
   vk::ImageCreateInfo imageInfo{
@@ -418,8 +421,8 @@ void Image::transition_layout(vk::ImageLayout oldLayout,
 }
 
 // TODO Make it more flexible
-void Image::write_from_buffer(vk::Buffer buffer, uint32_t width,
-                              uint32_t height) {
+void Image::write_from_buffer(vk::Buffer buffer, uint32_t dimX,
+                              uint32_t dimY) {
   vk::CommandBuffer commandbuffer = BeginSingleTimeCommand();
 
   vk::BufferImageCopy region;
@@ -436,7 +439,7 @@ void Image::write_from_buffer(vk::Buffer buffer, uint32_t width,
   region.imageSubresource = imageSubresource;
 
   region.imageOffset = vk::Offset3D(0, 0, 0);
-  region.imageExtent = vk::Extent3D(width, height, 1);
+  region.imageExtent = vk::Extent3D(dimX, dimY, 1);
 
   commandbuffer.copyBufferToImage(
       buffer, handle, vk::ImageLayout::eTransferDstOptimal, 1, &region);
