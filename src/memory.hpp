@@ -16,6 +16,8 @@ void Init();
 void SetTransferQueue(struct Queue queue);
 void WaitForTransferQueue();
 
+uint8_t GetPixelSizeFromFormat(vk::Format format);
+
 void Destroy();
 }; // namespace Allocator
 
@@ -89,6 +91,7 @@ private:
   size_t size = 0;
 
   vk::ImageAspectFlags aspect;
+  vk::Format format;
 
   uint32_t width;
   uint32_t height;
@@ -106,7 +109,7 @@ public:
   vk::ImageAspectFlags get_aspect() const { return aspect; }
 
   void
-  allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
+  allocate(uint32_t texWidth, uint32_t texHeight, vk::Format texFormat,
            vk::ImageTiling tiling, vk::ImageUsageFlags usage,
            vk::MemoryPropertyFlags properties,
            vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor);
@@ -131,6 +134,8 @@ public:
       const T *data, uint32_t dimX, uint32_t dimY,
       vk::ImageLayout srcLayout = vk::ImageLayout::eUndefined,
       vk::ImageLayout dstLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
+
+    assert(sizeof(T) == Allocator::GetPixelSizeFromFormat(format));
 
     transition_layout(srcLayout, vk::ImageLayout::eTransferDstOptimal);
 

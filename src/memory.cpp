@@ -113,6 +113,25 @@ void SetTransferQueue(::Queue queue) { transferQueue = queue; }
 
 void WaitForTransferQueue() { transferQueue.handle.waitIdle(); }
 
+uint8_t GetPixelSizeFromFormat(vk::Format format) {
+  switch (format) {
+  case vk::Format::eR8G8B8A8Unorm:
+  case vk::Format::eD32Sfloat:
+  case vk::Format::eR8G8B8A8Snorm:
+  case vk::Format::eR8G8B8A8Srgb:
+  case vk::Format::eR32Sfloat:
+    return 4;
+
+  case vk::Format::eR32G32B32A32Sfloat:
+    return 16;
+
+  default:
+    printf("[WARNING] Unsupported image format specified (%s).\n",
+           vk::to_string(format).c_str());
+    return 0;
+  }
+}
+
 void Destroy() {
   vmaDestroyAllocator(vmaAllocator);
   g_device.destroyCommandPool(stagingCommandPool, g_allocationCallbacks);
@@ -231,25 +250,6 @@ Buffer &Buffer::operator=(Buffer &&other) {
 // IMAGE
 //-----------------------------------------------------------------------------
 
-static uint8_t GetPixelSizeFromFormat(vk::Format format) {
-  switch (format) {
-  case vk::Format::eR8G8B8A8Unorm:
-  case vk::Format::eD32Sfloat:
-  case vk::Format::eR8G8B8A8Snorm:
-  case vk::Format::eR8G8B8A8Srgb:
-  case vk::Format::eR32Sfloat:
-    return 4;
-
-  case vk::Format::eR32G32B32A32Sfloat:
-    return 16;
-
-  default:
-    printf("[WARNING] Unsupported image format specified (%s).\n",
-           vk::to_string(format).c_str());
-    return 0;
-  }
-}
-
 Image::Image(Image &&other) {
   handle = other.handle;
   other.handle = nullptr;
@@ -269,8 +269,9 @@ Image::~Image() {
     vmaDestroyImage(vmaAllocator, handle, allocation);
 }
 
-void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
-                     vk::ImageTiling tiling, vk::ImageUsageFlags usage,
+void Image::allocate(uint32_t texWidth, uint32_t texHeight,
+                     vk::Format texFormat, vk::ImageTiling tiling,
+                     vk::ImageUsageFlags usage,
                      vk::MemoryPropertyFlags properties,
                      vk::ImageAspectFlags aspectFlags) {
 #ifndef NDEBUG
@@ -283,8 +284,10 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight, vk::Format format,
   width = texWidth;
   height = texHeight;
 
-  size = width * height * GetPixelSizeFromFormat(format);
   aspect = aspectFlags;
+  format = texFormat;
+
+  size = width * height * Allocator::GetPixelSizeFromFormat(format);
 
   vk::ImageCreateInfo imageInfo{
       vk::ImageCreateFlags(),
