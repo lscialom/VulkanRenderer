@@ -65,7 +65,7 @@ void main() {
 
   // rgb = color; a = specular intensity
   vec4 fragColorProps = vec4(texture(gBuffer[COLOR_BUFFER_INDEX], fragUV));
-  fragColorProps *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
+  // fragColorProps *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
   for(int i = 0; i<u_pushConstant.numLights; ++i)
   {
@@ -114,6 +114,9 @@ void main() {
 
   fragColor.a = 1.0;
 
+  float luminance = dot(fragColorProps.rgb, vec3(0.299, 0.587, 0.114)); 
+  fragColor.rgb *= mix(vec3(pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength)), vec3(1.0), luminance);
+
   // fragColor.rgb = vec3(computeSSAO(p, n));
   // fragColor.rgb *= vdn * computeSSAO(p, n);
 
@@ -124,10 +127,13 @@ void main() {
 
   fragColor.rgb = tonemap;
 
-  float noise = texture(ditherTex, gl_FragCoord.xy / textureSize(ditherTex, 0).x).r / BAYER_MATRIX_DIVISOR;
+  float noise = texture(ditherTex, gl_FragCoord.xy / textureSize(ditherTex, 0).xy).r / BAYER_MATRIX_DIVISOR;
 
   // higher mix range = less color banding but more noise
   fragColor.rgb += mix(-0.5/255.0, 1.5/255.0, noise);
+
+  // stronger version for badly calibrated monitors
+  // fragColor.rgb += mix(-2.0/255.0, 6.0/255.0, noise);
 
   // fragColor.rgb *= vec3(texture(ssaoColor, fragUV).r);
 
