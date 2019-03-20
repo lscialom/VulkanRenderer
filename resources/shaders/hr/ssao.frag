@@ -15,6 +15,7 @@ layout(set = 1, binding = 0) uniform sampler2D[G_BUFFER_SIZE] gBuffer;
 layout(set = 2, binding = 0) uniform sampler2D ssaoNoise;
 layout(set = 2, binding = 1) uniform ssaoSamplesIn { vec4 ssaoSamples[SSAO_NUM_SAMPLES]; };
 
+// TODO Use textureSize(gBuffer[0]) instead of sending extent
 layout(push_constant) uniform pushConstant {
   float xExtent;
   float yExtent;
