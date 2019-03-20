@@ -27,8 +27,8 @@ layout(location = 0) out float fragColor;
 
 float computeSSAO(vec3 pos, vec3 normal)
 {
-  const float radius = 0.5;
-  const float bias = 0.025;
+  const float radius = 5;
+  const float bias = 0.05;
   const vec2 noiseScale = vec2(u_pushConstant.xExtent/SSAO_NOISE_DIM, u_pushConstant.yExtent/SSAO_NOISE_DIM);
 
   vec3 randomVec = normalize(texture(ssaoNoise, fragUV * noiseScale).xyz);
@@ -44,17 +44,17 @@ float computeSSAO(vec3 pos, vec3 normal)
 
       vec3 currentSample = TBN * currentSSAOSample; // From tangent to view-space
       currentSample = pos + currentSample * radius;
-      
+
       vec4 offset = vec4(currentSample, 1.0);
       offset      = camData.proj * offset;    // from view to clip-space
       offset.xyz /= offset.w;               // perspective divide
-      offset.xyz  = offset.xyz * 0.5 + 0.5; // transform to range 0.0 - 1.0    } 
+      offset.xyz  = offset.xyz * 0.5 + 0.5; // transform to range 0.0 - 1.0    }
 
       float sampleDepth = (camData.view * texture(gBuffer[POS_BUFFER_INDEX], offset.xy)).z;
 
       // range check & accumulate
       float rangeCheck = smoothstep(0.0, 1.0, radius / abs(pos.z - sampleDepth));
-      occlusion += (sampleDepth >= currentSample.z + bias ? 1.0 : 0.0) * rangeCheck; 
+      occlusion += (sampleDepth >= currentSample.z + bias ? 1.0 : 0.0) * rangeCheck;
   }
 
   occlusion = 1.0 - (occlusion / SSAO_NUM_SAMPLES);

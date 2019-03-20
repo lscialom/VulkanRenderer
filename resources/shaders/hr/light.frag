@@ -38,7 +38,7 @@ layout(location = 0) in vec2 fragUV;
 layout(location = 0) out vec4 fragColor;
 
 //TODO Push constant
-const float ssaoStrength = 0.5;
+const float ssaoStrength = 1;
 const float gamma = 2.2;
 const float exposure = 1;
 // const float ditherFactor = 768;
@@ -114,8 +114,8 @@ void main() {
 
   fragColor.a = 1.0;
 
-  float luminance = dot(fragColorProps.rgb, vec3(0.299, 0.587, 0.114)); 
-  fragColor.rgb *= mix(vec3(pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength)), vec3(1.0), luminance);
+  float luminance = dot(fragColor.rgb, vec3(0.299, 0.587, 0.114));
+  fragColor.rgb *= mix(vec3(pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength)), vec3(1.0), vec3(luminance));
 
   // fragColor.rgb = vec3(computeSSAO(p, n));
   // fragColor.rgb *= vdn * computeSSAO(p, n);

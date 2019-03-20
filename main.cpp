@@ -258,7 +258,7 @@ int main() {
   //light->maxDist = 100;
 
   Renderer::Light *light;
-  Renderer::Vec3 lightColor = { 5.5, 5.5, 5.5 };
+  Renderer::Vec3 lightColor = { 2.5, 2.5, 2.5 };
 
   light =
 	  Renderer::SpawnLight({ -30.83f, 0.109f, 6.87f }, lightColor, 0);
@@ -304,7 +304,7 @@ int main() {
   inst2->color = Renderer::Color::Green;
   inst3->color = Renderer::Color::Blue;
 
-  map->color = Renderer::Color::White;
+  map->color = Renderer::Color::Grey;
 
   auto startTime = std::chrono::high_resolution_clock::now();
   auto frameTimestamp = startTime;
