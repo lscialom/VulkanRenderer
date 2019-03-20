@@ -28,7 +28,7 @@ layout(location = 0) out float fragColor;
 float computeSSAO(vec3 pos, vec3 normal)
 {
   const float radius = 5;
-  const float bias = 0.05;
+  const float bias = 0.1;
   const vec2 noiseScale = vec2(u_pushConstant.xExtent/SSAO_NOISE_DIM, u_pushConstant.yExtent/SSAO_NOISE_DIM);
 
   vec3 randomVec = normalize(texture(ssaoNoise, fragUV * noiseScale).xyz);
