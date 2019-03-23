@@ -7,7 +7,7 @@ private:
   vk::Pipeline pipeline;
   vk::PipelineLayout pipelineLayout;
 
-  // std::vector<DescriptorSet> descriptorSets;
+  std::vector<DescriptorSet> descriptorSets;
 
   static vk::ShaderModule CreateShaderModule(const std::vector<char> &code) {
     vk::ShaderModuleCreateInfo createInfo(
@@ -23,12 +23,21 @@ private:
     return shaderModule;
   }
 
+  void init_descriptors(const std::vector<DescriptorSetInfo> &descriptors) {
+
+    descriptorSets.resize(descriptors.size());
+
+    for (size_t i = 0; i < descriptorSets.size(); ++i)
+      descriptorSets[i].init(descriptors[i], true);
+  }
+
   void init_pipeline(const std::string &vertPath, const std::string &fragPath,
                      const vk::RenderPass &renderPass,
                      uint32_t nbColorAttachments, bool useVertexInput,
                      bool cull, bool blendEnable,
                      const std::vector<vk::PushConstantRange> &pushConstants,
-                     const std::vector<vk::DescriptorSetLayout> &descriptors) {
+                     const std::vector<vk::DescriptorSetLayout> &uboLayouts) {
+
     auto vertShaderCode = ReadFile(vertPath);
     auto fragShaderCode = ReadFile(fragPath);
 
@@ -113,10 +122,19 @@ private:
         vk::PipelineDynamicStateCreateFlags(),
         static_cast<uint32_t>(dynamicStates.size()), dynamicStates.data());
 
+    std::vector<vk::DescriptorSetLayout> descriptorLayouts;
+
+    for (size_t i = 0; i < uboLayouts.size(); ++i)
+      descriptorLayouts.push_back(uboLayouts[i]);
+
+    for (size_t i = 0; i < descriptorSets.size(); ++i)
+      descriptorLayouts.push_back(descriptorSets[i].get_layout());
+
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo =
         vk::PipelineLayoutCreateInfo(
             vk::PipelineLayoutCreateFlags(),
-            static_cast<uint32_t>(descriptors.size()), descriptors.data(),
+            static_cast<uint32_t>(descriptorLayouts.size()),
+            descriptorLayouts.data(),
             static_cast<uint32_t>(pushConstants.size()), pushConstants.data());
 
     CHECK_VK_RESULT_FATAL(g_device.createPipelineLayout(&pipelineLayoutInfo,
@@ -154,16 +172,33 @@ public:
             const vk::RenderPass &renderPass, uint32_t nbColorAttachments,
             bool useVertexInput, bool cull, bool blendEnable,
             const std::vector<vk::PushConstantRange> &pushConstants = {},
-            const std::vector<vk::DescriptorSetLayout> &descriptors = {}) {
+            const std::vector<DescriptorSetInfo> &descriptors = {},
+            const std::vector<vk::DescriptorSetLayout> &uboLayouts = {}) {
 
+    init_descriptors(descriptors);
     init_pipeline(vertPath, fragPath, renderPass, nbColorAttachments,
-                  useVertexInput, cull, blendEnable, pushConstants,
-                  descriptors);
+                  useVertexInput, cull, blendEnable, pushConstants, uboLayouts);
+  }
+
+  void update_descriptors() const {
+    for (size_t i = 0; i < descriptorSets.size(); ++i)
+      descriptorSets[i].update();
+  }
+
+  void bind_descriptors(const vk::CommandBuffer &commandbuffer,
+                        uint32_t offset = 0) const {
+    for (size_t i = 0; i < descriptorSets.size(); ++i) {
+      commandbuffer.bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, pipelineLayout, offset + i, 1,
+          &descriptorSets[i].get_handle(), 0, nullptr);
+    }
   }
 
   void destroy() {
     g_device.destroyPipeline(pipeline, g_allocationCallbacks);
     g_device.destroyPipelineLayout(pipelineLayout, g_allocationCallbacks);
+
+    descriptorSets.clear();
   }
 };
 
@@ -177,6 +212,6 @@ private:
   std::vector<Shader> shaders;
 
 public:
-  void init() {}
+  void init(const std::vector<DescriptorLayout> &descriptorLayouts) {}
 };
 } // namespace Renderer

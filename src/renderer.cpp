@@ -514,13 +514,8 @@ struct RenderContext {
   Attachment normalAttachment;
   Attachment colorAttachment;
 
-  DescriptorSet gBufferSet;
-
   Attachment ssaoColorAttachment;
   Attachment blurColorAttachment;
-
-  DescriptorSet ssaoResTexSet;
-  DescriptorSet blurResTexSet;
 
   static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
 
@@ -542,119 +537,10 @@ struct RenderContext {
   vk::DescriptorSetLayout lightsUBOLayout;
   UniformBufferObject lightsUBO;
 
-  DescriptorSet ssaoSet;
-
   Image ditherTex;
-  DescriptorSet ditherTexSet;
 
   std::vector<Model *> models;
   std::vector<Light *> lights;
-
-  void init_descriptor() {
-
-    gBufferSet.init(CommonResources::GBufferLayout);
-
-    {
-      UniformObjectInfo<CameraUBO> info;
-
-      info.binding = 0;
-      vk::DescriptorSetLayoutBinding layoutBinding =
-          info.make_descriptor_set_layout_binding();
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &camUBOLayout),
-          "Failed to create descriptor set layout.");
-
-      camUBO.init<decltype(info)>(camUBOLayout, 1);
-    }
-
-    {
-      UniformObjectInfo<LightUBO> info;
-
-      info.binding = 0;
-      info.arraySize = MAX_LIGHTS;
-      vk::DescriptorSetLayoutBinding layoutBinding =
-          info.make_descriptor_set_layout_binding();
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &lightsUBOLayout),
-          "Failed to create descriptor set layout.");
-
-      lightsUBO.init<decltype(info)>(lightsUBOLayout, MAX_LIGHTS);
-    }
-
-    ssaoSet.init(CommonResources::SSAOLayout);
-    ssaoResTexSet.init(CommonResources::UniqueTextureLayout);
-    blurResTexSet.init(CommonResources::UniqueTextureLayout);
-    ditherTexSet.init(CommonResources::UniqueTextureLayout);
-  }
-
-  void allocate_descriptor() {
-    {
-      std::vector<const Image *> images;
-      images.resize(G_BUFFER_SIZE);
-
-      images[posAttachmentArrayIndex] = &posAttachment.get_image();
-      images[normalAttachmentArrayIndex] = &normalAttachment.get_image();
-      images[colorAttachmentArrayIndex] = &colorAttachment.get_image();
-      images[depthAttachmentArrayIndex] = &depthAttachment.get_image();
-
-      std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
-                                                &CommonResources::BaseSampler);
-
-      gBufferSet.update({}, images, samplers);
-    }
-
-    ssaoSet.update({&CommonResources::SSAOKernelBuffer},
-                   {&CommonResources::SSAONoiseTex},
-                   {&CommonResources::RepeatSampler});
-
-    ssaoResTexSet.update({}, {&ssaoColorAttachment.get_image()},
-                         {&CommonResources::BaseSampler});
-    blurResTexSet.update({}, {&blurColorAttachment.get_image()},
-                         {&CommonResources::BaseSampler});
-
-    // dither set
-    {
-      ditherTex.allocate(Maths::DitheringPatternDim, Maths::DitheringPatternDim,
-                         vk::Format::eR32Sfloat, vk::ImageTiling::eOptimal,
-                         vk::ImageUsageFlagBits::eTransferDst |
-                             vk::ImageUsageFlagBits::eSampled,
-                         vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-      ditherTex.write_from_raw_data(Maths::DitheringPattern.data(),
-                                    vk::ImageLayout::eUndefined,
-                                    vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      ditherTexSet.update({}, {&ditherTex}, {&CommonResources::RepeatSampler});
-    }
-  }
-
-  void destroy_descriptor() {
-    gBufferSet.destroy();
-
-    g_device.destroyDescriptorSetLayout(camUBOLayout, g_allocationCallbacks);
-    camUBO.~UniformBufferObject();
-
-    g_device.destroyDescriptorSetLayout(lightsUBOLayout, g_allocationCallbacks);
-    lightsUBO.~UniformBufferObject();
-
-    ssaoSet.destroy();
-
-    ssaoResTexSet.destroy();
-    blurResTexSet.destroy();
-
-    ditherTex.free();
-    ditherTexSet.destroy();
-  }
 
   void init_render_passes() {
     {
@@ -873,28 +759,49 @@ struct RenderContext {
 
     gShader.init("../resources/shaders/spv/geom.vert.spv",
                  "../resources/shaders/spv/geom.frag.spv", geomRenderPass, 3,
-                 true, true, false, pushConstantRanges, descriptors);
+                 true, true, false, pushConstantRanges, {}, descriptors);
 
     pushConstantRanges.clear();
     PushConstantDescriptor<SSAOPassPushConstant> ssaoPassPushConstantRange{};
     pushConstantRanges.push_back(
         ssaoPassPushConstantRange.make_push_constant_range());
 
-    descriptors.push_back(gBufferSet.get_layout());
-    descriptors.push_back(ssaoSet.get_layout());
+    std::vector<const Image *> images;
+    images.resize(G_BUFFER_SIZE);
+
+    images[posAttachmentArrayIndex] = &posAttachment.get_image();
+    images[normalAttachmentArrayIndex] = &normalAttachment.get_image();
+    images[colorAttachmentArrayIndex] = &colorAttachment.get_image();
+    images[depthAttachmentArrayIndex] = &depthAttachment.get_image();
+
+    std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
+                                              &CommonResources::BaseSampler);
+
+    std::vector<DescriptorSetInfo> dsInfo;
+    dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
+    dsInfo.push_back({CommonResources::SSAOLayout,
+                      {&CommonResources::SSAOKernelBuffer},
+                      {&CommonResources::SSAONoiseTex},
+                      {&CommonResources::RepeatSampler}});
 
     ssaoShader.init("../resources/shaders/spv/ssao.vert.spv",
                     "../resources/shaders/spv/ssao.frag.spv", ssaoRenderPass, 1,
-                    false, false, false, pushConstantRanges, descriptors);
+                    false, false, false, pushConstantRanges, dsInfo,
+                    descriptors);
 
     pushConstantRanges.clear();
 
     descriptors.clear();
-    descriptors.push_back(ssaoResTexSet.get_layout());
+
+    dsInfo.clear();
+    dsInfo.push_back({CommonResources::UniqueTextureLayout,
+                      {},
+                      {&ssaoColorAttachment.get_image()},
+                      {&CommonResources::BaseSampler}});
 
     blurShader.init("../resources/shaders/spv/blur.vert.spv",
                     "../resources/shaders/spv/blur.frag.spv", blurRenderPass, 1,
-                    false, false, false, pushConstantRanges, descriptors);
+                    false, false, false, pushConstantRanges, dsInfo);
 
     pushConstantRanges.clear();
     PushConstantDescriptor<LightPassPushConstant> lightPassPushConstantRange{};
@@ -903,14 +810,23 @@ struct RenderContext {
 
     descriptors.clear();
     descriptors.push_back(camUBOLayout);
-    descriptors.push_back(gBufferSet.get_layout());
     descriptors.push_back(lightsUBOLayout);
-    descriptors.push_back(blurResTexSet.get_layout());
-    descriptors.push_back(ditherTexSet.get_layout());
+
+    dsInfo.clear();
+    dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
+    dsInfo.push_back({CommonResources::UniqueTextureLayout,
+                      {},
+                      {&blurColorAttachment.get_image()},
+                      {&CommonResources::BaseSampler}});
+    dsInfo.push_back({CommonResources::UniqueTextureLayout,
+                      {},
+                      {&ditherTex},
+                      {&CommonResources::RepeatSampler}});
 
     lightShader.init("../resources/shaders/spv/light.vert.spv",
                      "../resources/shaders/spv/light.frag.spv", lightRenderPass,
-                     1, false, false, true, pushConstantRanges, descriptors);
+                     1, false, false, true, pushConstantRanges, dsInfo,
+                     descriptors);
 
     pushConstantRanges.clear();
 
@@ -918,13 +834,13 @@ struct RenderContext {
     pushConstantRanges.push_back(
         extentPushConstantRange.make_push_constant_range());
 
-    descriptors.clear();
-    descriptors.push_back(gBufferSet.get_layout());
+    dsInfo.clear();
+    dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
 
     overlayShader.init("../resources/shaders/spv/overlay.vert.spv",
                        "../resources/shaders/spv/overlay.frag.spv",
                        lightRenderPass, 1, false, false, true,
-                       pushConstantRanges, descriptors);
+                       pushConstantRanges, dsInfo);
   }
 
   void destroy_shaders() {
@@ -1168,13 +1084,7 @@ struct RenderContext {
           vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 0,
           1, &camUBO.get_descriptor_set(index), 0, nullptr);
 
-      commandbuffers[index].bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 1,
-          1, &gBufferSet.get_handle(), 0, nullptr);
-
-      commandbuffers[index].bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 2,
-          1, &ssaoSet.get_handle(), 0, nullptr);
+      ssaoShader.bind_descriptors(commandbuffers[index], 1);
 
       SSAOPassPushConstant ssaoPassPushConstant{};
       ssaoPassPushConstant.xExtent = extent.width;
@@ -1199,10 +1109,7 @@ struct RenderContext {
                                             vk::SubpassContents::eInline);
 
       blurShader.bind_pipeline(commandbuffers[index]);
-
-      commandbuffers[index].bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, blurShader.get_pipeline_layout(), 0,
-          1, &ssaoResTexSet.get_handle(), 0, nullptr);
+      blurShader.bind_descriptors(commandbuffers[index]);
 
       // Draw scene into texture
       commandbuffers[index].draw(6, 1, 0, 0);
@@ -1244,19 +1151,9 @@ struct RenderContext {
 
     commandbuffers[index].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 1,
-        1, &gBufferSet.get_handle(), 0, nullptr);
-
-    commandbuffers[index].bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 2,
         1, &lightsUBO.get_descriptor_set(index), 0, nullptr);
 
-    commandbuffers[index].bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 3,
-        1, &blurResTexSet.get_handle(), 0, nullptr);
-
-    commandbuffers[index].bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 4,
-        1, &ditherTexSet.get_handle(), 0, nullptr);
+    lightShader.bind_descriptors(commandbuffers[index], 2);
 
     LightPassPushConstant lightPassPushConstant{};
     lightPassPushConstant.numLights = lights.size();
@@ -1271,9 +1168,7 @@ struct RenderContext {
 
     if (Config::ShowGBuffer) {
       overlayShader.bind_pipeline(commandbuffers[index]);
-      commandbuffers[index].bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, overlayShader.get_pipeline_layout(),
-          0, 1, &gBufferSet.get_handle(), 0, nullptr);
+      overlayShader.bind_descriptors(commandbuffers[index]);
 
       ExtentPushConstant ePc = {};
       ePc.xExtent = extent.width;
@@ -1300,10 +1195,8 @@ struct RenderContext {
     Swapchain::Init(requestedWidth, requestedHeight);
 
     CommonResources::InitDescriptorLayouts();
-    init_descriptor();
 
     init_render_passes();
-    init_shaders();
 
     init_framebuffers();
 
@@ -1311,7 +1204,54 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitSSAOResources();
 
-    allocate_descriptor();
+    ditherTex.allocate(Maths::DitheringPatternDim, Maths::DitheringPatternDim,
+                       vk::Format::eR32Sfloat, vk::ImageTiling::eOptimal,
+                       vk::ImageUsageFlagBits::eTransferDst |
+                           vk::ImageUsageFlagBits::eSampled,
+                       vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    ditherTex.write_from_raw_data(Maths::DitheringPattern.data(),
+                                  vk::ImageLayout::eUndefined,
+                                  vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    {
+      UniformObjectInfo<CameraUBO> info;
+
+      info.binding = 0;
+      vk::DescriptorSetLayoutBinding layoutBinding =
+          info.make_descriptor_set_layout_binding();
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &camUBOLayout),
+          "Failed to create descriptor set layout.");
+
+      camUBO.init<decltype(info)>(camUBOLayout, 1);
+    }
+
+    {
+      UniformObjectInfo<LightUBO> info;
+
+      info.binding = 0;
+      info.arraySize = MAX_LIGHTS;
+      vk::DescriptorSetLayoutBinding layoutBinding =
+          info.make_descriptor_set_layout_binding();
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo(
+          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
+
+      CHECK_VK_RESULT_FATAL(
+          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
+                                             &lightsUBOLayout),
+          "Failed to create descriptor set layout.");
+
+      lightsUBO.init<decltype(info)>(lightsUBOLayout, MAX_LIGHTS);
+    }
+
+    init_shaders();
 
     init_commandbuffers();
   }
@@ -1322,7 +1262,13 @@ struct RenderContext {
     CommonResources::DestroySamplers();
     CommonResources::DestroySSAOResources();
 
-    destroy_descriptor();
+    lightsUBO.~UniformBufferObject();
+    camUBO.~UniformBufferObject();
+
+    g_device.destroyDescriptorSetLayout(camUBOLayout, g_allocationCallbacks);
+    g_device.destroyDescriptorSetLayout(lightsUBOLayout, g_allocationCallbacks);
+
+    ditherTex.free();
 
     destroy_framebuffers();
     destroy_commandbuffers();
@@ -1349,7 +1295,7 @@ struct RenderContext {
   void refresh() {
     g_device.waitIdle();
 
-    destroy_descriptor();
+    // destroy_descriptor();
 
     destroy_framebuffers();
     destroy_commandbuffers();
@@ -1357,12 +1303,14 @@ struct RenderContext {
     Swapchain::Destroy();
     Swapchain::Init(requestedWidth, requestedHeight);
 
-    init_descriptor();
+    // init_descriptor();
 
     init_framebuffers();
     init_commandbuffers();
 
-    allocate_descriptor();
+    // allocate_descriptor();
+
+    // TODO UPDATE SHADERS
   }
 
   Light *spawn_light(Vec3 position, Vec3 color, float ambientStrength) {

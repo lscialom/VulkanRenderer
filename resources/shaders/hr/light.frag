@@ -13,9 +13,7 @@ layout(set = 0, binding = 0) uniform CameraData {
 }
 camData;
 
-layout(set = 1, binding = 0) uniform sampler2D[G_BUFFER_SIZE] gBuffer;
-
-layout(set = 2, binding = 0) uniform LightData {
+layout(set = 1, binding = 0) uniform LightData {
   vec4 vector;
   vec3 color;
 
@@ -24,6 +22,8 @@ layout(set = 2, binding = 0) uniform LightData {
   float maxDist;
 }
 lightData[MAX_LIGHTS];
+
+layout(set = 2, binding = 0) uniform sampler2D[G_BUFFER_SIZE] gBuffer;
 
 layout(set = 3, binding = 0) uniform sampler2D ssaoBlurColor;
 layout(set = 4, binding = 0) uniform sampler2D ditherTex;

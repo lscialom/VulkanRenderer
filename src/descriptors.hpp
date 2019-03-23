@@ -11,6 +11,13 @@ struct DescriptorLayout {
   std::vector<vk::DescriptorSetLayoutBinding> bindings;
 };
 
+struct DescriptorSetInfo {
+  DescriptorLayout layout;
+  std::vector<const Buffer *> buffers;
+  std::vector<const Image *> images;
+  std::vector<const vk::Sampler *> samplers;
+};
+
 struct DescriptorSet {
 private:
   // TODO Optimize
@@ -22,22 +29,29 @@ private:
 
   std::vector<vk::DescriptorSetLayoutBinding> bindingsInfo;
 
+  std::vector<const Buffer *> buffers;
+  std::vector<const Image *> images;
+  std::vector<const vk::Sampler *> samplers;
+
 public:
   ~DescriptorSet() { destroy(); }
 
-  void init(const DescriptorLayout &descriptorLayout) {
+  void init(const DescriptorSetInfo &info, bool updateNow = true) {
 
-    bindingsInfo.resize(descriptorLayout.bindings.size());
+    bindingsInfo.resize(info.layout.bindings.size());
 
-    memcpy(bindingsInfo.data(), descriptorLayout.bindings.data(),
-           descriptorLayout.bindings.size() *
-               sizeof(VkDescriptorSetLayoutBinding));
+    memcpy(bindingsInfo.data(), info.layout.bindings.data(),
+           info.layout.bindings.size() * sizeof(VkDescriptorSetLayoutBinding));
 
-    layout = descriptorLayout.handle;
+    layout = info.layout.handle;
+
+    buffers = info.buffers;
+    images = info.images;
+    samplers = info.samplers;
 
     std::map<vk::DescriptorType, uint32_t> poolSizesInfo;
 
-    for (const auto &binding : descriptorLayout.bindings)
+    for (const auto &binding : info.layout.bindings)
       poolSizesInfo[(vk::DescriptorType)binding.descriptorType] +=
           binding.descriptorCount;
 
@@ -65,11 +79,12 @@ public:
     allocInfo.pSetLayouts = &layout;
 
     g_device.allocateDescriptorSets(&allocInfo, &set);
+
+    if (updateNow)
+      update();
   }
 
-  void update(const std::vector<const Buffer *> &buffers,
-              const std::vector<const Image *> &images = {},
-              const std::vector<const vk::Sampler *> &samplers = {}) {
+  void update() const {
 
     std::vector<vk::WriteDescriptorSet> writes;
     uint32_t currentBufferIndex = 0;
