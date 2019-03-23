@@ -1295,22 +1295,20 @@ struct RenderContext {
   void refresh() {
     g_device.waitIdle();
 
-    // destroy_descriptor();
-
     destroy_framebuffers();
     destroy_commandbuffers();
+
+	destroy_shaders();
 
     Swapchain::Destroy();
     Swapchain::Init(requestedWidth, requestedHeight);
 
-    // init_descriptor();
-
     init_framebuffers();
     init_commandbuffers();
 
-    // allocate_descriptor();
+	init_shaders();
 
-    // TODO UPDATE SHADERS
+    // TODO UPDATE SHADERS INSTEAD OF RECREATING THEM
   }
 
   Light *spawn_light(Vec3 position, Vec3 color, float ambientStrength) {
