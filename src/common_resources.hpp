@@ -1,19 +1,19 @@
 #pragma once
 
+#include "data_structures.hpp"
+#include "descriptors.hpp"
 #include "maths.hpp"
 #include "memory.hpp"
-#include "descriptors.hpp"
 
 #include <vulkan/vulkan.hpp>
 
 #include <array>
 
-namespace Renderer
-{
-	namespace CommonResources
-	{
-		#include "descriptor_layouts.inl"
-		#include "samplers.inl"
-		#include "ssao_resources.inl"
-	}
-}
+namespace Renderer {
+namespace CommonResources {
+#include "descriptor_layouts.inl"
+#include "uniform_buffer_objects.inl"
+#include "samplers.inl"
+#include "ssao_resources.inl"
+} // namespace CommonResources
+} // namespace Renderer

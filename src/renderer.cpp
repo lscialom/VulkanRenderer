@@ -531,13 +531,10 @@ struct RenderContext {
   Shader lightShader;
   Shader overlayShader;
 
-  vk::DescriptorSetLayout camUBOLayout;
-  UniformBufferObject camUBO;
-
-  vk::DescriptorSetLayout lightsUBOLayout;
-  UniformBufferObject lightsUBO;
-
   Image ditherTex;
+
+  UniformBufferObject camUBO;
+  UniformBufferObject lightsUBO;
 
   std::vector<Model *> models;
   std::vector<Light *> lights;
@@ -755,7 +752,8 @@ struct RenderContext {
     pushConstantRanges.push_back(
         modelInstancePushConstantRange.make_push_constant_range());
 
-    std::vector<vk::DescriptorSetLayout> descriptors = {camUBOLayout};
+    std::vector<vk::DescriptorSetLayout> descriptors = {
+        CommonResources::CameraUBOLayout.layout};
 
     gShader.init("../resources/shaders/spv/geom.vert.spv",
                  "../resources/shaders/spv/geom.frag.spv", geomRenderPass, 3,
@@ -809,8 +807,8 @@ struct RenderContext {
         lightPassPushConstantRange.make_push_constant_range());
 
     descriptors.clear();
-    descriptors.push_back(camUBOLayout);
-    descriptors.push_back(lightsUBOLayout);
+    descriptors.push_back(CommonResources::CameraUBOLayout.layout);
+    descriptors.push_back(CommonResources::LightUBOLayout.layout);
 
     dsInfo.clear();
     dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
@@ -1195,6 +1193,7 @@ struct RenderContext {
     Swapchain::Init(requestedWidth, requestedHeight);
 
     CommonResources::InitDescriptorLayouts();
+    CommonResources::InitUniformBufferObjects();
 
     init_render_passes();
 
@@ -1215,40 +1214,17 @@ struct RenderContext {
                                   vk::ImageLayout::eShaderReadOnlyOptimal);
 
     {
-      UniformObjectInfo<CameraUBO> info;
 
-      info.binding = 0;
-      vk::DescriptorSetLayoutBinding layoutBinding =
-          info.make_descriptor_set_layout_binding();
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &camUBOLayout),
-          "Failed to create descriptor set layout.");
-
-      camUBO.init<decltype(info)>(camUBOLayout, 1);
+      camUBO.init<decltype(CommonResources::CameraUBOLayout)>(
+          CommonResources::CameraUBOLayout.layout,
+          decltype(CommonResources::CameraUBOLayout)::ArraySize);
     }
 
     {
-      UniformObjectInfo<LightUBO> info;
 
-      info.binding = 0;
-      info.arraySize = MAX_LIGHTS;
-      vk::DescriptorSetLayoutBinding layoutBinding =
-          info.make_descriptor_set_layout_binding();
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo(
-          vk::DescriptorSetLayoutCreateFlags(), 1, &layoutBinding);
-
-      CHECK_VK_RESULT_FATAL(
-          g_device.createDescriptorSetLayout(&layoutInfo, g_allocationCallbacks,
-                                             &lightsUBOLayout),
-          "Failed to create descriptor set layout.");
-
-      lightsUBO.init<decltype(info)>(lightsUBOLayout, MAX_LIGHTS);
+      lightsUBO.init<decltype(CommonResources::LightUBOLayout)>(
+          CommonResources::LightUBOLayout.layout,
+          decltype(CommonResources::LightUBOLayout)::ArraySize);
     }
 
     init_shaders();
@@ -1259,14 +1235,13 @@ struct RenderContext {
   void destroy(bool freeModels = true) {
 
     CommonResources::DestroyDescriptorLayouts();
+    CommonResources::DestroyUniformBufferObjects();
+
     CommonResources::DestroySamplers();
     CommonResources::DestroySSAOResources();
 
     lightsUBO.~UniformBufferObject();
     camUBO.~UniformBufferObject();
-
-    g_device.destroyDescriptorSetLayout(camUBOLayout, g_allocationCallbacks);
-    g_device.destroyDescriptorSetLayout(lightsUBOLayout, g_allocationCallbacks);
 
     ditherTex.free();
 
@@ -1298,7 +1273,7 @@ struct RenderContext {
     destroy_framebuffers();
     destroy_commandbuffers();
 
-	destroy_shaders();
+    destroy_shaders();
 
     Swapchain::Destroy();
     Swapchain::Init(requestedWidth, requestedHeight);
@@ -1306,7 +1281,7 @@ struct RenderContext {
     init_framebuffers();
     init_commandbuffers();
 
-	init_shaders();
+    init_shaders();
 
     // TODO UPDATE SHADERS INSTEAD OF RECREATING THEM
   }

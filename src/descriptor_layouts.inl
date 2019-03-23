@@ -79,26 +79,6 @@ DEFINE_LAYOUT(SSAOLayout, 2,
 		),
 	});
 
-//DEFINE_LAYOUT(CameraLayout, 1,
-//	{
-//		DEFINE_LAYOUT_BINDING(
-//			.binding = 0,
-//			.descriptorCount = 1,
-//			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-//			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-//		),
-//	}
-//
-//DEFINE_LAYOUT(LightsLayout, 1,
-//	{
-//		DEFINE_LAYOUT_BINDING(
-//			.binding = 0,
-//			.descriptorCount = MAX_LIGHTS,
-//			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-//			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-//		),
-//	}
-
 // clang-format on
 
 #undef DEFINE_LAYOUT
@@ -112,16 +92,12 @@ void InitDescriptorLayouts() {
   CREATE_DESCRIPTOR_SET_LAYOUT(UniqueTextureLayout);
   CREATE_DESCRIPTOR_SET_LAYOUT(GBufferLayout);
   CREATE_DESCRIPTOR_SET_LAYOUT(SSAOLayout);
-  //CREATE_DESCRIPTOR_SET_LAYOUT(CameraLayout);
-  //CREATE_DESCRIPTOR_SET_LAYOUT(LightsLayout);
 }
 
 void DestroyDescriptorLayouts() {
   DESTROY_DESCRIPTOR_SET_LAYOUT(UniqueTextureLayout);
   DESTROY_DESCRIPTOR_SET_LAYOUT(GBufferLayout);
   DESTROY_DESCRIPTOR_SET_LAYOUT(SSAOLayout);
-  //DESTROY_DESCRIPTOR_SET_LAYOUT(CameraLayout);
-  //DESTROY_DESCRIPTOR_SET_LAYOUT(LightsLayout);
 }
 
 #undef DESTROY_DESCRIPTOR_SET_LAYOUT

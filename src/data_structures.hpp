@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 
 #include "configuration_helper.hpp"
+#include "global_context.hpp"
 
 //-----------------------------------------------------------------------------
 // VERTEX INPUT DESCRIPTION
@@ -119,44 +120,11 @@ SET_PRIMITIVE_INDICES(Cube,
 // UNIFORM OBJECTS
 //-----------------------------------------------------------------------------
 
-template <typename T> struct UniformObjectInfo {
-  static constexpr const uint64_t Size = sizeof(T);
-  static constexpr const vk::DescriptorType DescriptorType =
-      vk::DescriptorType::eUniformBuffer;
-
-  // Non-wrapped type for constexpr qualifier
-  static constexpr const VkShaderStageFlags ShaderStage = 0;
-
-  uint32_t binding;
-  uint32_t arraySize = 1;
-  vk::Sampler *immutableSamplers = nullptr;
-
-  vk::DescriptorSetLayoutBinding make_descriptor_set_layout_binding() {
-    return vk::DescriptorSetLayoutBinding(binding, DescriptorType, arraySize,
-                                          vk::ShaderStageFlags(ShaderStage),
-                                          immutableSamplers);
-  }
-};
-
-#define DEFINE_UNIFORM_OBJECT(type, descType, shaderStageFlags)                \
-  template <>                                                                  \
-  constexpr const vk::DescriptorType UniformObjectInfo<type>::DescriptorType = \
-      descType;                                                                \
-                                                                               \
-  template <>                                                                  \
-  constexpr const VkShaderStageFlags UniformObjectInfo<type>::ShaderStage =    \
-      (VkShaderStageFlags)shaderStageFlags;
-
-// UNIFORMBUFFERINFO SPECIALIZATIONS
-
 struct CameraUBO {
   Eigen::Matrix4f view;
   Eigen::Matrix4f proj;
   Eigen::Vector3f viewPos;
 };
-
-DEFINE_UNIFORM_OBJECT(CameraUBO, vk::DescriptorType::eUniformBuffer,
-                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
 
 struct LightUBO {
   Eigen::Vector4f vector;
@@ -166,11 +134,6 @@ struct LightUBO {
 
   float maxDist;
 };
-
-DEFINE_UNIFORM_OBJECT(LightUBO, vk::DescriptorType::eUniformBuffer,
-                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-
-#undef DEFINE_UNIFORM_OBJECT
 
 //-----------------------------------------------------------------------------
 // PUSH CONSTANTS
