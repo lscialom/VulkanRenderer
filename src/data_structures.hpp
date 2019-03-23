@@ -1,7 +1,8 @@
 #pragma once
 
 #include <Eigen/Core>
-#include <vulkan/vulkan.hpp>
+
+#include "configuration_helper.hpp"
 
 //-----------------------------------------------------------------------------
 // VERTEX INPUT DESCRIPTION
@@ -35,7 +36,7 @@ struct LiteralVertex {
   }
 };
 
-bool operator==(const LiteralVertex &v1, const LiteralVertex &v2) {
+static bool operator==(const LiteralVertex &v1, const LiteralVertex &v2) {
   return v1.pos == v2.pos && v1.nor == v2.nor;
 }
 
@@ -217,13 +218,12 @@ struct LightPassPushConstant {
 DEFINE_PUSH_CONSTANT(LightPassPushConstant,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
-struct SSAOPassPushConstant
-{
-	float xExtent;
-	float yExtent;
+struct SSAOPassPushConstant {
+  float xExtent;
+  float yExtent;
 };
 
 DEFINE_PUSH_CONSTANT(SSAOPassPushConstant,
-	VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
 #undef DEFINE_PUSH_CONSTANT
