@@ -552,7 +552,7 @@ struct RenderContext {
 
   void init_descriptor() {
 
-    gBufferSet.init(DESCRIPTOR_INFO(CommonResources::GBufferLayout));
+    gBufferSet.init(CommonResources::GBufferLayout);
 
     {
       UniformObjectInfo<CameraUBO> info;
@@ -591,10 +591,10 @@ struct RenderContext {
       lightsUBO.init<decltype(info)>(lightsUBOLayout, MAX_LIGHTS);
     }
 
-    ssaoSet.init(DESCRIPTOR_INFO(CommonResources::SSAOLayout));
-    ssaoResTexSet.init(DESCRIPTOR_INFO(CommonResources::UniqueTextureLayout));
-    blurResTexSet.init(DESCRIPTOR_INFO(CommonResources::UniqueTextureLayout));
-    ditherTexSet.init(DESCRIPTOR_INFO(CommonResources::UniqueTextureLayout));
+    ssaoSet.init(CommonResources::SSAOLayout);
+    ssaoResTexSet.init(CommonResources::UniqueTextureLayout);
+    blurResTexSet.init(CommonResources::UniqueTextureLayout);
+    ditherTexSet.init(CommonResources::UniqueTextureLayout);
   }
 
   void allocate_descriptor() {

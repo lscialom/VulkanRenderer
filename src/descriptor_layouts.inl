@@ -1,31 +1,36 @@
-// TODO Array of layouts for Passes
-
 //-----------------------------------------------------------------------------
 // MACROS
 //-----------------------------------------------------------------------------
 
 #define DEFINE_LAYOUT(name, bindingCount, ...)                                 \
-  vk::DescriptorSetLayout name;                                                \
+  ::Renderer::DescriptorLayout name;                                           \
   static constexpr std::array<VkDescriptorSetLayoutBinding, bindingCount>      \
-      name##Info = {__VA_ARGS__};
+      name##BindingsInfo = {__VA_ARGS__};
 
 #define DEFINE_LAYOUT_BINDING(...)                                             \
   { __VA_ARGS__ }
 
-#define CREATE_DESCRIPTOR_SET_LAYOUT(layoutBindings, dstLayout)                \
-  vk::DescriptorSetLayoutCreateInfo layoutBindings##layoutInfo(                \
+#define CREATE_DESCRIPTOR_SET_LAYOUT(dstLayout)                                \
+  vk::DescriptorSetLayoutCreateInfo dstLayout##layoutInfo(                     \
       vk::DescriptorSetLayoutCreateFlags(),                                    \
-      static_cast<uint32_t>(layoutBindings.size()),                            \
+      static_cast<uint32_t>(dstLayout##BindingsInfo.size()),                   \
       reinterpret_cast<const vk::DescriptorSetLayoutBinding *>(                \
-          layoutBindings.data()));                                             \
+          dstLayout##BindingsInfo.data()));                                    \
                                                                                \
   CHECK_VK_RESULT_FATAL(                                                       \
-      g_device.createDescriptorSetLayout(&layoutBindings##layoutInfo,          \
-                                         g_allocationCallbacks, &dstLayout),   \
-      "Failed to create descriptor set layout.");
+      g_device.createDescriptorSetLayout(                                      \
+          &dstLayout##layoutInfo, g_allocationCallbacks, &dstLayout.handle),   \
+      "Failed to create descriptor set layout.");                              \
+                                                                               \
+  dstLayout.bindings.resize(dstLayout##BindingsInfo.size());                   \
+  memcpy(dstLayout.bindings.data(), dstLayout##BindingsInfo.data(),            \
+         dstLayout##BindingsInfo.size() *                                      \
+             sizeof(VkDescriptorSetLayoutBinding));
 
 #define DESTROY_DESCRIPTOR_SET_LAYOUT(layout)                                  \
-  g_device.destroyDescriptorSetLayout(layout, g_allocationCallbacks)
+  g_device.destroyDescriptorSetLayout(layout.handle, g_allocationCallbacks);   \
+  layout.handle = nullptr;                                                     \
+  layout.bindings.clear();
 
 //-----------------------------------------------------------------------------
 // DEFINITIONS
@@ -84,9 +89,9 @@ DEFINE_LAYOUT(SSAOLayout, 2,
 //-----------------------------------------------------------------------------
 
 void InitDescriptorLayouts() {
-  CREATE_DESCRIPTOR_SET_LAYOUT(UniqueTextureLayoutInfo, UniqueTextureLayout);
-  CREATE_DESCRIPTOR_SET_LAYOUT(GBufferLayoutInfo, GBufferLayout);
-  CREATE_DESCRIPTOR_SET_LAYOUT(SSAOLayoutInfo, SSAOLayout);
+  CREATE_DESCRIPTOR_SET_LAYOUT(UniqueTextureLayout);
+  CREATE_DESCRIPTOR_SET_LAYOUT(GBufferLayout);
+  CREATE_DESCRIPTOR_SET_LAYOUT(SSAOLayout);
 }
 
 void DestroyDescriptorLayouts() {
@@ -97,5 +102,3 @@ void DestroyDescriptorLayouts() {
 
 #undef DESTROY_DESCRIPTOR_SET_LAYOUT
 #undef CREATE_DESCRIPTOR_SET_LAYOUT
-
-#define DESCRIPTOR_INFO(layout) layout##Info, layout

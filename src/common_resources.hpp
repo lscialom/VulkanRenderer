@@ -2,6 +2,7 @@
 
 #include "maths.hpp"
 #include "memory.hpp"
+#include "descriptors.hpp"
 
 #include <vulkan/vulkan.hpp>
 

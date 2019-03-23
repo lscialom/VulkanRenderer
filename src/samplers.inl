@@ -37,7 +37,7 @@ DEFINE_SAMPLER(BaseSampler,
 		.maxLod = 0,
 		.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
 		.unnormalizedCoordinates = false
-	)
+)
 
 DEFINE_SAMPLER(RepeatSampler,
 	.magFilter = VK_FILTER_NEAREST,
