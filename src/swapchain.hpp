@@ -1,8 +1,10 @@
 #pragma once
 
-#include "vulkan/vulkan.hpp"
+#include "global_context.hpp"
 
+namespace Renderer {
 namespace Swapchain {
+
 extern vk::PresentModeKHR PreferredPresentMode;
 static constexpr vk::SurfaceFormatKHR PreferredImageFormat = {
     vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear};
@@ -19,7 +21,7 @@ vk::Extent2D GetExtent();
 
 const std::vector<vk::ImageView> &GetImageViews();
 
-void SetPresentQueue(struct Queue queue);
+void SetPresentQueue(Queue queue);
 
 void Init(uint32_t w, uint32_t h);
 
@@ -27,4 +29,6 @@ void Destroy();
 
 vk::Result AcquireNextImage();
 vk::Result Present(const vk::Semaphore *presentSemaphore);
+
 } // namespace Swapchain
+} // namespace Renderer

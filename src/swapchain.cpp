@@ -1,8 +1,8 @@
 #include "swapchain.hpp"
 
-#include "global_context.hpp"
-
 #include "configuration_helper.hpp"
+
+namespace Renderer {
 
 namespace Swapchain {
 vk::PresentModeKHR PreferredPresentMode = vk::PresentModeKHR::eMailbox;
@@ -21,7 +21,7 @@ static std::array<vk::Fence, MAX_IN_FLIGHT_FRAMES> inFlightFences;
 static size_t currentFrame = 0;
 static uint32_t currentImageIndex = 0;
 
-static ::Queue presentQueue;
+static Queue presentQueue;
 
 vk::AttachmentDescription GetAttachmentDescription() {
   return vk::AttachmentDescription(
@@ -47,7 +47,7 @@ vk::Extent2D GetExtent() { return extent; }
 
 const std::vector<vk::ImageView> &GetImageViews() { return imageViews; }
 
-void SetPresentQueue(::Queue queue) { presentQueue = queue; }
+void SetPresentQueue(Queue queue) { presentQueue = queue; }
 
 static void InitSyncBarriers() {
   vk::SemaphoreCreateInfo semaphoreInfo = {};
@@ -180,7 +180,7 @@ void Init(uint32_t w, uint32_t h) {
 
   InitSyncBarriers();
 
-  // TODO Move in some debug tool
+// TODO Move in some debug tool
 #ifndef NDEBUG
   g_device.setDebugUtilsObjectNameEXT({vk::ObjectType::eSwapchainKHR,
                                        (uint64_t)((VkSwapchainKHR)handle),
@@ -230,4 +230,6 @@ vk::Result Present(const vk::Semaphore *presentSemaphore) {
 
   return presentQueue.handle.presentKHR(&presentInfo);
 }
+
 } // namespace Swapchain
+} // namespace Renderer

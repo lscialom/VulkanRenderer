@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.hpp>
 
+namespace Renderer {
+
 // TODO Move this somewhere else
 struct Queue {
   int index = -1;
@@ -29,3 +31,5 @@ extern vk::DispatchLoaderDynamic g_dldy;
 #ifndef NDEBUG
 extern std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers;
 #endif
+
+} // namespace Renderer

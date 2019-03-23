@@ -109,7 +109,7 @@ void Init() {
   InitCommandbufferAsync();
 };
 
-void SetTransferQueue(::Queue queue) { transferQueue = queue; }
+void SetTransferQueue(::Renderer::Queue queue) { transferQueue = queue; }
 
 void WaitForTransferQueue() { transferQueue.handle.waitIdle(); }
 

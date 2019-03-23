@@ -1,5 +1,7 @@
 #include "global_context.hpp"
 
+namespace Renderer {
+
 vk::Instance g_instance = nullptr;
 vk::PhysicalDevice g_physicalDevice = nullptr;
 
@@ -19,3 +21,5 @@ vk::DispatchLoaderDynamic g_dldy = {};
 #ifndef NDEBUG
 std::vector<vk::DebugUtilsMessengerEXT> g_debugMessengers = {};
 #endif
+
+} // namespace Renderer

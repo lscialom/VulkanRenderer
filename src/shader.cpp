@@ -28,6 +28,8 @@ static std::vector<char> ReadFile(const std::string &filename) {
   return buffer;
 }
 
+namespace Renderer {
+
 static vk::ShaderModule CreateShaderModule(const std::vector<char> &code) {
   vk::ShaderModuleCreateInfo createInfo(
       vk::ShaderModuleCreateFlags(), code.size(),
@@ -40,8 +42,6 @@ static vk::ShaderModule CreateShaderModule(const std::vector<char> &code) {
 
   return shaderModule;
 }
-
-namespace Renderer {
 
 void Shader::init_descriptors(
     const std::vector<DescriptorSetInfo> &descriptors) {
