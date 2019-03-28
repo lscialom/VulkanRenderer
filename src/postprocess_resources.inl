@@ -33,6 +33,16 @@ DEFINE_TEXTURE2D(SSAONoiseTex,
 	.aspectFlags = vk::ImageAspectFlagBits::eColor
 )
 
+DEFINE_TEXTURE2D(DitherTex,
+	.texWidth = Maths::DitheringPatternDim,
+	.texHeight = Maths::DitheringPatternDim,
+	.format = vk::Format::eR32Sfloat,
+	.tiling = vk::ImageTiling::eOptimal,
+	.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+	.memProperties = vk::MemoryPropertyFlagBits::eDeviceLocal,
+	.aspectFlags = vk::ImageAspectFlagBits::eColor
+)
+
 // clang-format on
 
 #undef DEFINE_TEXTURE2D
@@ -42,8 +52,9 @@ DEFINE_TEXTURE2D(SSAONoiseTex,
 // INITIALIZER - DESTROYER
 //-----------------------------------------------------------------------------
 
-void InitSSAOResources() {
+void InitPostProcessResources() {
 
+  // SSAO Resources
   std::vector<Eigen::Vector4f> ssaoNoise =
       Maths::GenerateSSAONoise(SSAO_NOISE_DIM);
 
@@ -57,10 +68,18 @@ void InitSSAOResources() {
 
   SSAOKernelBuffer.allocate(SSAOKernelBufferInfo);
   SSAOKernelBuffer.write(ssaoKernelData.data(), SSAOKernelBufferInfo.size);
+
+  // Dithering Resources
+  DitherTex.allocate(DitherTexInfo);
+  DitherTex.write_from_raw_data(Maths::DitheringPattern.data(),
+                                vk::ImageLayout::eUndefined,
+                                vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
-void DestroySSAOResources() {
+void DestroyPostProcessResources() {
   SSAONoiseTex.free();
 
   SSAOKernelBuffer.~Buffer();
+
+  DitherTex.free();
 }

@@ -531,8 +531,6 @@ struct RenderContext {
   Shader lightShader;
   Shader overlayShader;
 
-  Image ditherTex;
-
   UniformBufferObject camUBO;
   UniformBufferObject lightsUBO;
 
@@ -818,7 +816,7 @@ struct RenderContext {
                       {&CommonResources::BaseSampler}});
     dsInfo.push_back({CommonResources::UniqueTextureLayout,
                       {},
-                      {&ditherTex},
+                      {&CommonResources::DitherTex},
                       {&CommonResources::RepeatSampler}});
 
     lightShader.init("../resources/shaders/spv/light.vert.spv",
@@ -1201,17 +1199,7 @@ struct RenderContext {
 
     // Resources for descriptors
     CommonResources::InitSamplers();
-    CommonResources::InitSSAOResources();
-
-    ditherTex.allocate(Maths::DitheringPatternDim, Maths::DitheringPatternDim,
-                       vk::Format::eR32Sfloat, vk::ImageTiling::eOptimal,
-                       vk::ImageUsageFlagBits::eTransferDst |
-                           vk::ImageUsageFlagBits::eSampled,
-                       vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    ditherTex.write_from_raw_data(Maths::DitheringPattern.data(),
-                                  vk::ImageLayout::eUndefined,
-                                  vk::ImageLayout::eShaderReadOnlyOptimal);
+    CommonResources::InitPostProcessResources();
 
     {
 
@@ -1238,12 +1226,10 @@ struct RenderContext {
     CommonResources::DestroyUniformBufferObjects();
 
     CommonResources::DestroySamplers();
-    CommonResources::DestroySSAOResources();
+    CommonResources::DestroyPostProcessResources();
 
     lightsUBO.~UniformBufferObject();
     camUBO.~UniformBufferObject();
-
-    ditherTex.free();
 
     destroy_framebuffers();
     destroy_commandbuffers();
