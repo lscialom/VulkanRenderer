@@ -168,6 +168,13 @@ public:
 // ATTACHMENT
 //-----------------------------------------------------------------------------
 
+struct AttachmentInfo
+{
+	vk::Format format;
+	bool isDepth = false;
+	vk::Extent2D extent = { 0, 0 };
+};
+
 struct Attachment {
 private:
   Image image;

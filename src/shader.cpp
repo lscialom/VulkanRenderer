@@ -56,7 +56,6 @@ void Shader::init_pipeline(
     const std::string &vertPath, const std::string &fragPath,
     const vk::RenderPass &renderPass, uint32_t nbColorAttachments,
     bool useVertexInput, bool cull, bool blendEnable,
-    const std::vector<vk::PushConstantRange> &pushConstants,
     const std::vector<vk::DescriptorSetLayout> &uboLayouts) {
 
   auto vertShaderCode = ReadFile(vertPath);
