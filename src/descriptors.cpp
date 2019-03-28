@@ -1,7 +1,6 @@
 #include "descriptors.hpp"
 
 #include "debug_tools.hpp"
-#include "global_context.hpp"
 
 #include <vulkan/vulkan.hpp>
 

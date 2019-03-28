@@ -50,7 +50,7 @@ private:
                 vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal,
                 vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal));
 
-        depthAttachmentRef = {i,
+        depthAttachmentRef = {static_cast<uint32_t>(i),
                               vk::ImageLayout::eDepthStencilAttachmentOptimal};
 
       } else {
@@ -62,7 +62,8 @@ private:
                 vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageLayout::eShaderReadOnlyOptimal));
 
-        colorRefs.push_back({i, vk::ImageLayout::eColorAttachmentOptimal});
+        colorRefs.push_back({static_cast<uint32_t>(i),
+                             vk::ImageLayout::eColorAttachmentOptimal});
 
         nbColorAttachments++;
       }
@@ -100,11 +101,12 @@ private:
     shaders.resize(shaderInfos.size());
 
     for (size_t i = 0; i < shaders.size(); ++i) {
-      shaders[i].init(shaderInfos[i].vertPath, shaderInfos[i].fragPath, handle,
-                      nbColorAttachments, shaderInfos[i].useVertexInput,
-                      shaderInfos[i].cull, shaderInfos[i].blendEnable,
-                      shaderInfos[i].pushConstants,
-                      shaderInfos[i].descriptors, );
+      // shaders[i].init(shaderInfos[i].vertPath, shaderInfos[i].fragPath,
+      // handle,
+      //                nbColorAttachments, shaderInfos[i].useVertexInput,
+      //                shaderInfos[i].cull, shaderInfos[i].blendEnable,
+      //                shaderInfos[i].pushConstants,
+      //                shaderInfos[i].descriptors, );
     }
   }
 

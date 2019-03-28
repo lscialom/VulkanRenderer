@@ -39,6 +39,7 @@ template <typename T> struct UniformObjectLayout {
 
 #define DEFINE_UBO(type, descType, shaderStageFlags, binding, arraySize)       \
   UniformObjectLayout<type> type##Layout;                                      \
+  UniformBufferObject type##Set;                                               \
                                                                                \
   template <>                                                                  \
   constexpr const vk::DescriptorType                                           \
@@ -54,9 +55,13 @@ template <typename T> struct UniformObjectLayout {
   template <>                                                                  \
   constexpr const uint32_t UniformObjectLayout<type>::ArraySize = arraySize;
 
-#define CREATE_UBO(dataType) dataType##Layout.init();
+#define CREATE_UBO(dataType)                                                   \
+  dataType##Layout.init();                                                     \
+  dataType##Set.init(dataType##Layout);
 
-#define DESTROY_UBO(dataType) dataType##Layout.destroy();
+#define DESTROY_UBO(dataType)                                                  \
+  dataType##Layout.destroy();                                                  \
+  dataType##Set.~UniformBufferObject();
 
 //-----------------------------------------------------------------------------
 // DEFINITIONS

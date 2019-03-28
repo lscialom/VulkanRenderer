@@ -123,126 +123,6 @@ public:
   }
 };
 
-struct UniformBufferObject {
-private:
-  std::vector<Buffer> buffers;
-  std::vector<vk::DescriptorSet> descriptorSets;
-
-  vk::DescriptorPool pool;
-
-  size_t alignment = 0;
-
-public:
-  UniformBufferObject() = default;
-  UniformBufferObject(UniformBufferObject &&other) {
-    descriptorSets.resize(other.descriptorSets.size());
-    for (size_t i = 0; i < other.descriptorSets.size(); ++i) {
-      descriptorSets[i] = other.descriptorSets[i];
-      other.descriptorSets[i] = nullptr;
-    }
-
-    pool = other.pool;
-    other.pool = nullptr;
-
-    buffers = std::move(other.buffers);
-    alignment = other.alignment;
-  }
-  ~UniformBufferObject() {
-    if (pool) {
-      g_device.destroyDescriptorPool(pool, g_allocationCallbacks);
-      pool = nullptr;
-    }
-  }
-
-  size_t get_alignment() const { return alignment; }
-
-  const vk::DescriptorSet &get_descriptor_set(size_t index) const {
-    return descriptorSets[index];
-  }
-
-  template <typename T> void init(T layoutInfo) {
-    if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic ||
-        T::DescriptorType == vk::DescriptorType::eUniformBuffer) {
-      size_t minUboAlignment = g_physicalDevice.getProperties()
-                                   .limits.minUniformBufferOffsetAlignment;
-      alignment = sizeof(T::Size);
-
-      if (minUboAlignment > 0) {
-        alignment = (alignment + minUboAlignment - 1) & ~(minUboAlignment - 1);
-      }
-    } else
-      alignment = T::Size;
-
-    size_t nbElements = T::ArraySize;
-    size_t nbBuffers = Swapchain::ImageCount();
-
-    vk::DescriptorPoolSize poolSize{vk::DescriptorType::eUniformBuffer,
-                                    static_cast<uint32_t>(nbBuffers)};
-
-    vk::DescriptorPoolCreateInfo poolInfo{vk::DescriptorPoolCreateFlags(),
-                                          static_cast<uint32_t>(nbBuffers), 1,
-                                          &poolSize};
-
-    CHECK_VK_RESULT_FATAL(
-        g_device.createDescriptorPool(&poolInfo, g_allocationCallbacks, &pool),
-        "Failed to create descriptor pool.");
-
-    buffers.resize(nbBuffers);
-    for (size_t i = 0; i < buffers.size(); ++i)
-      buffers[i].allocate(alignment * nbElements,
-                          vk::BufferUsageFlagBits::eUniformBuffer,
-                          vk::MemoryPropertyFlagBits::eHostCoherent |
-                              vk::MemoryPropertyFlagBits::eHostVisible);
-
-    std::vector<vk::DescriptorSetLayout> layouts(nbBuffers, layoutInfo.layout);
-
-    vk::DescriptorSetAllocateInfo allocInfo{
-        pool, static_cast<uint32_t>(nbBuffers), layouts.data()};
-
-    descriptorSets.resize(nbBuffers);
-    CHECK_VK_RESULT_FATAL(
-        g_device.allocateDescriptorSets(&allocInfo, descriptorSets.data()),
-        "Failed to allocate descriptor sets.");
-
-    for (size_t i = 0; i < descriptorSets.size(); ++i) {
-
-      std::vector<vk::DescriptorBufferInfo> bInfos;
-      if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic) {
-
-        vk::DescriptorBufferInfo bufferInfo{buffers[i].get_handle(), 0,
-                                            alignment * nbElements};
-        bInfos.push_back(bufferInfo);
-
-      } else {
-        for (size_t j = 0; j < nbElements; ++j) {
-          vk::DescriptorBufferInfo bufferInfo{buffers[i].get_handle(),
-                                              alignment * j, alignment};
-          bInfos.push_back(bufferInfo);
-        }
-      }
-
-      vk::WriteDescriptorSet descriptorWrite{descriptorSets[i],
-                                             0,
-                                             0,
-                                             (uint32_t)bInfos.size(),
-                                             T::DescriptorType,
-                                             nullptr,
-                                             bInfos.data(),
-                                             nullptr};
-
-      g_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
-    }
-  }
-
-  void write(uint32_t bufferIndex, const void *data, VkDeviceSize writeSize,
-             uint64_t step) const {
-
-    // TODO Support alignment for multiple elements at once
-    writeSize = (writeSize + alignment - 1) & ~(alignment - 1);
-    buffers[bufferIndex].write(data, writeSize, step * alignment);
-  }
-};
-
 struct ModelInstanceInternal : ModelInstance {
   using Transform = Eigen::Transform<float, 3, Eigen::Affine>;
 
@@ -529,9 +409,6 @@ struct RenderContext {
   Shader blurShader;
   Shader lightShader;
   Shader overlayShader;
-
-  UniformBufferObject camUBO;
-  UniformBufferObject lightsUBO;
 
   std::vector<Model *> models;
   std::vector<Light *> lights;
@@ -1022,11 +899,11 @@ struct RenderContext {
     cam.proj = Camera::ProjMatrix;
     cam.viewPos = Maths::EigenizeVec3(Camera::Position);
 
-    camUBO.write(index, &cam, sizeof(cam), 0);
+    CommonResources::CameraUBOSet.write(index, &cam, sizeof(cam), 0);
 
     commandbuffers[index].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, gShader.get_pipeline_layout(), 0, 1,
-        &camUBO.get_descriptor_set(index), 0, nullptr);
+        &CommonResources::CameraUBOSet.get_descriptor_set(index), 0, nullptr);
 
     // TODO WRAP INTO LIGHT STRUCT
     // std::vector<LightUBO> lightsUBOData;
@@ -1044,7 +921,7 @@ struct RenderContext {
       ubo.ambientFactor = lights[i]->ambientFactor;
       ubo.maxDist = lights[i]->maxDist;
 
-      lightsUBO.write(index, &ubo, sizeof(LightUBO), i);
+      CommonResources::LightUBOSet.write(index, &ubo, sizeof(LightUBO), i);
 
       // lightsUBOData.push_back(ubo);
     }
@@ -1077,7 +954,8 @@ struct RenderContext {
 
       commandbuffers[index].bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 0,
-          1, &camUBO.get_descriptor_set(index), 0, nullptr);
+          1, &CommonResources::CameraUBOSet.get_descriptor_set(index), 0,
+          nullptr);
 
       ssaoShader.bind_descriptors(commandbuffers[index], 1);
 
@@ -1142,11 +1020,12 @@ struct RenderContext {
 
     commandbuffers[index].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 0,
-        1, &camUBO.get_descriptor_set(index), 0, nullptr);
+        1, &CommonResources::CameraUBOSet.get_descriptor_set(index), 0,
+        nullptr);
 
     commandbuffers[index].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 1,
-        1, &lightsUBO.get_descriptor_set(index), 0, nullptr);
+        1, &CommonResources::LightUBOSet.get_descriptor_set(index), 0, nullptr);
 
     lightShader.bind_descriptors(commandbuffers[index], 2);
 
@@ -1200,9 +1079,6 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
-    camUBO.init(CommonResources::CameraUBOLayout);
-    lightsUBO.init(CommonResources::LightUBOLayout);
-
     init_shaders();
 
     init_commandbuffers();
@@ -1215,9 +1091,6 @@ struct RenderContext {
 
     CommonResources::DestroySamplers();
     CommonResources::DestroyPostProcessResources();
-
-    lightsUBO.~UniformBufferObject();
-    camUBO.~UniformBufferObject();
 
     destroy_framebuffers();
     destroy_commandbuffers();
