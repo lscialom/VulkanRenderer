@@ -188,6 +188,8 @@ void Shader::destroy() {
   }
 
   descriptorSets.clear();
+  ubos.clear();
+  pushConstants.clear();
 }
 
 } // namespace Renderer

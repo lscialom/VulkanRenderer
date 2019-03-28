@@ -24,7 +24,7 @@ private:
 
   vk::Extent2D extent;
 
-  bool attachmentsCleared = true;
+  bool attachmentsCleared = false;
 
   void init_render_pass(const std::vector<AttachmentInfo> &attachmentInfos) {
 
@@ -203,7 +203,7 @@ public:
 
     extent = vk::Extent2D(0, 0);
     nbColorAttachments = 0;
-    attachmentsCleared = true;
+    attachmentsCleared = false;
 
     if (framebuffer) {
       g_device.destroyFramebuffer(framebuffer, g_allocationCallbacks);
