@@ -2,23 +2,28 @@
 
 #include "shader.hpp"
 
+#include "model.hpp"
+
 namespace Renderer {
 
 struct Pass {
 private:
+  struct ShaderInternal {
+    Shader handle;
+    bool drawModels;
+  };
+
   vk::Framebuffer framebuffer;
   std::vector<Attachment> attachments;
 
   vk::RenderPass handle;
 
-  std::vector<Shader> shaders;
+  std::vector<ShaderInternal> shaders;
   uint32_t nbColorAttachments = 0;
 
-  void init_render_pass(vk::Extent2D extent,
-                        const std::vector<AttachmentInfo> &attachmentInfos) {
+  vk::Extent2D extent;
 
-    if (extent == vk::Extent2D(0, 0))
-      extent = Swapchain::GetExtent();
+  void init_render_pass(const std::vector<AttachmentInfo> &attachmentInfos) {
 
     std::vector<vk::ImageView> imageViews;
 
@@ -101,23 +106,61 @@ private:
     shaders.resize(shaderInfos.size());
 
     for (size_t i = 0; i < shaders.size(); ++i) {
-      // shaders[i].init(shaderInfos[i].vertPath, shaderInfos[i].fragPath,
-      // handle,
-      //                nbColorAttachments, shaderInfos[i].useVertexInput,
-      //                shaderInfos[i].cull, shaderInfos[i].blendEnable,
-      //                shaderInfos[i].pushConstants,
-      //                shaderInfos[i].descriptors, );
+
+      shaders[i].handle.init(shaderInfos[i].vertPath, shaderInfos[i].fragPath,
+                             handle, nbColorAttachments,
+                             shaderInfos[i].useVertexInput, shaderInfos[i].cull,
+                             shaderInfos[i].blendEnable,
+                             shaderInfos[i].pushConstants,
+                             shaderInfos[i].descriptors, shaderInfos[i].ubos);
+
+      shaders[i].drawModels = shaderInfos[i].drawModels;
     }
   }
 
 public:
   // TODO Manage multiple attachment extents
-  void init(vk::Extent2D extent,
+  void init(vk::Extent2D attachmentsExtent,
             const std::vector<AttachmentInfo> &attachmentInfos,
             const std::vector<ShaderInfo> &shaderInfos) {
 
-    init_render_pass(extent, attachmentInfos);
+    extent = attachmentsExtent;
+    if (extent == vk::Extent2D(0, 0))
+      extent = Swapchain::GetExtent();
+
+    init_render_pass(attachmentInfos);
     init_shaders(shaderInfos);
+  }
+
+  void record(const vk::CommandBuffer &commandbuffer, uint32_t frameIndex,
+              const std::vector<std::vector<void *>> &pushConstantData,
+              vk::ClearValue clearValue,
+              const std::vector<Model *> &models = {}) const {
+
+    vk::RenderPassBeginInfo renderPassInfo(handle, framebuffer,
+                                           {{0, 0}, extent}, 1, &clearValue);
+
+    commandbuffer.beginRenderPass(&renderPassInfo,
+                                  vk::SubpassContents::eInline);
+
+    for (size_t i = 0; i < shaders.size(); ++i) {
+
+      shaders[i].handle.bind_pipeline(commandbuffer);
+      shaders[i].handle.bind_resources(commandbuffer, frameIndex,
+                                       pushConstantData[i]);
+
+      if (shaders[i].drawModels) {
+
+        // TODO Call a function from renderContext instead + move it in
+        // global_context
+        for (size_t i = 0; i < models.size(); ++i)
+          models[i]->record(commandbuffer, shaders[i].handle, frameIndex);
+
+      } else
+        commandbuffer.draw(6, 1, 0, 0);
+    }
+
+    commandbuffer.endRenderPass();
   }
 };
 } // namespace Renderer

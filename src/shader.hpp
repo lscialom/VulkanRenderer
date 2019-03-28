@@ -13,10 +13,12 @@ struct ShaderInfo {
   std::string fragPath;
   std::vector<vk::PushConstantRange> pushConstants;
   std::vector<DescriptorSetInfo> descriptors;
+  std::vector<UniformBufferObject *> ubos;
 
   bool useVertexInput;
   bool cull;
   bool blendEnable;
+  bool drawModels;
 };
 
 struct Shader {
@@ -25,6 +27,7 @@ private:
   vk::PipelineLayout pipelineLayout;
 
   std::vector<DescriptorSet> descriptorSets;
+  std::vector<UniformBufferObject *> ubos;
   std::vector<vk::PushConstantRange> pushConstants;
 
   void init_descriptors(const std::vector<DescriptorSetInfo> &descriptors);
@@ -51,9 +54,16 @@ public:
             bool useVertexInput, bool cull, bool blendEnable,
             const std::vector<vk::PushConstantRange> &pcRanges = {},
             const std::vector<DescriptorSetInfo> &descriptors = {},
-            const std::vector<vk::DescriptorSetLayout> &uboLayouts = {}) {
+            const std::vector<UniformBufferObject *> &vUbo = {}) {
 
     pushConstants = pcRanges;
+    ubos = vUbo;
+
+    std::vector<vk::DescriptorSetLayout> uboLayouts;
+    uboLayouts.resize(ubos.size());
+
+    for (size_t i = 0; i < uboLayouts.size(); ++i)
+      uboLayouts[i] = ubos[i]->get_layout();
 
     init_descriptors(descriptors);
     init_pipeline(vertPath, fragPath, renderPass, nbColorAttachments,
@@ -77,14 +87,34 @@ public:
   void bind_pushConstants(const vk::CommandBuffer &commandbuffer,
                           const std::vector<void *> &data) const {
 
-    assert(data.size() == pushConstants.size());
+    assert(data.size() <= pushConstants.size());
 
-    for (size_t i = 0; i < pushConstants.size(); ++i) {
+    for (size_t i = 0; i < data.size(); ++i) {
       commandbuffer.pushConstants(
           pipelineLayout,
           vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
           pushConstants[i].offset, pushConstants[i].size, data[i]);
     }
+  }
+
+  void bind_ubos(const vk::CommandBuffer &commandbuffer,
+                 uint32_t frameIndex) const {
+
+    for (size_t i = 0; i < ubos.size(); ++i) {
+
+      commandbuffer.bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, pipelineLayout, i, 1,
+          &ubos[i]->get_descriptor_set(frameIndex), 0, nullptr);
+    }
+  }
+
+  void bind_resources(const vk::CommandBuffer &commandbuffer,
+                      uint32_t frameIndex,
+                      const std::vector<void *> &pushConstantData) const {
+
+    bind_ubos(commandbuffer, frameIndex);
+    bind_descriptors(commandbuffer, ubos.size());
+    bind_pushConstants(commandbuffer, pushConstantData);
   }
 
   void destroy();

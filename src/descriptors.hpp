@@ -58,6 +58,9 @@ private:
 
   vk::DescriptorPool pool;
 
+  // Does not own it
+  vk::DescriptorSetLayout layout;
+
   size_t alignment = 0;
 
 public:
@@ -87,6 +90,7 @@ public:
   const vk::DescriptorSet &get_descriptor_set(size_t index) const {
     return descriptorSets[index];
   }
+  vk::DescriptorSetLayout get_layout() const { return layout; }
 
   template <typename T> void init(T layoutInfo) {
     if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic ||
@@ -100,6 +104,8 @@ public:
       }
     } else
       alignment = T::Size;
+
+    layout = layoutInfo.layout;
 
     size_t nbElements = T::ArraySize;
     size_t nbBuffers = Swapchain::ImageCount();
@@ -122,7 +128,7 @@ public:
                           vk::MemoryPropertyFlagBits::eHostCoherent |
                               vk::MemoryPropertyFlagBits::eHostVisible);
 
-    std::vector<vk::DescriptorSetLayout> layouts(nbBuffers, layoutInfo.layout);
+    std::vector<vk::DescriptorSetLayout> layouts(nbBuffers, layout);
 
     vk::DescriptorSetAllocateInfo allocInfo{
         pool, static_cast<uint32_t>(nbBuffers), layouts.data()};
