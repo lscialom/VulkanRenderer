@@ -160,9 +160,7 @@ public:
     return descriptorSets[index];
   }
 
-  template <typename T>
-  void init(vk::DescriptorSetLayout layout,
-            size_t nbElements = MAX_OBJECT_INSTANCES_PER_TEMPLATE) {
+  template <typename T> void init(T layoutInfo) {
     if (T::DescriptorType == vk::DescriptorType::eUniformBufferDynamic ||
         T::DescriptorType == vk::DescriptorType::eUniformBuffer) {
       size_t minUboAlignment = g_physicalDevice.getProperties()
@@ -175,6 +173,7 @@ public:
     } else
       alignment = T::Size;
 
+    size_t nbElements = T::ArraySize;
     size_t nbBuffers = Swapchain::ImageCount();
 
     vk::DescriptorPoolSize poolSize{vk::DescriptorType::eUniformBuffer,
@@ -195,7 +194,7 @@ public:
                           vk::MemoryPropertyFlagBits::eHostCoherent |
                               vk::MemoryPropertyFlagBits::eHostVisible);
 
-    std::vector<vk::DescriptorSetLayout> layouts(nbBuffers, layout);
+    std::vector<vk::DescriptorSetLayout> layouts(nbBuffers, layoutInfo.layout);
 
     vk::DescriptorSetAllocateInfo allocInfo{
         pool, static_cast<uint32_t>(nbBuffers), layouts.data()};
@@ -1201,19 +1200,8 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
-    {
-
-      camUBO.init<decltype(CommonResources::CameraUBOLayout)>(
-          CommonResources::CameraUBOLayout.layout,
-          decltype(CommonResources::CameraUBOLayout)::ArraySize);
-    }
-
-    {
-
-      lightsUBO.init<decltype(CommonResources::LightUBOLayout)>(
-          CommonResources::LightUBOLayout.layout,
-          decltype(CommonResources::LightUBOLayout)::ArraySize);
-    }
+    camUBO.init(CommonResources::CameraUBOLayout);
+    lightsUBO.init(CommonResources::LightUBOLayout);
 
     init_shaders();
 
