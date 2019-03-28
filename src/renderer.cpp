@@ -149,7 +149,6 @@ struct RenderContext {
 
   Shader gShader;
   Shader ssaoShader;
-  Shader blurShader;
   Shader lightShader;
   Shader overlayShader;
 
@@ -431,7 +430,6 @@ struct RenderContext {
   void destroy_shaders() {
     gShader.destroy();
     ssaoShader.destroy();
-    blurShader.destroy();
     lightShader.destroy();
     overlayShader.destroy();
   }
