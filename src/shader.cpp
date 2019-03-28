@@ -177,8 +177,15 @@ void Shader::init_pipeline(
 }
 
 void Shader::destroy() {
-  g_device.destroyPipeline(pipeline, g_allocationCallbacks);
-  g_device.destroyPipelineLayout(pipelineLayout, g_allocationCallbacks);
+  if (pipeline) {
+    g_device.destroyPipeline(pipeline, g_allocationCallbacks);
+    pipeline = nullptr;
+  }
+
+  if (pipelineLayout) {
+    g_device.destroyPipelineLayout(pipelineLayout, g_allocationCallbacks);
+    pipelineLayout = nullptr;
+  }
 
   descriptorSets.clear();
 }

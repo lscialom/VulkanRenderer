@@ -127,11 +127,9 @@ struct RenderContext {
   vk::Framebuffer geomFramebuffer;
 
   vk::Framebuffer ssaoFramebuffer;
-  vk::Framebuffer blurFramebuffer;
 
   vk::RenderPass geomRenderPass;
   vk::RenderPass ssaoRenderPass;
-  vk::RenderPass blurRenderPass;
   vk::RenderPass lightRenderPass;
 
   Attachment depthAttachment;
@@ -140,7 +138,6 @@ struct RenderContext {
   Attachment colorAttachment;
 
   Attachment ssaoColorAttachment;
-  Attachment blurColorAttachment;
 
   static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
 
@@ -158,6 +155,35 @@ struct RenderContext {
 
   std::vector<Model *> models;
   std::vector<Light *> lights;
+
+  Pass blurPass;
+
+  void init_blur_pass() {
+    vk::Extent2D extent = Swapchain::GetExtent();
+
+    AttachmentInfo attachmentInfo;
+    attachmentInfo.extent = extent;
+    attachmentInfo.format = vk::Format::eR32Sfloat;
+    attachmentInfo.isDepth = false;
+
+    DescriptorSetInfo descriptorSetInfo;
+    descriptorSetInfo.layout = CommonResources::UniqueTextureLayout;
+    descriptorSetInfo.samplers = {&CommonResources::BaseSampler};
+    descriptorSetInfo.images = {&ssaoColorAttachment.get_image()};
+
+    ShaderInfo shaderInfo;
+    shaderInfo.vertPath = "../resources/shaders/spv/blur.vert.spv";
+    shaderInfo.fragPath = "../resources/shaders/spv/blur.frag.spv";
+    shaderInfo.useVertexInput = false;
+    shaderInfo.cull = false;
+    shaderInfo.blendEnable = false;
+    shaderInfo.drawModels = false;
+    shaderInfo.descriptors = {descriptorSetInfo};
+
+    blurPass.init(extent, {attachmentInfo}, {shaderInfo});
+  }
+
+  void destroy_blur_pass() { blurPass.destroy(); }
 
   void init_render_passes() {
     {
@@ -278,46 +304,6 @@ struct RenderContext {
     }
 
     {
-      // Third Pass
-      std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {};
-
-      blurColorAttachment.requiredFormat = vk::Format::eR32Sfloat;
-
-      attachmentDescriptions[0] =
-          blurColorAttachment.make_attachment_description(
-              vk::ImageLayout::eShaderReadOnlyOptimal,
-              vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      // Color Attachments
-      std::array<vk::AttachmentReference, 1> colorRefs;
-
-      colorRefs[0] =
-          vk::AttachmentReference(0, vk::ImageLayout::eColorAttachmentOptimal);
-
-      vk::SubpassDescription subpass(
-          vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
-          nullptr, static_cast<uint32_t>(colorRefs.size()), colorRefs.data(),
-          nullptr, nullptr);
-
-      vk::RenderPassCreateInfo renderPassInfo(
-          vk::RenderPassCreateFlags(),
-          static_cast<uint32_t>(attachmentDescriptions.size()),
-          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
-
-      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
-                                                      g_allocationCallbacks,
-                                                      &blurRenderPass),
-                            "Failed to create render pass.");
-
-#ifndef NDEBUG
-      g_device.setDebugUtilsObjectNameEXT(
-          {vk::ObjectType::eRenderPass,
-           (uint64_t)((VkRenderPass)blurRenderPass), "Blur Render Pass"},
-          g_dldy);
-#endif
-    }
-
-    {
       // Fourth Pass
       std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {
           Swapchain::GetAttachmentDescription()};
@@ -359,7 +345,6 @@ struct RenderContext {
   void destroy_render_pass() {
     g_device.destroyRenderPass(geomRenderPass, g_allocationCallbacks);
     g_device.destroyRenderPass(ssaoRenderPass, g_allocationCallbacks);
-    g_device.destroyRenderPass(blurRenderPass, g_allocationCallbacks);
     g_device.destroyRenderPass(lightRenderPass, g_allocationCallbacks);
   }
 
@@ -372,8 +357,8 @@ struct RenderContext {
     pushConstantRanges.push_back(
         modelInstancePushConstantRange.make_push_constant_range());
 
-	std::vector<UniformBufferObject*> ubos;
-	ubos.push_back(&CommonResources::CameraUBOSet);
+    std::vector<UniformBufferObject *> ubos;
+    ubos.push_back(&CommonResources::CameraUBOSet);
 
     gShader.init("../resources/shaders/spv/geom.vert.spv",
                  "../resources/shaders/spv/geom.frag.spv", geomRenderPass, 3,
@@ -404,20 +389,7 @@ struct RenderContext {
 
     ssaoShader.init("../resources/shaders/spv/ssao.vert.spv",
                     "../resources/shaders/spv/ssao.frag.spv", ssaoRenderPass, 1,
-                    false, false, false, pushConstantRanges, dsInfo,
-		ubos);
-
-    pushConstantRanges.clear();
-
-    dsInfo.clear();
-    dsInfo.push_back({CommonResources::UniqueTextureLayout,
-                      {},
-                      {&ssaoColorAttachment.get_image()},
-                      {&CommonResources::BaseSampler}});
-
-    blurShader.init("../resources/shaders/spv/blur.vert.spv",
-                    "../resources/shaders/spv/blur.frag.spv", blurRenderPass, 1,
-                    false, false, false, pushConstantRanges, dsInfo);
+                    false, false, false, pushConstantRanges, dsInfo, ubos);
 
     pushConstantRanges.clear();
     PushConstantDescriptor<LightPassPushConstant> lightPassPushConstantRange{};
@@ -430,7 +402,7 @@ struct RenderContext {
     dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
     dsInfo.push_back({CommonResources::UniqueTextureLayout,
                       {},
-                      {&blurColorAttachment.get_image()},
+                      {&blurPass.get_attachment_image()},
                       {&CommonResources::BaseSampler}});
     dsInfo.push_back({CommonResources::UniqueTextureLayout,
                       {},
@@ -439,8 +411,7 @@ struct RenderContext {
 
     lightShader.init("../resources/shaders/spv/light.vert.spv",
                      "../resources/shaders/spv/light.frag.spv", lightRenderPass,
-                     1, false, false, true, pushConstantRanges, dsInfo,
-                     ubos);
+                     1, false, false, true, pushConstantRanges, dsInfo, ubos);
 
     pushConstantRanges.clear();
 
@@ -524,24 +495,6 @@ struct RenderContext {
     }
 
     {
-      blurColorAttachment.init(Swapchain::GetExtent().width,
-                               Swapchain::GetExtent().height);
-
-      std::array<vk::ImageView, 1> attachments;
-      attachments[0] = blurColorAttachment.get_image_view();
-
-      vk::FramebufferCreateInfo framebufferInfo(
-          vk::FramebufferCreateFlags(), blurRenderPass,
-          static_cast<uint32_t>(attachments.size()), attachments.data(),
-          extent.width, extent.height, 1);
-
-      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
-                                                       g_allocationCallbacks,
-                                                       &blurFramebuffer),
-                            "Failed to create framebuffer.");
-    }
-
-    {
       const std::vector<vk::ImageView> &attachments =
           Swapchain::GetImageViews();
 
@@ -569,7 +522,6 @@ struct RenderContext {
 
     g_device.destroyFramebuffer(geomFramebuffer, g_allocationCallbacks);
     g_device.destroyFramebuffer(ssaoFramebuffer, g_allocationCallbacks);
-    g_device.destroyFramebuffer(blurFramebuffer, g_allocationCallbacks);
 
     depthAttachment.destroy();
     posAttachment.destroy();
@@ -577,7 +529,6 @@ struct RenderContext {
     colorAttachment.destroy();
 
     ssaoColorAttachment.destroy();
-    blurColorAttachment.destroy();
   }
 
   void init_commandbuffers() {
@@ -677,17 +628,18 @@ struct RenderContext {
 
     commandbuffers[index].endRenderPass();
 
+    static constexpr const std::array<float, 4> whiteClearColorArray = {
+        {1.0f, 1.0f, 1.0f, 1.0f}};
+
+    vk::ClearColorValue whiteClearColorValue = whiteClearColorArray;
+    vk::ClearValue whiteClearValue = (vk::ClearValue)whiteClearColorValue;
+
     // ssao pass
     if (Config::SSAOEnable) {
-      static constexpr const std::array<float, 4> ssaoClearColorArray = {
-          {1.0f, 1.0f, 1.0f, 1.0f}};
-
-      vk::ClearColorValue ssaoClearColorValue = ssaoClearColorArray;
-      vk::ClearValue ssaoClearValue = (vk::ClearValue)ssaoClearColorValue;
 
       vk::RenderPassBeginInfo ssaoRenderPassInfo(
           ssaoRenderPass, ssaoFramebuffer, {{0, 0}, extent}, 1,
-          &ssaoClearValue);
+          &whiteClearValue);
 
       commandbuffers[index].beginRenderPass(&ssaoRenderPassInfo,
                                             vk::SubpassContents::eInline);
@@ -715,38 +667,10 @@ struct RenderContext {
 
       commandbuffers[index].endRenderPass();
 
-      // Blur result
-      vk::RenderPassBeginInfo blurRenderPassInfo(
-          blurRenderPass, blurFramebuffer, {{0, 0}, extent}, 1,
-          &ssaoClearValue);
+      blurPass.record(commandbuffers[index], index, {}, whiteClearValue);
 
-      commandbuffers[index].beginRenderPass(&blurRenderPassInfo,
-                                            vk::SubpassContents::eInline);
-
-      blurShader.bind_pipeline(commandbuffers[index]);
-      blurShader.bind_descriptors(commandbuffers[index]);
-
-      // Draw scene into texture
-      commandbuffers[index].draw(6, 1, 0, 0);
-
-      commandbuffers[index].endRenderPass();
-    } else {
-      // TODO Clear instead of blank pass
-      static constexpr const std::array<float, 4> blurClearColorArray = {
-          {1.0f, 1.0f, 1.0f, 1.0f}};
-
-      vk::ClearColorValue blurClearColorValue = blurClearColorArray;
-      vk::ClearValue blurClearValue = (vk::ClearValue)blurClearColorValue;
-
-      vk::RenderPassBeginInfo blurRenderPassInfo(
-          blurRenderPass, blurFramebuffer, {{0, 0}, extent}, 1,
-          &blurClearValue);
-
-      commandbuffers[index].beginRenderPass(&blurRenderPassInfo,
-                                            vk::SubpassContents::eInline);
-
-      commandbuffers[index].endRenderPass();
-    }
+    } else
+      blurPass.record_clear_attachments(commandbuffers[index], whiteClearValue);
 
     // light pass
     vk::ClearValue clearValue = (vk::ClearValue)clearColorValue;
@@ -821,6 +745,8 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
+    init_blur_pass();
+
     init_shaders();
 
     init_commandbuffers();
@@ -836,6 +762,8 @@ struct RenderContext {
 
     destroy_framebuffers();
     destroy_commandbuffers();
+
+    destroy_blur_pass();
 
     destroy_shaders();
     destroy_render_pass();
@@ -862,6 +790,8 @@ struct RenderContext {
     destroy_framebuffers();
     destroy_commandbuffers();
 
+    destroy_blur_pass();
+
     destroy_shaders();
 
     Swapchain::Destroy();
@@ -869,6 +799,8 @@ struct RenderContext {
 
     init_framebuffers();
     init_commandbuffers();
+
+    init_blur_pass();
 
     init_shaders();
 

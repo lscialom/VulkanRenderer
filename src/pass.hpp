@@ -11,6 +11,7 @@ private:
   struct ShaderInternal {
     Shader handle;
     bool drawModels;
+    bool hasPushConstants;
   };
 
   vk::Framebuffer framebuffer;
@@ -22,6 +23,8 @@ private:
   uint32_t nbColorAttachments = 0;
 
   vk::Extent2D extent;
+
+  bool attachmentsCleared = true;
 
   void init_render_pass(const std::vector<AttachmentInfo> &attachmentInfos) {
 
@@ -79,7 +82,7 @@ private:
     vk::SubpassDescription subpass(
         vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
         nullptr, static_cast<uint32_t>(colorRefs.size()), colorRefs.data(),
-        nullptr, &depthAttachmentRef);
+        nullptr, (depthCount ? &depthAttachmentRef : nullptr));
 
     vk::RenderPassCreateInfo renderPassInfo(
         vk::RenderPassCreateFlags(),
@@ -115,10 +118,13 @@ private:
                              shaderInfos[i].descriptors, shaderInfos[i].ubos);
 
       shaders[i].drawModels = shaderInfos[i].drawModels;
+      shaders[i].hasPushConstants = !shaderInfos[i].pushConstants.empty();
     }
   }
 
 public:
+  ~Pass() { destroy(); }
+
   // TODO Manage multiple attachment extents
   void init(vk::Extent2D attachmentsExtent,
             const std::vector<AttachmentInfo> &attachmentInfos,
@@ -135,7 +141,7 @@ public:
   void record(const vk::CommandBuffer &commandbuffer, uint32_t frameIndex,
               const std::vector<std::vector<void *>> &pushConstantData,
               vk::ClearValue clearValue,
-              const std::vector<Model *> &models = {}) const {
+              const std::vector<Model *> &models = {}) {
 
     vk::RenderPassBeginInfo renderPassInfo(handle, framebuffer,
                                            {{0, 0}, extent}, 1, &clearValue);
@@ -143,11 +149,18 @@ public:
     commandbuffer.beginRenderPass(&renderPassInfo,
                                   vk::SubpassContents::eInline);
 
+    size_t currentPushConstantDataIndex = 0;
     for (size_t i = 0; i < shaders.size(); ++i) {
 
       shaders[i].handle.bind_pipeline(commandbuffer);
-      shaders[i].handle.bind_resources(commandbuffer, frameIndex,
-                                       pushConstantData[i]);
+
+      if (shaders[i].hasPushConstants) {
+        shaders[i].handle.bind_resources(
+            commandbuffer, frameIndex,
+            pushConstantData[currentPushConstantDataIndex++]);
+      } else {
+        shaders[i].handle.bind_resources(commandbuffer, frameIndex);
+      }
 
       if (shaders[i].drawModels) {
 
@@ -161,6 +174,50 @@ public:
     }
 
     commandbuffer.endRenderPass();
+
+    attachmentsCleared = false;
+  }
+
+  void record_clear_attachments(const vk::CommandBuffer &commandbuffer,
+                                vk::ClearValue clearValue, size_t index = 0) {
+
+    if (attachmentsCleared)
+      return;
+
+    vk::RenderPassBeginInfo renderPassInfo(handle, framebuffer,
+                                           {{0, 0}, extent}, 1, &clearValue);
+
+    commandbuffer.beginRenderPass(&renderPassInfo,
+                                  vk::SubpassContents::eInline);
+
+    commandbuffer.endRenderPass();
+
+    attachmentsCleared = true;
+  }
+
+  const Image &get_attachment_image(size_t index = 0) const {
+    return attachments[index].get_image();
+  }
+
+  void destroy() {
+
+    extent = vk::Extent2D(0, 0);
+    nbColorAttachments = 0;
+    attachmentsCleared = true;
+
+    if (framebuffer) {
+      g_device.destroyFramebuffer(framebuffer, g_allocationCallbacks);
+      framebuffer = nullptr;
+    }
+
+    attachments.clear();
+
+    shaders.clear();
+
+    if (handle) {
+      g_device.destroyRenderPass(handle, g_allocationCallbacks);
+      handle = nullptr;
+    }
   }
 };
 } // namespace Renderer

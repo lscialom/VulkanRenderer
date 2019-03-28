@@ -39,6 +39,8 @@ private:
                      const std::vector<vk::DescriptorSetLayout> &uboLayouts);
 
 public:
+  ~Shader() { destroy(); }
+
   const vk::PipelineLayout get_pipeline_layout() const {
     return pipelineLayout;
   }
@@ -110,7 +112,7 @@ public:
 
   void bind_resources(const vk::CommandBuffer &commandbuffer,
                       uint32_t frameIndex,
-                      const std::vector<void *> &pushConstantData) const {
+                      const std::vector<void *> &pushConstantData = {}) const {
 
     bind_ubos(commandbuffer, frameIndex);
     bind_descriptors(commandbuffer, ubos.size());
