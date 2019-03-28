@@ -126,18 +126,13 @@ struct RenderContext {
   std::vector<vk::Framebuffer> presentFramebuffers;
   vk::Framebuffer geomFramebuffer;
 
-  vk::Framebuffer ssaoFramebuffer;
-
   vk::RenderPass geomRenderPass;
-  vk::RenderPass ssaoRenderPass;
   vk::RenderPass lightRenderPass;
 
   Attachment depthAttachment;
   Attachment posAttachment;
   Attachment normalAttachment;
   Attachment colorAttachment;
-
-  Attachment ssaoColorAttachment;
 
   static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
 
@@ -148,14 +143,68 @@ struct RenderContext {
   static constexpr uint32_t gPassAttachmentCount = G_BUFFER_SIZE;
 
   Shader gShader;
-  Shader ssaoShader;
   Shader lightShader;
   Shader overlayShader;
 
   std::vector<Model *> models;
   std::vector<Light *> lights;
 
+  Pass ssaoPass;
   Pass blurPass;
+
+  void init_ssao_pass() {
+    vk::Extent2D extent = Swapchain::GetExtent();
+
+    AttachmentInfo attachmentInfo;
+    attachmentInfo.extent = extent;
+    attachmentInfo.format = vk::Format::eR32Sfloat;
+    attachmentInfo.isDepth = false;
+
+    std::vector<const Image *> images;
+    images.resize(G_BUFFER_SIZE);
+
+    images[posAttachmentArrayIndex] = &posAttachment.get_image();
+    images[normalAttachmentArrayIndex] = &normalAttachment.get_image();
+    images[colorAttachmentArrayIndex] = &colorAttachment.get_image();
+    images[depthAttachmentArrayIndex] = &depthAttachment.get_image();
+
+    std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
+                                              &CommonResources::BaseSampler);
+
+    std::vector<UniformBufferObject *> ubos;
+    ubos.push_back(&CommonResources::CameraUBOSet);
+
+    std::vector<vk::PushConstantRange> pushConstantRanges;
+
+    PushConstantDescriptor<SSAOPassPushConstant> ssaoPassPushConstantRange{};
+    pushConstantRanges.push_back(
+        ssaoPassPushConstantRange.make_push_constant_range());
+
+    std::vector<DescriptorSetInfo> descriptorSetInfos;
+    descriptorSetInfos.resize(2);
+
+    descriptorSetInfos[0].layout = CommonResources::GBufferLayout;
+    descriptorSetInfos[0].images = images;
+    descriptorSetInfos[0].samplers = samplers;
+
+    descriptorSetInfos[1].layout = CommonResources::SSAOLayout;
+    descriptorSetInfos[1].buffers = {&CommonResources::SSAOKernelBuffer};
+    descriptorSetInfos[1].images = {&CommonResources::SSAONoiseTex};
+    descriptorSetInfos[1].samplers = {&CommonResources::RepeatSampler};
+
+    ShaderInfo shaderInfo;
+    shaderInfo.vertPath = "../resources/shaders/spv/ssao.vert.spv";
+    shaderInfo.fragPath = "../resources/shaders/spv/ssao.frag.spv";
+    shaderInfo.useVertexInput = false;
+    shaderInfo.cull = false;
+    shaderInfo.blendEnable = false;
+    shaderInfo.drawModels = false;
+    shaderInfo.pushConstants = pushConstantRanges;
+    shaderInfo.descriptors = descriptorSetInfos;
+    shaderInfo.ubos = ubos;
+
+    ssaoPass.init(extent, {attachmentInfo}, {shaderInfo});
+  }
 
   void init_blur_pass() {
     vk::Extent2D extent = Swapchain::GetExtent();
@@ -168,7 +217,7 @@ struct RenderContext {
     DescriptorSetInfo descriptorSetInfo;
     descriptorSetInfo.layout = CommonResources::UniqueTextureLayout;
     descriptorSetInfo.samplers = {&CommonResources::BaseSampler};
-    descriptorSetInfo.images = {&ssaoColorAttachment.get_image()};
+    descriptorSetInfo.images = {&ssaoPass.get_attachment_image()};
 
     ShaderInfo shaderInfo;
     shaderInfo.vertPath = "../resources/shaders/spv/blur.vert.spv";
@@ -181,6 +230,8 @@ struct RenderContext {
 
     blurPass.init(extent, {attachmentInfo}, {shaderInfo});
   }
+
+  void destroy_ssao_pass() { ssaoPass.destroy(); }
 
   void destroy_blur_pass() { blurPass.destroy(); }
 
@@ -263,46 +314,6 @@ struct RenderContext {
     }
 
     {
-      // Second Pass
-      std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {};
-
-      ssaoColorAttachment.requiredFormat = vk::Format::eR32Sfloat;
-
-      attachmentDescriptions[0] =
-          ssaoColorAttachment.make_attachment_description(
-              vk::ImageLayout::eShaderReadOnlyOptimal,
-              vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      // Color Attachments
-      std::array<vk::AttachmentReference, 1> colorRefs;
-
-      colorRefs[0] =
-          vk::AttachmentReference(0, vk::ImageLayout::eColorAttachmentOptimal);
-
-      vk::SubpassDescription subpass(
-          vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
-          nullptr, static_cast<uint32_t>(colorRefs.size()), colorRefs.data(),
-          nullptr, nullptr);
-
-      vk::RenderPassCreateInfo renderPassInfo(
-          vk::RenderPassCreateFlags(),
-          static_cast<uint32_t>(attachmentDescriptions.size()),
-          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
-
-      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
-                                                      g_allocationCallbacks,
-                                                      &ssaoRenderPass),
-                            "Failed to create render pass.");
-
-#ifndef NDEBUG
-      g_device.setDebugUtilsObjectNameEXT(
-          {vk::ObjectType::eRenderPass,
-           (uint64_t)((VkRenderPass)ssaoRenderPass), "SSAO Render Pass"},
-          g_dldy);
-#endif
-    }
-
-    {
       // Fourth Pass
       std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {
           Swapchain::GetAttachmentDescription()};
@@ -343,7 +354,6 @@ struct RenderContext {
 
   void destroy_render_pass() {
     g_device.destroyRenderPass(geomRenderPass, g_allocationCallbacks);
-    g_device.destroyRenderPass(ssaoRenderPass, g_allocationCallbacks);
     g_device.destroyRenderPass(lightRenderPass, g_allocationCallbacks);
   }
 
@@ -363,11 +373,6 @@ struct RenderContext {
                  "../resources/shaders/spv/geom.frag.spv", geomRenderPass, 3,
                  true, true, false, pushConstantRanges, {}, ubos);
 
-    pushConstantRanges.clear();
-    PushConstantDescriptor<SSAOPassPushConstant> ssaoPassPushConstantRange{};
-    pushConstantRanges.push_back(
-        ssaoPassPushConstantRange.make_push_constant_range());
-
     std::vector<const Image *> images;
     images.resize(G_BUFFER_SIZE);
 
@@ -379,17 +384,6 @@ struct RenderContext {
     std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
                                               &CommonResources::BaseSampler);
 
-    std::vector<DescriptorSetInfo> dsInfo;
-    dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
-    dsInfo.push_back({CommonResources::SSAOLayout,
-                      {&CommonResources::SSAOKernelBuffer},
-                      {&CommonResources::SSAONoiseTex},
-                      {&CommonResources::RepeatSampler}});
-
-    ssaoShader.init("../resources/shaders/spv/ssao.vert.spv",
-                    "../resources/shaders/spv/ssao.frag.spv", ssaoRenderPass, 1,
-                    false, false, false, pushConstantRanges, dsInfo, ubos);
-
     pushConstantRanges.clear();
     PushConstantDescriptor<LightPassPushConstant> lightPassPushConstantRange{};
     pushConstantRanges.push_back(
@@ -397,7 +391,8 @@ struct RenderContext {
 
     ubos.push_back(&CommonResources::LightUBOSet);
 
-    dsInfo.clear();
+    std::vector<DescriptorSetInfo> dsInfo;
+
     dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
     dsInfo.push_back({CommonResources::UniqueTextureLayout,
                       {},
@@ -429,7 +424,6 @@ struct RenderContext {
 
   void destroy_shaders() {
     gShader.destroy();
-    ssaoShader.destroy();
     lightShader.destroy();
     overlayShader.destroy();
   }
@@ -475,24 +469,6 @@ struct RenderContext {
     }
 
     {
-      ssaoColorAttachment.init(Swapchain::GetExtent().width,
-                               Swapchain::GetExtent().height);
-
-      std::array<vk::ImageView, 1> attachments;
-      attachments[0] = ssaoColorAttachment.get_image_view();
-
-      vk::FramebufferCreateInfo framebufferInfo(
-          vk::FramebufferCreateFlags(), ssaoRenderPass,
-          static_cast<uint32_t>(attachments.size()), attachments.data(),
-          extent.width, extent.height, 1);
-
-      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
-                                                       g_allocationCallbacks,
-                                                       &ssaoFramebuffer),
-                            "Failed to create framebuffer.");
-    }
-
-    {
       const std::vector<vk::ImageView> &attachments =
           Swapchain::GetImageViews();
 
@@ -519,14 +495,11 @@ struct RenderContext {
                                   g_allocationCallbacks);
 
     g_device.destroyFramebuffer(geomFramebuffer, g_allocationCallbacks);
-    g_device.destroyFramebuffer(ssaoFramebuffer, g_allocationCallbacks);
 
     depthAttachment.destroy();
     posAttachment.destroy();
     normalAttachment.destroy();
     colorAttachment.destroy();
-
-    ssaoColorAttachment.destroy();
   }
 
   void init_commandbuffers() {
@@ -635,36 +608,12 @@ struct RenderContext {
     // ssao pass
     if (Config::SSAOEnable) {
 
-      vk::RenderPassBeginInfo ssaoRenderPassInfo(
-          ssaoRenderPass, ssaoFramebuffer, {{0, 0}, extent}, 1,
-          &whiteClearValue);
-
-      commandbuffers[index].beginRenderPass(&ssaoRenderPassInfo,
-                                            vk::SubpassContents::eInline);
-
-      ssaoShader.bind_pipeline(commandbuffers[index]);
-
-      commandbuffers[index].bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, ssaoShader.get_pipeline_layout(), 0,
-          1, &CommonResources::CameraUBOSet.get_descriptor_set(index), 0,
-          nullptr);
-
-      ssaoShader.bind_descriptors(commandbuffers[index], 1);
-
       SSAOPassPushConstant ssaoPassPushConstant{};
       ssaoPassPushConstant.xExtent = extent.width;
       ssaoPassPushConstant.yExtent = extent.height;
 
-      commandbuffers[index].pushConstants(
-          ssaoShader.get_pipeline_layout(),
-          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-          0, sizeof(ssaoPassPushConstant), &ssaoPassPushConstant);
-
-      // Draw scene into texture
-      commandbuffers[index].draw(6, 1, 0, 0);
-
-      commandbuffers[index].endRenderPass();
-
+      ssaoPass.record(commandbuffers[index], index, {{&ssaoPassPushConstant}},
+                      whiteClearValue);
       blurPass.record(commandbuffers[index], index, {}, whiteClearValue);
 
     } else
@@ -743,6 +692,7 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
+    init_ssao_pass();
     init_blur_pass();
 
     init_shaders();
@@ -762,6 +712,7 @@ struct RenderContext {
     destroy_commandbuffers();
 
     destroy_blur_pass();
+    destroy_ssao_pass();
 
     destroy_shaders();
     destroy_render_pass();
@@ -789,6 +740,7 @@ struct RenderContext {
     destroy_commandbuffers();
 
     destroy_blur_pass();
+    destroy_ssao_pass();
 
     destroy_shaders();
 
@@ -798,6 +750,7 @@ struct RenderContext {
     init_framebuffers();
     init_commandbuffers();
 
+    init_ssao_pass();
     init_blur_pass();
 
     init_shaders();
