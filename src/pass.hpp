@@ -12,9 +12,12 @@ private:
     Shader handle;
     bool drawModels;
     bool hasPushConstants;
+
+    // See ShaderInfo struct for more details about this variable
+    uint32_t drawRectCount;
   };
 
-  vk::Framebuffer framebuffer;
+  std::vector<vk::Framebuffer> framebuffers;
   std::vector<Attachment> attachments;
 
   vk::RenderPass handle;
@@ -24,9 +27,11 @@ private:
 
   vk::Extent2D extent;
 
+  bool offscreen;
+
   bool attachmentsCleared = false;
 
-  void init_render_pass(const std::vector<AttachmentInfo> &attachmentInfos) {
+  void init_render_pass_offscreen(const std::vector<AttachmentInfo> &attachmentInfos) {
 
     std::vector<vk::ImageView> imageViews;
 
@@ -98,14 +103,18 @@ private:
         static_cast<uint32_t>(imageViews.size()), imageViews.data(),
         extent.width, extent.height, 1);
 
+    framebuffers.resize(1);
+
     // TODO Make one framebuffer per different attachment sizes
     CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
                                                      g_allocationCallbacks,
-                                                     &framebuffer),
+                                                     &framebuffers[0]),
                           "Failed to create framebuffer.");
   }
 
   void init_shaders(const std::vector<ShaderInfo> &shaderInfos) {
+    assert(!shaderInfos.empty());
+
     shaders.resize(shaderInfos.size());
 
     for (size_t i = 0; i < shaders.size(); ++i) {
@@ -118,6 +127,7 @@ private:
                              shaderInfos[i].descriptors, shaderInfos[i].ubos);
 
       shaders[i].drawModels = shaderInfos[i].drawModels;
+      shaders[i].drawRectCount = shaderInfos[i].drawRectCount;
       shaders[i].hasPushConstants = !shaderInfos[i].pushConstants.empty();
     }
   }
@@ -125,16 +135,71 @@ private:
 public:
   ~Pass() { destroy(); }
 
+  void init(const std::vector<ShaderInfo> &shaderInfos) {
+    offscreen = false;
+    extent = Swapchain::GetExtent();
+    nbColorAttachments = 1;
+
+    // Fourth Pass
+    std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {
+        Swapchain::GetAttachmentDescription()};
+
+    vk::AttachmentReference swapchainColorAttachmentRef(
+        0, vk::ImageLayout::eColorAttachmentOptimal);
+
+    vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(),
+                                   vk::PipelineBindPoint::eGraphics, 0, nullptr,
+                                   1, &swapchainColorAttachmentRef);
+
+    // vk::SubpassDependency dependency(
+    //    VK_SUBPASS_EXTERNAL, 0,
+    //    vk::PipelineStageFlagBits::eColorAttachmentOutput,
+    //    vk::PipelineStageFlagBits::eColorAttachmentOutput,
+    //    (vk::AccessFlagBits)0,
+    //    vk::AccessFlagBits::eColorAttachmentRead |
+    //        vk::AccessFlagBits::eColorAttachmentWrite);
+
+    vk::RenderPassCreateInfo renderPassInfo(
+        vk::RenderPassCreateFlags(),
+        static_cast<uint32_t>(attachmentDescriptions.size()),
+        attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
+
+    CHECK_VK_RESULT_FATAL(g_device.createRenderPass(
+                              &renderPassInfo, g_allocationCallbacks, &handle),
+                          "Failed to create render pass.");
+
+    const std::vector<vk::ImageView> &attachments = Swapchain::GetImageViews();
+
+    framebuffers.resize(Swapchain::ImageCount());
+    for (size_t i = 0; i < framebuffers.size(); i++) {
+      std::array<vk::ImageView, 1> iattachments = {attachments[i]};
+
+      vk::FramebufferCreateInfo framebufferInfo(
+          vk::FramebufferCreateFlags(), handle,
+          static_cast<uint32_t>(iattachments.size()), iattachments.data(),
+          extent.width, extent.height, 1);
+
+      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
+                                                       g_allocationCallbacks,
+                                                       &framebuffers[i]),
+                            "Failed to create framebuffer.");
+    }
+
+    init_shaders(shaderInfos);
+  }
+
   // TODO Manage multiple attachment extents
-  void init(vk::Extent2D attachmentsExtent,
-            const std::vector<AttachmentInfo> &attachmentInfos,
-            const std::vector<ShaderInfo> &shaderInfos) {
+  void init_offscreen(vk::Extent2D attachmentsExtent,
+                      const std::vector<AttachmentInfo> &attachmentInfos,
+                      const std::vector<ShaderInfo> &shaderInfos) {
+
+    offscreen = true;
 
     extent = attachmentsExtent;
     if (extent == vk::Extent2D(0, 0))
       extent = Swapchain::GetExtent();
 
-    init_render_pass(attachmentInfos);
+	init_render_pass_offscreen(attachmentInfos);
     init_shaders(shaderInfos);
   }
 
@@ -143,11 +208,21 @@ public:
               const std::vector<vk::ClearValue> clearValues,
               const std::vector<Model *> &models = {}) {
 
-    assert(clearValues.size() == attachments.size());
+    vk::RenderPassBeginInfo renderPassInfo;
 
-    vk::RenderPassBeginInfo renderPassInfo(
-        handle, framebuffer, {{0, 0}, extent},
-        static_cast<uint32_t>(clearValues.size()), clearValues.data());
+    if (offscreen) {
+      assert(clearValues.size() == attachments.size());
+
+      renderPassInfo = vk::RenderPassBeginInfo(
+          handle, framebuffers[0], {{0, 0}, extent},
+          static_cast<uint32_t>(clearValues.size()), clearValues.data());
+    } else {
+      assert(clearValues.size() == 1);
+
+      renderPassInfo = vk::RenderPassBeginInfo(
+          handle, framebuffers[frameIndex], {{0, 0}, extent},
+          static_cast<uint32_t>(clearValues.size()), clearValues.data());
+    }
 
     commandbuffer.beginRenderPass(&renderPassInfo,
                                   vk::SubpassContents::eInline);
@@ -175,7 +250,7 @@ public:
           models[j]->record(commandbuffer, shaders[i].handle, frameIndex);
 
       } else
-        commandbuffer.draw(6, 1, 0, 0);
+        commandbuffer.draw(6 * shaders[i].drawRectCount, 1, 0, 0);
     }
 
     commandbuffer.endRenderPass();
@@ -184,18 +259,21 @@ public:
   }
 
   void record_clear_attachments(const vk::CommandBuffer &commandbuffer,
-                                vk::ClearValue clearValue, size_t index = 0) {
+                                vk::ClearValue clearValue) {
 
     if (attachmentsCleared)
       return;
 
-    vk::RenderPassBeginInfo renderPassInfo(handle, framebuffer,
-                                           {{0, 0}, extent}, 1, &clearValue);
+    // TODO Optimize ?
+    for (size_t i = 0; i < framebuffers.size(); ++i) {
+      vk::RenderPassBeginInfo renderPassInfo(handle, framebuffers[i],
+                                             {{0, 0}, extent}, 1, &clearValue);
 
-    commandbuffer.beginRenderPass(&renderPassInfo,
-                                  vk::SubpassContents::eInline);
+      commandbuffer.beginRenderPass(&renderPassInfo,
+                                    vk::SubpassContents::eInline);
 
-    commandbuffer.endRenderPass();
+      commandbuffer.endRenderPass();
+    }
 
     attachmentsCleared = true;
   }
@@ -210,9 +288,13 @@ public:
     nbColorAttachments = 0;
     attachmentsCleared = false;
 
-    if (framebuffer) {
-      g_device.destroyFramebuffer(framebuffer, g_allocationCallbacks);
-      framebuffer = nullptr;
+    if (!framebuffers.empty()) {
+      for (size_t i = 0; i < framebuffers.size(); ++i) {
+        g_device.destroyFramebuffer(framebuffers[i], g_allocationCallbacks);
+        framebuffers[i] = nullptr;
+      }
+
+      framebuffers.clear();
     }
 
     attachments.clear();

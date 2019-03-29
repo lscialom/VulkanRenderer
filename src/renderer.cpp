@@ -123,10 +123,6 @@ public:
 
 struct RenderContext {
   std::vector<vk::CommandBuffer> commandbuffers;
-  std::vector<vk::Framebuffer> presentFramebuffers;
-
-  vk::RenderPass geomRenderPass;
-  vk::RenderPass lightRenderPass;
 
   static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
 
@@ -136,15 +132,13 @@ struct RenderContext {
 
   static constexpr uint32_t gPassAttachmentCount = G_BUFFER_SIZE;
 
-  Shader lightShader;
-  Shader overlayShader;
-
   std::vector<Model *> models;
   std::vector<Light *> lights;
 
   Pass gPass;
   Pass ssaoPass;
   Pass blurPass;
+  Pass lightPass;
 
   void init_g_pass() {
     vk::Extent2D extent = Swapchain::GetExtent();
@@ -188,7 +182,7 @@ struct RenderContext {
     shaderInfo.pushConstants = pushConstantRanges;
     shaderInfo.ubos = ubos;
 
-    gPass.init(extent, attachmentInfos, {shaderInfo});
+    gPass.init_offscreen(extent, attachmentInfos, {shaderInfo});
   }
 
   void init_ssao_pass() {
@@ -246,7 +240,7 @@ struct RenderContext {
     shaderInfo.descriptors = descriptorSetInfos;
     shaderInfo.ubos = ubos;
 
-    ssaoPass.init(extent, {attachmentInfo}, {shaderInfo});
+    ssaoPass.init_offscreen(extent, {attachmentInfo}, {shaderInfo});
   }
 
   void init_blur_pass() {
@@ -271,64 +265,10 @@ struct RenderContext {
     shaderInfo.drawModels = false;
     shaderInfo.descriptors = {descriptorSetInfo};
 
-    blurPass.init(extent, {attachmentInfo}, {shaderInfo});
+    blurPass.init_offscreen(extent, {attachmentInfo}, {shaderInfo});
   }
 
-  void destroy_g_pass() { gPass.destroy(); }
-
-  void destroy_ssao_pass() { ssaoPass.destroy(); }
-
-  void destroy_blur_pass() { blurPass.destroy(); }
-
-  void init_render_passes() {
-    {
-      // Fourth Pass
-      std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {
-          Swapchain::GetAttachmentDescription()};
-
-      vk::AttachmentReference swapchainColorAttachmentRef(
-          0, vk::ImageLayout::eColorAttachmentOptimal);
-
-      vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(),
-                                     vk::PipelineBindPoint::eGraphics, 0,
-                                     nullptr, 1, &swapchainColorAttachmentRef);
-
-      // vk::SubpassDependency dependency(
-      //    VK_SUBPASS_EXTERNAL, 0,
-      //    vk::PipelineStageFlagBits::eColorAttachmentOutput,
-      //    vk::PipelineStageFlagBits::eColorAttachmentOutput,
-      //    (vk::AccessFlagBits)0,
-      //    vk::AccessFlagBits::eColorAttachmentRead |
-      //        vk::AccessFlagBits::eColorAttachmentWrite);
-
-      vk::RenderPassCreateInfo renderPassInfo(
-          vk::RenderPassCreateFlags(),
-          static_cast<uint32_t>(attachmentDescriptions.size()),
-          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
-
-      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
-                                                      g_allocationCallbacks,
-                                                      &lightRenderPass),
-                            "Failed to create render pass.");
-
-#ifndef NDEBUG
-      g_device.setDebugUtilsObjectNameEXT(
-          {vk::ObjectType::eRenderPass,
-           (uint64_t)((VkRenderPass)lightRenderPass), "Light Render Pass"},
-          g_dldy);
-#endif
-    }
-  }
-
-  void destroy_render_pass() {
-    g_device.destroyRenderPass(geomRenderPass, g_allocationCallbacks);
-    g_device.destroyRenderPass(lightRenderPass, g_allocationCallbacks);
-  }
-
-  void init_shaders() {
-
-    std::vector<vk::PushConstantRange> pushConstantRanges;
-
+  void init_light_pass() {
     std::vector<const Image *> images;
     images.resize(G_BUFFER_SIZE);
 
@@ -344,81 +284,67 @@ struct RenderContext {
     std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
                                               &CommonResources::BaseSampler);
 
-    pushConstantRanges.clear();
-    PushConstantDescriptor<LightPassPushConstant> lightPassPushConstantRange{};
-    pushConstantRanges.push_back(
-        lightPassPushConstantRange.make_push_constant_range());
+    vk::PushConstantRange lightShaderPushConstant;
+    lightShaderPushConstant = PushConstantDescriptor<LightPassPushConstant>()
+                                  .make_push_constant_range();
 
     std::vector<UniformBufferObject *> ubos;
 
     ubos.push_back(&CommonResources::CameraUBOSet);
     ubos.push_back(&CommonResources::LightUBOSet);
 
-    std::vector<DescriptorSetInfo> dsInfo;
+    std::vector<DescriptorSetInfo> descriptorSetInfos;
+    descriptorSetInfos.resize(3);
 
-    dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
-    dsInfo.push_back({CommonResources::UniqueTextureLayout,
-                      {},
-                      {&blurPass.get_attachment_image()},
-                      {&CommonResources::BaseSampler}});
-    dsInfo.push_back({CommonResources::UniqueTextureLayout,
-                      {},
-                      {&CommonResources::DitherTex},
-                      {&CommonResources::RepeatSampler}});
+    descriptorSetInfos[0].layout = CommonResources::GBufferLayout;
+    descriptorSetInfos[0].images = images;
+    descriptorSetInfos[0].samplers = samplers;
 
-    lightShader.init("../resources/shaders/spv/light.vert.spv",
-                     "../resources/shaders/spv/light.frag.spv", lightRenderPass,
-                     1, false, false, true, pushConstantRanges, dsInfo, ubos);
+    descriptorSetInfos[1].layout = CommonResources::UniqueTextureLayout;
+    descriptorSetInfos[1].images = {&blurPass.get_attachment_image()};
+    descriptorSetInfos[1].samplers = {&CommonResources::BaseSampler};
 
-    pushConstantRanges.clear();
+    descriptorSetInfos[2].layout = CommonResources::UniqueTextureLayout;
+    descriptorSetInfos[2].images = {&CommonResources::DitherTex};
+    descriptorSetInfos[2].samplers = {&CommonResources::RepeatSampler};
 
-    PushConstantDescriptor<ExtentPushConstant> extentPushConstantRange{};
-    pushConstantRanges.push_back(
-        extentPushConstantRange.make_push_constant_range());
+    std::vector<ShaderInfo> shaderInfos;
+    shaderInfos.resize(2);
 
-    dsInfo.clear();
-    dsInfo.push_back({CommonResources::GBufferLayout, {}, images, samplers});
+    shaderInfos[0].vertPath = "../resources/shaders/spv/light.vert.spv";
+    shaderInfos[0].fragPath = "../resources/shaders/spv/light.frag.spv";
+    shaderInfos[0].useVertexInput = false;
+    shaderInfos[0].cull = false;
+    shaderInfos[0].blendEnable = true;
+    shaderInfos[0].drawModels = false;
+    shaderInfos[0].pushConstants = {lightShaderPushConstant};
+    shaderInfos[0].descriptors = descriptorSetInfos;
+    shaderInfos[0].ubos = ubos;
 
-    overlayShader.init("../resources/shaders/spv/overlay.vert.spv",
-                       "../resources/shaders/spv/overlay.frag.spv",
-                       lightRenderPass, 1, false, false, true,
-                       pushConstantRanges, dsInfo);
+    vk::PushConstantRange overlayShaderPushConstant;
+    overlayShaderPushConstant =
+        PushConstantDescriptor<ExtentPushConstant>().make_push_constant_range();
+
+    shaderInfos[1].vertPath = "../resources/shaders/spv/overlay.vert.spv";
+    shaderInfos[1].fragPath = "../resources/shaders/spv/overlay.frag.spv";
+    shaderInfos[1].useVertexInput = false;
+    shaderInfos[1].cull = false;
+    shaderInfos[1].blendEnable = true;
+    shaderInfos[1].drawModels = false;
+    shaderInfos[1].pushConstants = {overlayShaderPushConstant};
+    shaderInfos[1].descriptors = {descriptorSetInfos[0]};
+    shaderInfos[1].drawRectCount = G_BUFFER_SIZE;
+
+    lightPass.init(shaderInfos);
   }
 
-  void destroy_shaders() {
-    lightShader.destroy();
-    overlayShader.destroy();
-  }
+  void destroy_g_pass() { gPass.destroy(); }
 
-  void init_framebuffers() {
-    vk::Extent2D extent = Swapchain::GetExtent();
+  void destroy_ssao_pass() { ssaoPass.destroy(); }
 
-    {
-      const std::vector<vk::ImageView> &attachments =
-          Swapchain::GetImageViews();
+  void destroy_blur_pass() { blurPass.destroy(); }
 
-      presentFramebuffers.resize(Swapchain::ImageCount());
-      for (size_t i = 0; i < presentFramebuffers.size(); i++) {
-        std::array<vk::ImageView, 1> iattachments = {attachments[i]};
-
-        vk::FramebufferCreateInfo framebufferInfo(
-            vk::FramebufferCreateFlags(), lightRenderPass,
-            static_cast<uint32_t>(iattachments.size()), iattachments.data(),
-            extent.width, extent.height, 1);
-
-        CHECK_VK_RESULT_FATAL(
-            g_device.createFramebuffer(&framebufferInfo, g_allocationCallbacks,
-                                       &presentFramebuffers[i]),
-            "Failed to create framebuffer.");
-      }
-    }
-  }
-
-  void destroy_framebuffers() {
-    for (size_t i = 0; i < presentFramebuffers.size(); ++i)
-      g_device.destroyFramebuffer(presentFramebuffers[i],
-                                  g_allocationCallbacks);
-  }
+  void destroy_light_pass() { lightPass.destroy(); }
 
   void init_commandbuffers() {
     commandbuffers.resize(Swapchain::ImageCount());
@@ -476,6 +402,26 @@ struct RenderContext {
 
     gPass.record(commandbuffers[index], index, {}, clearColors, models);
 
+    static constexpr const std::array<float, 4> whiteClearColorArray = {
+        {1.0f, 1.0f, 1.0f, 1.0f}};
+
+    vk::ClearColorValue whiteClearColorValue = whiteClearColorArray;
+    vk::ClearValue whiteClearValue = (vk::ClearValue)whiteClearColorValue;
+
+    // ssao pass
+    if (Config::SSAOEnable) {
+
+      SSAOPassPushConstant ssaoPassPushConstant{};
+      ssaoPassPushConstant.xExtent = extent.width;
+      ssaoPassPushConstant.yExtent = extent.height;
+
+      ssaoPass.record(commandbuffers[index], index, {{&ssaoPassPushConstant}},
+                      {whiteClearValue});
+      blurPass.record(commandbuffers[index], index, {}, {whiteClearValue});
+
+    } else
+      blurPass.record_clear_attachments(commandbuffers[index], whiteClearValue);
+
     // TODO WRAP INTO LIGHT STRUCT
     // std::vector<LightUBO> lightsUBOData;
     for (size_t i = 0; i < lights.size(); ++i) {
@@ -501,79 +447,43 @@ struct RenderContext {
     // lightsUBO.write(index, lightsUBOData.data(),
     //                sizeof(LightUBO) * lightsUBOData.size(), 0);
 
-    static constexpr const std::array<float, 4> whiteClearColorArray = {
-        {1.0f, 1.0f, 1.0f, 1.0f}};
-
-    vk::ClearColorValue whiteClearColorValue = whiteClearColorArray;
-    vk::ClearValue whiteClearValue = (vk::ClearValue)whiteClearColorValue;
-
-    // ssao pass
-    if (Config::SSAOEnable) {
-
-      SSAOPassPushConstant ssaoPassPushConstant{};
-      ssaoPassPushConstant.xExtent = extent.width;
-      ssaoPassPushConstant.yExtent = extent.height;
-
-      ssaoPass.record(commandbuffers[index], index, {{&ssaoPassPushConstant}},
-                      {whiteClearValue});
-      blurPass.record(commandbuffers[index], index, {}, {whiteClearValue});
-
-    } else
-      blurPass.record_clear_attachments(commandbuffers[index], whiteClearValue);
-
     // light pass
     vk::ClearValue clearValue = (vk::ClearValue)blackColorValue;
 
-    vk::RenderPassBeginInfo lightRenderPassInfo(
-        lightRenderPass, presentFramebuffers[index], {{0, 0}, extent}, 1,
-        &clearValue);
-
-    commandbuffers[index].beginRenderPass(&lightRenderPassInfo,
-                                          vk::SubpassContents::eInline);
-
-    lightShader.bind_pipeline(commandbuffers[index]);
-
-    commandbuffers[index].bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 0,
-        1, &CommonResources::CameraUBOSet.get_descriptor_set(index), 0,
-        nullptr);
-
-    commandbuffers[index].bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics, lightShader.get_pipeline_layout(), 1,
-        1, &CommonResources::LightUBOSet.get_descriptor_set(index), 0, nullptr);
-
-    lightShader.bind_descriptors(commandbuffers[index], 2);
+    std::vector<std::vector<void *>> lightPassPushConstants;
+    lightPassPushConstants.resize(2);
 
     LightPassPushConstant lightPassPushConstant{};
     lightPassPushConstant.numLights = lights.size();
 
-    commandbuffers[index].pushConstants(
-        lightShader.get_pipeline_layout(),
-        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-        0, sizeof(lightPassPushConstant), &lightPassPushConstant);
+    ExtentPushConstant ePc = {};
+    ePc.xExtent = extent.width;
+    ePc.yExtent = extent.height;
+    ePc.ratio = 1.f / 6.f;
 
-    // Draw scene into texture
-    commandbuffers[index].draw(6, 1, 0, 0);
+    lightPassPushConstants[0].push_back(&lightPassPushConstant);
+    lightPassPushConstants[1].push_back(&ePc);
 
-    if (Config::ShowGBuffer) {
-      overlayShader.bind_pipeline(commandbuffers[index]);
-      overlayShader.bind_descriptors(commandbuffers[index]);
+    lightPass.record(commandbuffers[index], index, lightPassPushConstants,
+                     {clearValue});
 
-      ExtentPushConstant ePc = {};
-      ePc.xExtent = extent.width;
-      ePc.yExtent = extent.height;
-      ePc.ratio = 1.f / 6.f;
+    // if (Config::ShowGBuffer) {
+    //  overlayShader.bind_pipeline(commandbuffers[index]);
+    //  overlayShader.bind_descriptors(commandbuffers[index]);
 
-      commandbuffers[index].pushConstants(
-          overlayShader.get_pipeline_layout(),
-          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-          0, sizeof(ePc), &ePc);
+    //  ExtentPushConstant ePc = {};
+    //  ePc.xExtent = extent.width;
+    //  ePc.yExtent = extent.height;
+    //  ePc.ratio = 1.f / 6.f;
 
-      // Draw G-Buffer overlay
-      commandbuffers[index].draw(6 * 4, 1, 0, 0);
-    }
+    //  commandbuffers[index].pushConstants(
+    //      overlayShader.get_pipeline_layout(),
+    //      vk::ShaderStageFlagBits::eVertex |
+    //      vk::ShaderStageFlagBits::eFragment, 0, sizeof(ePc), &ePc);
 
-    commandbuffers[index].endRenderPass();
+    //  // Draw G-Buffer overlay
+    //  commandbuffers[index].draw(6 * 4, 1, 0, 0);
+    //}
 
     commandbuffers[index]
         .end(); // Strangely, it does returns void instead of vk::Result so no
@@ -586,19 +496,13 @@ struct RenderContext {
     CommonResources::InitDescriptorLayouts();
     CommonResources::InitUniformBufferObjects();
 
-    init_render_passes();
-
-    init_framebuffers();
-
-    // Resources for descriptors
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
     init_g_pass();
     init_ssao_pass();
     init_blur_pass();
-
-    init_shaders();
+    init_light_pass();
 
     init_commandbuffers();
   }
@@ -611,15 +515,12 @@ struct RenderContext {
     CommonResources::DestroySamplers();
     CommonResources::DestroyPostProcessResources();
 
-    destroy_framebuffers();
     destroy_commandbuffers();
 
+    destroy_light_pass();
     destroy_blur_pass();
     destroy_ssao_pass();
     destroy_g_pass();
-
-    destroy_shaders();
-    destroy_render_pass();
 
     Swapchain::Destroy();
 
@@ -640,26 +541,22 @@ struct RenderContext {
   void refresh() {
     g_device.waitIdle();
 
-    destroy_framebuffers();
     destroy_commandbuffers();
 
+    destroy_light_pass();
     destroy_blur_pass();
     destroy_ssao_pass();
     destroy_g_pass();
 
-    destroy_shaders();
-
     Swapchain::Destroy();
     Swapchain::Init(requestedWidth, requestedHeight);
 
-    init_framebuffers();
     init_commandbuffers();
 
     init_g_pass();
     init_ssao_pass();
     init_blur_pass();
-
-    init_shaders();
+    init_light_pass();
 
     // TODO UPDATE SHADERS INSTEAD OF RECREATING THEM
   }

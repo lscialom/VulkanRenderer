@@ -15,6 +15,10 @@ struct ShaderInfo {
   std::vector<DescriptorSetInfo> descriptors;
   std::vector<UniformBufferObject *> ubos;
 
+  // For offscreen. Multiplier on number of vertices to draw. So 1 means 6 * 1
+  // vertices drawn (1 rect)
+  uint32_t drawRectCount = 1;
+
   bool useVertexInput;
   bool cull;
   bool blendEnable;
