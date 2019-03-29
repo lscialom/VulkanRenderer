@@ -13,8 +13,12 @@ private:
     bool drawModels;
     bool hasPushConstants;
 
+    std::string name;
+
     // See ShaderInfo struct for more details about this variable
     uint32_t drawRectCount;
+
+    bool enabled = true;
   };
 
   std::vector<vk::Framebuffer> framebuffers;
@@ -31,7 +35,8 @@ private:
 
   bool attachmentsCleared = false;
 
-  void init_render_pass_offscreen(const std::vector<AttachmentInfo> &attachmentInfos) {
+  void init_render_pass_offscreen(
+      const std::vector<AttachmentInfo> &attachmentInfos) {
 
     std::vector<vk::ImageView> imageViews;
 
@@ -129,6 +134,21 @@ private:
       shaders[i].drawModels = shaderInfos[i].drawModels;
       shaders[i].drawRectCount = shaderInfos[i].drawRectCount;
       shaders[i].hasPushConstants = !shaderInfos[i].pushConstants.empty();
+
+      std::string str = shaderInfos[i].vertPath;
+
+      uint64_t slashPos = str.rfind('/');
+      if (slashPos == std::string::npos)
+        slashPos = str.rfind('\\');
+
+      int64_t beginPos = (slashPos == std::string::npos) ? 0 : slashPos;
+
+      size_t dotPos = str.find('.', beginPos);
+
+      if (!beginPos)
+        beginPos = -1;
+
+      shaders[i].name = str.substr(beginPos + 1, dotPos - beginPos - 1);
     }
   }
 
@@ -140,7 +160,6 @@ public:
     extent = Swapchain::GetExtent();
     nbColorAttachments = 1;
 
-    // Fourth Pass
     std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {
         Swapchain::GetAttachmentDescription()};
 
@@ -199,7 +218,7 @@ public:
     if (extent == vk::Extent2D(0, 0))
       extent = Swapchain::GetExtent();
 
-	init_render_pass_offscreen(attachmentInfos);
+    init_render_pass_offscreen(attachmentInfos);
     init_shaders(shaderInfos);
   }
 
@@ -229,6 +248,9 @@ public:
 
     size_t currentPushConstantDataIndex = 0;
     for (size_t i = 0; i < shaders.size(); ++i) {
+
+      if (!shaders[i].enabled)
+        continue;
 
       shaders[i].handle.bind_pipeline(commandbuffer);
 
@@ -276,6 +298,16 @@ public:
     }
 
     attachmentsCleared = true;
+  }
+
+  void set_shader_enabled(const std::string &shaderName, bool shouldEnable) {
+
+    for (size_t i = 0; i < shaders.size(); ++i) {
+      if (shaderName == shaders[i].name) {
+        shaders[i].enabled = shouldEnable;
+        return;
+      }
+    }
   }
 
   const Image &get_attachment_image(size_t index = 0) const {

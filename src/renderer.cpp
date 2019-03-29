@@ -464,26 +464,10 @@ struct RenderContext {
     lightPassPushConstants[0].push_back(&lightPassPushConstant);
     lightPassPushConstants[1].push_back(&ePc);
 
+    lightPass.set_shader_enabled("overlay", Config::ShowGBuffer);
+
     lightPass.record(commandbuffers[index], index, lightPassPushConstants,
                      {clearValue});
-
-    // if (Config::ShowGBuffer) {
-    //  overlayShader.bind_pipeline(commandbuffers[index]);
-    //  overlayShader.bind_descriptors(commandbuffers[index]);
-
-    //  ExtentPushConstant ePc = {};
-    //  ePc.xExtent = extent.width;
-    //  ePc.yExtent = extent.height;
-    //  ePc.ratio = 1.f / 6.f;
-
-    //  commandbuffers[index].pushConstants(
-    //      overlayShader.get_pipeline_layout(),
-    //      vk::ShaderStageFlagBits::eVertex |
-    //      vk::ShaderStageFlagBits::eFragment, 0, sizeof(ePc), &ePc);
-
-    //  // Draw G-Buffer overlay
-    //  commandbuffers[index].draw(6 * 4, 1, 0, 0);
-    //}
 
     commandbuffers[index]
         .end(); // Strangely, it does returns void instead of vk::Result so no
