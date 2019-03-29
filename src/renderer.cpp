@@ -124,15 +124,9 @@ public:
 struct RenderContext {
   std::vector<vk::CommandBuffer> commandbuffers;
   std::vector<vk::Framebuffer> presentFramebuffers;
-  vk::Framebuffer geomFramebuffer;
 
   vk::RenderPass geomRenderPass;
   vk::RenderPass lightRenderPass;
-
-  Attachment depthAttachment;
-  Attachment posAttachment;
-  Attachment normalAttachment;
-  Attachment colorAttachment;
 
   static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
 
@@ -142,15 +136,60 @@ struct RenderContext {
 
   static constexpr uint32_t gPassAttachmentCount = G_BUFFER_SIZE;
 
-  Shader gShader;
   Shader lightShader;
   Shader overlayShader;
 
   std::vector<Model *> models;
   std::vector<Light *> lights;
 
+  Pass gPass;
   Pass ssaoPass;
   Pass blurPass;
+
+  void init_g_pass() {
+    vk::Extent2D extent = Swapchain::GetExtent();
+
+    std::vector<AttachmentInfo> attachmentInfos;
+    attachmentInfos.resize(G_BUFFER_SIZE);
+
+    attachmentInfos[depthAttachmentArrayIndex].extent = extent;
+    attachmentInfos[depthAttachmentArrayIndex].format = FindSupportedFormat(
+        g_physicalDevice,
+        {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint,
+         vk::Format::eD24UnormS8Uint},
+        vk::ImageTiling::eOptimal,
+        vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+
+    attachmentInfos[depthAttachmentArrayIndex].isDepth = true;
+
+    for (size_t i = 1; i < attachmentInfos.size(); ++i) {
+      attachmentInfos[i].extent = extent;
+      attachmentInfos[i].format = vk::Format::eR32G32B32A32Sfloat;
+      attachmentInfos[i].isDepth = false;
+    }
+
+    std::vector<vk::PushConstantRange> pushConstantRanges;
+
+    PushConstantDescriptor<ModelInstancePushConstant>
+        modelInstancePushConstantRange{};
+    pushConstantRanges.push_back(
+        modelInstancePushConstantRange.make_push_constant_range());
+
+    std::vector<UniformBufferObject *> ubos;
+    ubos.push_back(&CommonResources::CameraUBOSet);
+
+    ShaderInfo shaderInfo;
+    shaderInfo.vertPath = "../resources/shaders/spv/geom.vert.spv";
+    shaderInfo.fragPath = "../resources/shaders/spv/geom.frag.spv";
+    shaderInfo.useVertexInput = true;
+    shaderInfo.cull = true;
+    shaderInfo.blendEnable = false;
+    shaderInfo.drawModels = true;
+    shaderInfo.pushConstants = pushConstantRanges;
+    shaderInfo.ubos = ubos;
+
+    gPass.init(extent, attachmentInfos, {shaderInfo});
+  }
 
   void init_ssao_pass() {
     vk::Extent2D extent = Swapchain::GetExtent();
@@ -163,10 +202,14 @@ struct RenderContext {
     std::vector<const Image *> images;
     images.resize(G_BUFFER_SIZE);
 
-    images[posAttachmentArrayIndex] = &posAttachment.get_image();
-    images[normalAttachmentArrayIndex] = &normalAttachment.get_image();
-    images[colorAttachmentArrayIndex] = &colorAttachment.get_image();
-    images[depthAttachmentArrayIndex] = &depthAttachment.get_image();
+    images[posAttachmentArrayIndex] =
+        &gPass.get_attachment_image(posAttachmentArrayIndex);
+    images[normalAttachmentArrayIndex] =
+        &gPass.get_attachment_image(normalAttachmentArrayIndex);
+    images[colorAttachmentArrayIndex] =
+        &gPass.get_attachment_image(colorAttachmentArrayIndex);
+    images[depthAttachmentArrayIndex] =
+        &gPass.get_attachment_image(depthAttachmentArrayIndex);
 
     std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
                                               &CommonResources::BaseSampler);
@@ -231,88 +274,13 @@ struct RenderContext {
     blurPass.init(extent, {attachmentInfo}, {shaderInfo});
   }
 
+  void destroy_g_pass() { gPass.destroy(); }
+
   void destroy_ssao_pass() { ssaoPass.destroy(); }
 
   void destroy_blur_pass() { blurPass.destroy(); }
 
   void init_render_passes() {
-    {
-      // First Pass
-      std::array<vk::AttachmentDescription, gPassAttachmentCount>
-          attachmentDescriptions = {};
-
-      depthAttachment.requiredFormat = FindSupportedFormat(
-          g_physicalDevice,
-          {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint,
-           vk::Format::eD24UnormS8Uint},
-          vk::ImageTiling::eOptimal,
-          vk::FormatFeatureFlagBits::eDepthStencilAttachment);
-
-      attachmentDescriptions[depthAttachmentArrayIndex] =
-          depthAttachment.make_attachment_description(
-              vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal,
-              vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
-
-      posAttachment.requiredFormat = vk::Format::eR32G32B32A32Sfloat;
-
-      attachmentDescriptions[posAttachmentArrayIndex] =
-          posAttachment.make_attachment_description(
-              vk::ImageLayout::eShaderReadOnlyOptimal,
-              vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      normalAttachment.requiredFormat = vk::Format::eR32G32B32A32Sfloat;
-
-      attachmentDescriptions[normalAttachmentArrayIndex] =
-          normalAttachment.make_attachment_description(
-              vk::ImageLayout::eShaderReadOnlyOptimal,
-              vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      colorAttachment.requiredFormat = vk::Format::eR32G32B32A32Sfloat;
-
-      attachmentDescriptions[colorAttachmentArrayIndex] =
-          colorAttachment.make_attachment_description(
-              vk::ImageLayout::eShaderReadOnlyOptimal,
-              vk::ImageLayout::eShaderReadOnlyOptimal);
-
-      // Color Attachments
-      std::array<vk::AttachmentReference, gPassAttachmentCount - 1> colorRefs;
-
-      colorRefs[posAttachmentArrayIndex - 1] = vk::AttachmentReference(
-          posAttachmentArrayIndex, vk::ImageLayout::eColorAttachmentOptimal);
-
-      colorRefs[normalAttachmentArrayIndex - 1] = vk::AttachmentReference(
-          normalAttachmentArrayIndex, vk::ImageLayout::eColorAttachmentOptimal);
-
-      colorRefs[colorAttachmentArrayIndex - 1] = vk::AttachmentReference(
-          colorAttachmentArrayIndex, vk::ImageLayout::eColorAttachmentOptimal);
-
-      vk::AttachmentReference depthAttachmentRef(
-          depthAttachmentArrayIndex,
-          vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-      vk::SubpassDescription subpass(
-          vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
-          nullptr, static_cast<uint32_t>(colorRefs.size()), colorRefs.data(),
-          nullptr, &depthAttachmentRef);
-
-      vk::RenderPassCreateInfo renderPassInfo(
-          vk::RenderPassCreateFlags(),
-          static_cast<uint32_t>(attachmentDescriptions.size()),
-          attachmentDescriptions.data(), 1, &subpass, 0, nullptr);
-
-      CHECK_VK_RESULT_FATAL(g_device.createRenderPass(&renderPassInfo,
-                                                      g_allocationCallbacks,
-                                                      &geomRenderPass),
-                            "Failed to create render pass.");
-
-#ifndef NDEBUG
-      g_device.setDebugUtilsObjectNameEXT(
-          {vk::ObjectType::eRenderPass,
-           (uint64_t)((VkRenderPass)geomRenderPass), "Geometry Render Pass"},
-          g_dldy);
-#endif
-    }
-
     {
       // Fourth Pass
       std::array<vk::AttachmentDescription, 1> attachmentDescriptions = {
@@ -361,25 +329,17 @@ struct RenderContext {
 
     std::vector<vk::PushConstantRange> pushConstantRanges;
 
-    PushConstantDescriptor<ModelInstancePushConstant>
-        modelInstancePushConstantRange{};
-    pushConstantRanges.push_back(
-        modelInstancePushConstantRange.make_push_constant_range());
-
-    std::vector<UniformBufferObject *> ubos;
-    ubos.push_back(&CommonResources::CameraUBOSet);
-
-    gShader.init("../resources/shaders/spv/geom.vert.spv",
-                 "../resources/shaders/spv/geom.frag.spv", geomRenderPass, 3,
-                 true, true, false, pushConstantRanges, {}, ubos);
-
     std::vector<const Image *> images;
     images.resize(G_BUFFER_SIZE);
 
-    images[posAttachmentArrayIndex] = &posAttachment.get_image();
-    images[normalAttachmentArrayIndex] = &normalAttachment.get_image();
-    images[colorAttachmentArrayIndex] = &colorAttachment.get_image();
-    images[depthAttachmentArrayIndex] = &depthAttachment.get_image();
+    images[posAttachmentArrayIndex] =
+        &gPass.get_attachment_image(posAttachmentArrayIndex);
+    images[normalAttachmentArrayIndex] =
+        &gPass.get_attachment_image(normalAttachmentArrayIndex);
+    images[colorAttachmentArrayIndex] =
+        &gPass.get_attachment_image(colorAttachmentArrayIndex);
+    images[depthAttachmentArrayIndex] =
+        &gPass.get_attachment_image(depthAttachmentArrayIndex);
 
     std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
                                               &CommonResources::BaseSampler);
@@ -389,6 +349,9 @@ struct RenderContext {
     pushConstantRanges.push_back(
         lightPassPushConstantRange.make_push_constant_range());
 
+    std::vector<UniformBufferObject *> ubos;
+
+    ubos.push_back(&CommonResources::CameraUBOSet);
     ubos.push_back(&CommonResources::LightUBOSet);
 
     std::vector<DescriptorSetInfo> dsInfo;
@@ -423,50 +386,12 @@ struct RenderContext {
   }
 
   void destroy_shaders() {
-    gShader.destroy();
     lightShader.destroy();
     overlayShader.destroy();
   }
 
   void init_framebuffers() {
     vk::Extent2D extent = Swapchain::GetExtent();
-
-    {
-      depthAttachment.init(
-          Swapchain::GetExtent().width, Swapchain::GetExtent().height,
-          vk::ImageTiling::eOptimal,
-          vk::ImageUsageFlagBits::eDepthStencilAttachment |
-              vk::ImageUsageFlagBits::eSampled,
-          vk::MemoryPropertyFlagBits::eDeviceLocal,
-          vk::ImageAspectFlagBits::eDepth,
-          vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
-
-      posAttachment.init(Swapchain::GetExtent().width,
-                         Swapchain::GetExtent().height);
-
-      normalAttachment.init(Swapchain::GetExtent().width,
-                            Swapchain::GetExtent().height);
-
-      colorAttachment.init(Swapchain::GetExtent().width,
-                           Swapchain::GetExtent().height);
-
-      std::array<vk::ImageView, gPassAttachmentCount> attachments;
-      attachments[depthAttachmentArrayIndex] = depthAttachment.get_image_view();
-      attachments[posAttachmentArrayIndex] = posAttachment.get_image_view();
-      attachments[normalAttachmentArrayIndex] =
-          normalAttachment.get_image_view();
-      attachments[colorAttachmentArrayIndex] = colorAttachment.get_image_view();
-
-      vk::FramebufferCreateInfo framebufferInfo(
-          vk::FramebufferCreateFlags(), geomRenderPass,
-          static_cast<uint32_t>(attachments.size()), attachments.data(),
-          extent.width, extent.height, 1);
-
-      CHECK_VK_RESULT_FATAL(g_device.createFramebuffer(&framebufferInfo,
-                                                       g_allocationCallbacks,
-                                                       &geomFramebuffer),
-                            "Failed to create framebuffer.");
-    }
 
     {
       const std::vector<vk::ImageView> &attachments =
@@ -493,13 +418,6 @@ struct RenderContext {
     for (size_t i = 0; i < presentFramebuffers.size(); ++i)
       g_device.destroyFramebuffer(presentFramebuffers[i],
                                   g_allocationCallbacks);
-
-    g_device.destroyFramebuffer(geomFramebuffer, g_allocationCallbacks);
-
-    depthAttachment.destroy();
-    posAttachment.destroy();
-    normalAttachment.destroy();
-    colorAttachment.destroy();
   }
 
   void init_commandbuffers() {
@@ -529,21 +447,17 @@ struct RenderContext {
                           1);
     vk::Rect2D scissor({}, extent);
 
-    static constexpr const std::array<float, 4> clearColorArray = {
+    static constexpr const std::array<float, 4> blackColorArray = {
         {0.0f, 0.0f, 0.0f, 1.0f}};
 
-    vk::ClearColorValue clearColorValue = clearColorArray;
+    vk::ClearColorValue blackColorValue = blackColorArray;
     vk::ClearDepthStencilValue clearDepthValue = {1.0f};
 
-    std::array<vk::ClearValue, 4> clearColors = {
-        clearDepthValue, clearColorValue, clearColorValue, clearColorValue};
+    std::vector<vk::ClearValue> clearColors = {
+        clearDepthValue, blackColorValue, blackColorValue, blackColorValue};
 
     CHECK_VK_RESULT_FATAL(commandbuffers[index].begin(&beginInfo),
                           "Failed to begin recording command buffer.");
-
-    vk::RenderPassBeginInfo renderPassInfo(
-        geomRenderPass, geomFramebuffer, {{0, 0}, extent},
-        static_cast<uint32_t>(clearColors.size()), clearColors.data());
 
     commandbuffers[index].setViewport(
         0, 1,
@@ -553,11 +467,6 @@ struct RenderContext {
         0, 1,
         &scissor); // TODO buffers are recorded once so can't change scissor
 
-    commandbuffers[index].beginRenderPass(&renderPassInfo,
-                                          vk::SubpassContents::eInline);
-
-    gShader.bind_pipeline(commandbuffers[index]);
-
     CameraUBO cam{};
     cam.view = Camera::ViewMatrix;
     cam.proj = Camera::ProjMatrix;
@@ -565,9 +474,7 @@ struct RenderContext {
 
     CommonResources::CameraUBOSet.write(index, &cam, sizeof(cam), 0);
 
-    commandbuffers[index].bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics, gShader.get_pipeline_layout(), 0, 1,
-        &CommonResources::CameraUBOSet.get_descriptor_set(index), 0, nullptr);
+    gPass.record(commandbuffers[index], index, {}, clearColors, models);
 
     // TODO WRAP INTO LIGHT STRUCT
     // std::vector<LightUBO> lightsUBOData;
@@ -594,11 +501,6 @@ struct RenderContext {
     // lightsUBO.write(index, lightsUBOData.data(),
     //                sizeof(LightUBO) * lightsUBOData.size(), 0);
 
-    for (size_t j = 0; j < models.size(); ++j)
-      models[j]->record(commandbuffers[index], gShader, index);
-
-    commandbuffers[index].endRenderPass();
-
     static constexpr const std::array<float, 4> whiteClearColorArray = {
         {1.0f, 1.0f, 1.0f, 1.0f}};
 
@@ -613,14 +515,14 @@ struct RenderContext {
       ssaoPassPushConstant.yExtent = extent.height;
 
       ssaoPass.record(commandbuffers[index], index, {{&ssaoPassPushConstant}},
-                      whiteClearValue);
-      blurPass.record(commandbuffers[index], index, {}, whiteClearValue);
+                      {whiteClearValue});
+      blurPass.record(commandbuffers[index], index, {}, {whiteClearValue});
 
     } else
       blurPass.record_clear_attachments(commandbuffers[index], whiteClearValue);
 
     // light pass
-    vk::ClearValue clearValue = (vk::ClearValue)clearColorValue;
+    vk::ClearValue clearValue = (vk::ClearValue)blackColorValue;
 
     vk::RenderPassBeginInfo lightRenderPassInfo(
         lightRenderPass, presentFramebuffers[index], {{0, 0}, extent}, 1,
@@ -692,6 +594,7 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
+    init_g_pass();
     init_ssao_pass();
     init_blur_pass();
 
@@ -713,6 +616,7 @@ struct RenderContext {
 
     destroy_blur_pass();
     destroy_ssao_pass();
+    destroy_g_pass();
 
     destroy_shaders();
     destroy_render_pass();
@@ -741,6 +645,7 @@ struct RenderContext {
 
     destroy_blur_pass();
     destroy_ssao_pass();
+    destroy_g_pass();
 
     destroy_shaders();
 
@@ -750,6 +655,7 @@ struct RenderContext {
     init_framebuffers();
     init_commandbuffers();
 
+    init_g_pass();
     init_ssao_pass();
     init_blur_pass();
 

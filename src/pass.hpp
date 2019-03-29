@@ -140,11 +140,14 @@ public:
 
   void record(const vk::CommandBuffer &commandbuffer, uint32_t frameIndex,
               const std::vector<std::vector<void *>> &pushConstantData,
-              vk::ClearValue clearValue,
+              const std::vector<vk::ClearValue> clearValues,
               const std::vector<Model *> &models = {}) {
 
-    vk::RenderPassBeginInfo renderPassInfo(handle, framebuffer,
-                                           {{0, 0}, extent}, 1, &clearValue);
+    assert(clearValues.size() == attachments.size());
+
+    vk::RenderPassBeginInfo renderPassInfo(
+        handle, framebuffer, {{0, 0}, extent},
+        static_cast<uint32_t>(clearValues.size()), clearValues.data());
 
     commandbuffer.beginRenderPass(&renderPassInfo,
                                   vk::SubpassContents::eInline);
@@ -154,7 +157,9 @@ public:
 
       shaders[i].handle.bind_pipeline(commandbuffer);
 
-      if (shaders[i].hasPushConstants) {
+      // Auto push constant if have some and that it is not models push
+      // constants (because they change at each draw calls)
+      if (shaders[i].hasPushConstants && !shaders[i].drawModels) {
         shaders[i].handle.bind_resources(
             commandbuffer, frameIndex,
             pushConstantData[currentPushConstantDataIndex++]);
@@ -166,8 +171,8 @@ public:
 
         // TODO Call a function from renderContext instead + move it in
         // global_context
-        for (size_t i = 0; i < models.size(); ++i)
-          models[i]->record(commandbuffer, shaders[i].handle, frameIndex);
+        for (size_t j = 0; j < models.size(); ++j)
+          models[j]->record(commandbuffer, shaders[i].handle, frameIndex);
 
       } else
         commandbuffer.draw(6, 1, 0, 0);
