@@ -230,7 +230,7 @@ struct RenderContext {
     descriptorSetInfos[1].samplers = {&CommonResources::RepeatSampler};
 
     ShaderInfo shaderInfo;
-    shaderInfo.vertPath = "../resources/shaders/spv/ssao.vert.spv";
+    shaderInfo.vertPath = "../resources/shaders/spv/fullscreen.vert.spv";
     shaderInfo.fragPath = "../resources/shaders/spv/ssao.frag.spv";
     shaderInfo.useVertexInput = false;
     shaderInfo.cull = false;
@@ -257,7 +257,7 @@ struct RenderContext {
     descriptorSetInfo.images = {&ssaoPass.get_attachment_image()};
 
     ShaderInfo shaderInfo;
-    shaderInfo.vertPath = "../resources/shaders/spv/blur.vert.spv";
+    shaderInfo.vertPath = "../resources/shaders/spv/fullscreen.vert.spv";
     shaderInfo.fragPath = "../resources/shaders/spv/blur.frag.spv";
     shaderInfo.useVertexInput = false;
     shaderInfo.cull = false;
@@ -311,7 +311,7 @@ struct RenderContext {
     std::vector<ShaderInfo> shaderInfos;
     shaderInfos.resize(2);
 
-    shaderInfos[0].vertPath = "../resources/shaders/spv/light.vert.spv";
+    shaderInfos[0].vertPath = "../resources/shaders/spv/fullscreen.vert.spv";
     shaderInfos[0].fragPath = "../resources/shaders/spv/light.frag.spv";
     shaderInfos[0].useVertexInput = false;
     shaderInfos[0].cull = false;

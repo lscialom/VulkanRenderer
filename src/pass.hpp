@@ -135,7 +135,7 @@ private:
       shaders[i].drawRectCount = shaderInfos[i].drawRectCount;
       shaders[i].hasPushConstants = !shaderInfos[i].pushConstants.empty();
 
-      std::string str = shaderInfos[i].vertPath;
+      std::string str = shaderInfos[i].fragPath;
 
       uint64_t slashPos = str.rfind('/');
       if (slashPos == std::string::npos)
