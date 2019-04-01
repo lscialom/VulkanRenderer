@@ -124,14 +124,6 @@ public:
 struct RenderContext {
   std::vector<vk::CommandBuffer> commandbuffers;
 
-  static constexpr uint32_t depthAttachmentArrayIndex = DEPTH_BUFFER_INDEX;
-
-  static constexpr uint32_t posAttachmentArrayIndex = POS_BUFFER_INDEX;
-  static constexpr uint32_t normalAttachmentArrayIndex = NORMAL_BUFFER_INDEX;
-  static constexpr uint32_t colorAttachmentArrayIndex = COLOR_BUFFER_INDEX;
-
-  static constexpr uint32_t gPassAttachmentCount = G_BUFFER_SIZE;
-
   std::vector<Model *> models;
   std::vector<Light *> lights;
 
@@ -146,15 +138,15 @@ struct RenderContext {
     std::vector<AttachmentInfo> attachmentInfos;
     attachmentInfos.resize(G_BUFFER_SIZE);
 
-    attachmentInfos[depthAttachmentArrayIndex].extent = extent;
-    attachmentInfos[depthAttachmentArrayIndex].format = FindSupportedFormat(
+    attachmentInfos[DEPTH_BUFFER_INDEX].extent = extent;
+    attachmentInfos[DEPTH_BUFFER_INDEX].format = FindSupportedFormat(
         g_physicalDevice,
         {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint,
          vk::Format::eD24UnormS8Uint},
         vk::ImageTiling::eOptimal,
         vk::FormatFeatureFlagBits::eDepthStencilAttachment);
 
-    attachmentInfos[depthAttachmentArrayIndex].isDepth = true;
+    attachmentInfos[DEPTH_BUFFER_INDEX].isDepth = true;
 
     for (size_t i = 1; i < attachmentInfos.size(); ++i) {
       attachmentInfos[i].extent = extent;
@@ -196,14 +188,13 @@ struct RenderContext {
     std::vector<const Image *> images;
     images.resize(G_BUFFER_SIZE);
 
-    images[posAttachmentArrayIndex] =
-        &gPass.get_attachment_image(posAttachmentArrayIndex);
-    images[normalAttachmentArrayIndex] =
-        &gPass.get_attachment_image(normalAttachmentArrayIndex);
-    images[colorAttachmentArrayIndex] =
-        &gPass.get_attachment_image(colorAttachmentArrayIndex);
-    images[depthAttachmentArrayIndex] =
-        &gPass.get_attachment_image(depthAttachmentArrayIndex);
+    images[POS_BUFFER_INDEX] = &gPass.get_attachment_image(POS_BUFFER_INDEX);
+    images[NORMAL_BUFFER_INDEX] =
+        &gPass.get_attachment_image(NORMAL_BUFFER_INDEX);
+    images[COLOR_BUFFER_INDEX] =
+        &gPass.get_attachment_image(COLOR_BUFFER_INDEX);
+    images[DEPTH_BUFFER_INDEX] =
+        &gPass.get_attachment_image(DEPTH_BUFFER_INDEX);
 
     std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
                                               &CommonResources::BaseSampler);
@@ -272,14 +263,13 @@ struct RenderContext {
     std::vector<const Image *> images;
     images.resize(G_BUFFER_SIZE);
 
-    images[posAttachmentArrayIndex] =
-        &gPass.get_attachment_image(posAttachmentArrayIndex);
-    images[normalAttachmentArrayIndex] =
-        &gPass.get_attachment_image(normalAttachmentArrayIndex);
-    images[colorAttachmentArrayIndex] =
-        &gPass.get_attachment_image(colorAttachmentArrayIndex);
-    images[depthAttachmentArrayIndex] =
-        &gPass.get_attachment_image(depthAttachmentArrayIndex);
+    images[POS_BUFFER_INDEX] = &gPass.get_attachment_image(POS_BUFFER_INDEX);
+    images[NORMAL_BUFFER_INDEX] =
+        &gPass.get_attachment_image(NORMAL_BUFFER_INDEX);
+    images[COLOR_BUFFER_INDEX] =
+        &gPass.get_attachment_image(COLOR_BUFFER_INDEX);
+    images[DEPTH_BUFFER_INDEX] =
+        &gPass.get_attachment_image(DEPTH_BUFFER_INDEX);
 
     std::vector<const vk::Sampler *> samplers(G_BUFFER_SIZE,
                                               &CommonResources::BaseSampler);
@@ -385,13 +375,8 @@ struct RenderContext {
     CHECK_VK_RESULT_FATAL(commandbuffers[index].begin(&beginInfo),
                           "Failed to begin recording command buffer.");
 
-    commandbuffers[index].setViewport(
-        0, 1,
-        &viewport); // TODO buffers are recorded once so can't change viewport
-
-    commandbuffers[index].setScissor(
-        0, 1,
-        &scissor); // TODO buffers are recorded once so can't change scissor
+    commandbuffers[index].setViewport(0, 1, &viewport);
+    commandbuffers[index].setScissor(0, 1, &scissor);
 
     CameraUBO cam{};
     cam.view = Camera::ViewMatrix;
