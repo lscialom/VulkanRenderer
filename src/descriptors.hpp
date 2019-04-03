@@ -97,7 +97,7 @@ public:
         T::DescriptorType == vk::DescriptorType::eUniformBuffer) {
       size_t minUboAlignment = g_physicalDevice.getProperties()
                                    .limits.minUniformBufferOffsetAlignment;
-      alignment = sizeof(T::Size);
+      alignment = T::Size;
 
       if (minUboAlignment > 0) {
         alignment = (alignment + minUboAlignment - 1) & ~(minUboAlignment - 1);
@@ -172,7 +172,6 @@ public:
              uint64_t step) const {
 
     // TODO Support alignment for multiple elements at once
-    writeSize = (writeSize + alignment - 1) & ~(alignment - 1);
     buffers[bufferIndex].write(data, writeSize, step * alignment);
   }
 };

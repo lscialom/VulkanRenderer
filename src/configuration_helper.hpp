@@ -199,7 +199,7 @@ static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) {
   return requiredExtensions.empty();
 }
 
-static int RateDeviceSuitability(vk::PhysicalDevice device,
+static uint64_t RateDeviceSuitability(vk::PhysicalDevice device,
                                  vk::SurfaceKHR surface) {
   if (!GetQueueFamilies(device, surface).isComplete() ||
       !CheckDeviceExtensionSupport(device))
@@ -215,7 +215,7 @@ static int RateDeviceSuitability(vk::PhysicalDevice device,
   vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
   // vk::PhysicalDeviceFeatures deviceFeatures = device.getFeatures();
 
-  int score = 0;
+  uint64_t score = 0;
 
   // Discrete GPUs have a significant performance advantage
   if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
@@ -223,6 +223,12 @@ static int RateDeviceSuitability(vk::PhysicalDevice device,
 
   // Maximum possible size of textures affects graphics quality
   score += deviceProperties.limits.maxImageDimension2D;
+
+  vk::PhysicalDeviceMemoryProperties memProperties =
+      device.getMemoryProperties();
+
+  for (size_t i = 0; i < memProperties.memoryHeapCount; ++i)
+    score += memProperties.memoryHeaps[i].size;
 
   return score;
 }

@@ -710,10 +710,10 @@ static void InitDevice() {
 
   {
     // Use an ordered map to automatically sort candidates by increasing score
-    std::multimap<int, vk::PhysicalDevice> candidates;
+    std::multimap<uint64_t, vk::PhysicalDevice> candidates;
 
     for (const auto &device : devices) {
-      int score = RateDeviceSuitability(device, g_surface);
+      uint64_t score = RateDeviceSuitability(device, g_surface);
       candidates.insert(std::make_pair(score, device));
     }
 
