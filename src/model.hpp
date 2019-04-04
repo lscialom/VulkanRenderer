@@ -71,50 +71,19 @@ private:
   GeometryInstance geometryInstance;
   std::vector<ModelInstanceInternal *> modelInstances;
 
-  template <typename T, size_t N, size_t O>
-  void init_geometry_instance(
-      const std::array<T, N> &vertexBuffer,
-      const std::array<VERTEX_INDICES_TYPE, O> &indexBuffer) {
-    constexpr const VkDeviceSize iBufferSize = sizeof(VERTEX_INDICES_TYPE) * O;
-    constexpr const VkDeviceSize vBufferSize = sizeof(T) * N;
+  // /!\ Data must be contiguous
+  template <typename Iter1, typename Iter2>
+  void init_geometry_instance(Iter1 vertexBegin, Iter1 vertexEnd,
+                              Iter2 indexBegin, Iter2 indexEnd) {
 
-    constexpr const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
-    constexpr const VkDeviceSize vertexOffset = iBufferSize;
+    using VertexType = std::decay_t<decltype(*vertexBegin)>;
+    using IndexType = std::decay_t<decltype(*indexBegin)>;
 
-    // Making the staging by ourselves is more optimized than the auto one in
-    // Buffer::write in this case (because ATM we would need 2 calls)
+    const uint32_t indexCount = indexEnd - indexBegin;
+    const uint32_t vertexCount = vertexEnd - vertexBegin;
 
-    Buffer stagingBuffer;
-    stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-                           vk::MemoryPropertyFlagBits::eHostVisible |
-                               vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    stagingBuffer.write(indexBuffer.data(), iBufferSize);
-    stagingBuffer.write(vertexBuffer.data(), vBufferSize, vertexOffset);
-
-    geometryInstance.buffer.allocate(
-        bufferSize,
-        vk::BufferUsageFlagBits::eTransferDst |
-            vk::BufferUsageFlagBits::eVertexBuffer |
-            vk::BufferUsageFlagBits::eIndexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    stagingBuffer.copy_to(geometryInstance.buffer, bufferSize);
-
-    geometryInstance.indexOffset = 0;
-    geometryInstance.indexCount = indexBuffer.size();
-
-    geometryInstance.vertexCount = vertexBuffer.size();
-    geometryInstance.vertexOffset = vertexOffset;
-  }
-
-  template <typename T>
-  void
-  init_geometry_instance(const std::vector<T> &vertexBuffer,
-                         const std::vector<VERTEX_INDICES_TYPE> &indexBuffer) {
-    const VkDeviceSize iBufferSize =
-        sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
-    const VkDeviceSize vBufferSize = sizeof(T) * vertexBuffer.size();
+    const VkDeviceSize iBufferSize = sizeof(IndexType) * indexCount;
+    const VkDeviceSize vBufferSize = sizeof(VertexType) * vertexCount;
 
     const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
     const VkDeviceSize vertexOffset = iBufferSize;
@@ -127,8 +96,9 @@ private:
                            vk::MemoryPropertyFlagBits::eHostVisible |
                                vk::MemoryPropertyFlagBits::eHostCoherent);
 
-    stagingBuffer.write(indexBuffer.data(), iBufferSize);
-    stagingBuffer.write(vertexBuffer.data(), vBufferSize, vertexOffset);
+    // pointers to first element
+    stagingBuffer.write(&*indexBegin, iBufferSize);
+    stagingBuffer.write(&*vertexBegin, vBufferSize, vertexOffset);
 
     geometryInstance.buffer.allocate(
         bufferSize,
@@ -140,9 +110,9 @@ private:
     stagingBuffer.copy_to(geometryInstance.buffer, bufferSize);
 
     geometryInstance.indexOffset = 0;
-    geometryInstance.indexCount = indexBuffer.size();
+    geometryInstance.indexCount = indexCount;
 
-    geometryInstance.vertexCount = vertexBuffer.size();
+    geometryInstance.vertexCount = vertexCount;
     geometryInstance.vertexOffset = vertexOffset;
   }
 
@@ -154,30 +124,27 @@ public:
       delete modelInstances[i];
   }
 
-  template <typename T, size_t N, size_t O>
-  void init(const std::array<T, N> &vertices,
-            const std::array<VERTEX_INDICES_TYPE, O> &indices) {
-    init_geometry_instance(vertices, indices);
-
-    // uboModelMat.init<UniformBufferInfo<UniformModelMat>>(
-    //    g_baseDescriptorSetLayout);
-  }
-
-  template <typename T>
-  void init(const std::vector<T> &vertices,
-            const std::vector<VERTEX_INDICES_TYPE> &indices) {
-    init_geometry_instance(vertices, indices);
+  // /!\ Data must be contiguous
+  template <typename Iter1, typename Iter2>
+  void init_from_data(Iter1 vertexBegin, Iter1 vertexEnd, Iter2 indexBegin,
+                      Iter2 indexEnd) {
+    init_geometry_instance(vertexBegin, vertexEnd, indexBegin, indexEnd);
   }
 
   template <typename Prim> void init_from_primitive() {
-    init(Prim::Vertices, Prim::Indices);
+    init_from_data(Prim::Vertices.begin(), Prim::Vertices.end(),
+                   Prim::Indices.begin(), Prim::Indices.end());
   }
 
   void init_from_obj_file(const std::string &objFilename) {
+
     std::vector<LiteralVertex> vertices;
     std::vector<VERTEX_INDICES_TYPE> indices;
+
     ObjLoader::LoadObj(objFilename, vertices, indices);
-    init(vertices, indices);
+
+    init_from_data(vertices.begin(), vertices.end(), indices.begin(),
+                   indices.end());
   }
 
   // TODO index param only used for descriptors (that are unused for now).
