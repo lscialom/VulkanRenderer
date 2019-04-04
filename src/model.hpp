@@ -1,9 +1,33 @@
 #pragma once
 
+//#include "nv_helpers_vk/BottomLevelASGenerator.h"
+//#include "nv_helpers_vk/TopLevelASGenerator.h"
+//#include "nv_helpers_vk/VKHelpers.h"
+
 #include "memory.hpp"
 #include "obj_loader.hpp"
 
 namespace Renderer {
+
+struct GeometryInstance {
+  Buffer buffer;
+
+  uint32_t vertexCount;
+  vk::DeviceSize vertexOffset;
+
+  uint32_t indexCount;
+  vk::DeviceSize indexOffset;
+  // Eigen::Matrix4f transform;
+};
+
+struct AccelerationStructure {
+  Buffer scratchBuffer;
+  Buffer resultBuffer;
+  Buffer instancesBuffer;
+
+  vk::AccelerationStructureNV structure;
+};
+
 struct ModelInstanceInternal : ModelInstance {
   using Transform = Eigen::Transform<float, 3, Eigen::Affine>;
 
@@ -42,24 +66,20 @@ public:
 
 struct Model {
 private:
-  Buffer viBuffer;
-  vk::DeviceSize vOffset = 0;
-
-  uint64_t nbIndices = 0;
-
   // UniformBufferObject uboModelMat;
 
+  GeometryInstance geometryInstance;
   std::vector<ModelInstanceInternal *> modelInstances;
 
   template <typename T, size_t N, size_t O>
-  vk::DeviceSize
-  init_vi_buffer(const std::array<T, N> &vertexBuffer,
-                 const std::array<VERTEX_INDICES_TYPE, O> &indexBuffer) {
+  void init_geometry_instance(
+      const std::array<T, N> &vertexBuffer,
+      const std::array<VERTEX_INDICES_TYPE, O> &indexBuffer) {
     constexpr const VkDeviceSize iBufferSize = sizeof(VERTEX_INDICES_TYPE) * O;
     constexpr const VkDeviceSize vBufferSize = sizeof(T) * N;
 
     constexpr const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
-    constexpr const VkDeviceSize offset = iBufferSize;
+    constexpr const VkDeviceSize vertexOffset = iBufferSize;
 
     // Making the staging by ourselves is more optimized than the auto one in
     // Buffer::write in this case (because ATM we would need 2 calls)
@@ -70,29 +90,34 @@ private:
                                vk::MemoryPropertyFlagBits::eHostCoherent);
 
     stagingBuffer.write(indexBuffer.data(), iBufferSize);
-    stagingBuffer.write(vertexBuffer.data(), vBufferSize, offset);
+    stagingBuffer.write(vertexBuffer.data(), vBufferSize, vertexOffset);
 
-    viBuffer.allocate(bufferSize,
-                      vk::BufferUsageFlagBits::eTransferDst |
-                          vk::BufferUsageFlagBits::eVertexBuffer |
-                          vk::BufferUsageFlagBits::eIndexBuffer,
-                      vk::MemoryPropertyFlagBits::eDeviceLocal);
+    geometryInstance.buffer.allocate(
+        bufferSize,
+        vk::BufferUsageFlagBits::eTransferDst |
+            vk::BufferUsageFlagBits::eVertexBuffer |
+            vk::BufferUsageFlagBits::eIndexBuffer,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    stagingBuffer.copy_to(viBuffer, bufferSize);
+    stagingBuffer.copy_to(geometryInstance.buffer, bufferSize);
 
-    return offset;
+    geometryInstance.indexOffset = 0;
+    geometryInstance.indexCount = indexBuffer.size();
+
+    geometryInstance.vertexCount = vertexBuffer.size();
+    geometryInstance.vertexOffset = vertexOffset;
   }
 
   template <typename T>
-  vk::DeviceSize
-  init_vi_buffer(const std::vector<T> &vertexBuffer,
-                 const std::vector<VERTEX_INDICES_TYPE> &indexBuffer) {
+  void
+  init_geometry_instance(const std::vector<T> &vertexBuffer,
+                         const std::vector<VERTEX_INDICES_TYPE> &indexBuffer) {
     const VkDeviceSize iBufferSize =
         sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
     const VkDeviceSize vBufferSize = sizeof(T) * vertexBuffer.size();
 
     const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
-    const VkDeviceSize offset = iBufferSize;
+    const VkDeviceSize vertexOffset = iBufferSize;
 
     // Making the staging by ourselves is more optimized than the auto one in
     // Buffer::write in this case (because ATM we would need 2 calls)
@@ -103,17 +128,22 @@ private:
                                vk::MemoryPropertyFlagBits::eHostCoherent);
 
     stagingBuffer.write(indexBuffer.data(), iBufferSize);
-    stagingBuffer.write(vertexBuffer.data(), vBufferSize, offset);
+    stagingBuffer.write(vertexBuffer.data(), vBufferSize, vertexOffset);
 
-    viBuffer.allocate(bufferSize,
-                      vk::BufferUsageFlagBits::eTransferDst |
-                          vk::BufferUsageFlagBits::eVertexBuffer |
-                          vk::BufferUsageFlagBits::eIndexBuffer,
-                      vk::MemoryPropertyFlagBits::eDeviceLocal);
+    geometryInstance.buffer.allocate(
+        bufferSize,
+        vk::BufferUsageFlagBits::eTransferDst |
+            vk::BufferUsageFlagBits::eVertexBuffer |
+            vk::BufferUsageFlagBits::eIndexBuffer,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    stagingBuffer.copy_to(viBuffer, bufferSize);
+    stagingBuffer.copy_to(geometryInstance.buffer, bufferSize);
 
-    return offset;
+    geometryInstance.indexOffset = 0;
+    geometryInstance.indexCount = indexBuffer.size();
+
+    geometryInstance.vertexCount = vertexBuffer.size();
+    geometryInstance.vertexOffset = vertexOffset;
   }
 
 public:
@@ -127,8 +157,7 @@ public:
   template <typename T, size_t N, size_t O>
   void init(const std::array<T, N> &vertices,
             const std::array<VERTEX_INDICES_TYPE, O> &indices) {
-    vOffset = init_vi_buffer(vertices, indices);
-    nbIndices = indices.size();
+    init_geometry_instance(vertices, indices);
 
     // uboModelMat.init<UniformBufferInfo<UniformModelMat>>(
     //    g_baseDescriptorSetLayout);
@@ -137,8 +166,7 @@ public:
   template <typename T>
   void init(const std::vector<T> &vertices,
             const std::vector<VERTEX_INDICES_TYPE> &indices) {
-    vOffset = init_vi_buffer(vertices, indices);
-    nbIndices = indices.size();
+    init_geometry_instance(vertices, indices);
   }
 
   template <typename Prim> void init_from_primitive() {
@@ -155,9 +183,10 @@ public:
   // TODO index param only used for descriptors (that are unused for now).
   void record(const vk::CommandBuffer &commandbuffer, const Shader &shader,
               size_t imageIndex) const {
-    commandbuffer.bindIndexBuffer(viBuffer.get_handle(), 0,
+    commandbuffer.bindIndexBuffer(geometryInstance.buffer.get_handle(), 0,
                                   VULKAN_INDICES_TYPE);
-    commandbuffer.bindVertexBuffers(0, 1, &viBuffer.get_handle(), &vOffset);
+    commandbuffer.bindVertexBuffers(0, 1, &geometryInstance.buffer.get_handle(),
+                                    &geometryInstance.vertexOffset);
 
     // uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
@@ -195,7 +224,7 @@ public:
                                       vk::ShaderStageFlagBits::eFragment,
                                   0, sizeof(miPc), &miPc);
 
-      commandbuffer.drawIndexed(nbIndices, 1, 0, 0, 0);
+      commandbuffer.drawIndexed(geometryInstance.indexCount, 1, 0, 0, 0);
     }
   }
 
