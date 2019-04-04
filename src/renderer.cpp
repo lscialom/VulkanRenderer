@@ -132,6 +132,16 @@ struct RenderContext {
   Pass blurPass;
   Pass lightPass;
 
+  vk::PhysicalDeviceRayTracingPropertiesNV rtProperties = {};
+
+  void init_ray_tracing() {
+    vk::PhysicalDeviceProperties2 pdProperties;
+    pdProperties.pNext = &rtProperties;
+    pdProperties.properties = {};
+
+    g_physicalDevice.getProperties2(&pdProperties);
+  }
+
   void init_g_pass() {
     vk::Extent2D extent = Swapchain::GetExtent();
 
@@ -468,6 +478,8 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
+    init_ray_tracing();
+
     init_g_pass();
     init_ssao_pass();
     init_blur_pass();
@@ -676,7 +688,7 @@ static void CreateInstance() {
       vk::createInstance(&createInfo, g_allocationCallbacks, &g_instance),
       "Failed to init vulkan instance");
 
-  g_dldy.init(g_instance);
+  g_dldy.init(g_instance, vkGetInstanceProcAddr);
 
 #ifndef NDEBUG
   for (size_t i = 0; i < g_debugMessengersInfos.size(); ++i)
@@ -757,7 +769,7 @@ static void InitDevice() {
                             &createInfo, g_allocationCallbacks, &g_device),
                         "Failed to create logical device");
 
-  g_dldy.init(g_instance, g_device);
+  g_dldy.init(g_instance, vkGetInstanceProcAddr, g_device, vkGetDeviceProcAddr);
 
   // TODO Different index for each (need to create a queue for each then)?
   graphicsQueue.index = 0;

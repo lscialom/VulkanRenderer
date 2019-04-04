@@ -1,2 +1,5 @@
 # Requirements
-Vulkan SDK v1.1.70. As I write theses lines, this is the version supported by GLFW.
+- Vulkan SDK 1.1.101.0 or newer
+- Clang 7.0.0 or newer
+- Windows
+

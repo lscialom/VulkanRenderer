@@ -35,8 +35,9 @@ static constexpr const std::array<const char *, 2>
 #endif
 };
 
-static constexpr const std::array<const char *, 1> g_deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+static constexpr const std::array<const char *, 3> g_deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_NV_RAY_TRACING_EXTENSION_NAME,
+    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME};
 
 #ifndef NDEBUG
 static constexpr const uint8_t INSTANCE_DEBUG_EXTENSION_COUNT = 1;
@@ -200,7 +201,7 @@ static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) {
 }
 
 static uint64_t RateDeviceSuitability(vk::PhysicalDevice device,
-                                 vk::SurfaceKHR surface) {
+                                      vk::SurfaceKHR surface) {
   if (!GetQueueFamilies(device, surface).isComplete() ||
       !CheckDeviceExtensionSupport(device))
     return 0;
