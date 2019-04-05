@@ -53,7 +53,8 @@ private:
 
       if (attachmentInfos[i].isDepth) {
 
-        assert(++depthCount == 1);
+        ++depthCount;
+        assert(depthCount == 1);
 
         attachments[i].init(
             extent.width, extent.height, vk::ImageTiling::eOptimal,
@@ -224,7 +225,7 @@ public:
 
   void record(const vk::CommandBuffer &commandbuffer, uint32_t frameIndex,
               const std::vector<std::vector<void *>> &pushConstantData,
-              const std::vector<vk::ClearValue> clearValues,
+              const std::vector<vk::ClearValue> &clearValues,
               const std::vector<Model *> &models = {}) {
 
     vk::RenderPassBeginInfo renderPassInfo;

@@ -67,7 +67,7 @@ static void UpdateMatrix() {
       Maths::LookAt(position, position + rot * Eigen::Vector3f::UnitZ(),
                     Eigen::Vector3f::UnitY());
   ProjMatrix =
-      Maths::Perspective(Camera::Fov, extent.width / (float)extent.height,
+      Maths::Perspective(Camera::Fov, (float)extent.width / (float)extent.height,
                          Camera::Near, Camera::Far);
 
   ProjMatrix(1, 1) *= -1;
