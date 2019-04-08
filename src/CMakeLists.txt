@@ -11,7 +11,7 @@ find_library(VULKAN_LIBRARY
   NAMES vulkan vulkan-1 HINTS $ENV{VK_SDK_PATH}/Lib)
 
 # Generating vulkan renderer library
-file(GLOB VULKAN_RENDERER_SRC ${PROJECT_SOURCE_DIR}/src/*.cpp)
+file(GLOB_RECURSE VULKAN_RENDERER_SRC ${PROJECT_SOURCE_DIR}/src/*.cpp)
 
 add_library(vulkan_renderer SHARED ${VULKAN_RENDERER_SRC})
 

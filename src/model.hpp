@@ -1,8 +1,8 @@
 #pragma once
 
-//#include "nv_helpers_vk/BottomLevelASGenerator.h"
-//#include "nv_helpers_vk/TopLevelASGenerator.h"
-//#include "nv_helpers_vk/VKHelpers.h"
+#include "nv_helpers_vk/BottomLevelASGenerator.h"
+#include "nv_helpers_vk/TopLevelASGenerator.h"
+#include "nv_helpers_vk/VKHelpers.h"
 
 #include "memory.hpp"
 #include "obj_loader.hpp"
