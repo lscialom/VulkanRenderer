@@ -66,9 +66,9 @@ static void UpdateMatrix() {
   ViewMatrix =
       Maths::LookAt(position, position + rot * Eigen::Vector3f::UnitZ(),
                     Eigen::Vector3f::UnitY());
-  ProjMatrix =
-      Maths::Perspective(Camera::Fov, (float)extent.width / (float)extent.height,
-                         Camera::Near, Camera::Far);
+  ProjMatrix = Maths::Perspective(Camera::Fov,
+                                  (float)extent.width / (float)extent.height,
+                                  Camera::Near, Camera::Far);
 
   ProjMatrix(1, 1) *= -1;
 
@@ -753,6 +753,23 @@ static void InitDevice() {
 
   vk::PhysicalDeviceFeatures deviceFeatures = {};
 
+  std::vector<const char *> deviceExtensions(g_deviceExtensions.begin(),
+                                             g_deviceExtensions.end());
+
+  static constexpr std::array<const char *, 2> nvrtRequiredExtensions = {
+      {VK_NV_RAY_TRACING_EXTENSION_NAME,
+       VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME}};
+
+  bool supportsNVRaytracing = CheckDeviceExtensionSupport(
+      g_physicalDevice, nvrtRequiredExtensions.begin(),
+      nvrtRequiredExtensions.end());
+
+  if (supportsNVRaytracing) {
+    deviceExtensions.insert(deviceExtensions.end(),
+                            nvrtRequiredExtensions.begin(),
+                            nvrtRequiredExtensions.end());
+  }
+
   vk::DeviceCreateInfo createInfo(
       vk::DeviceCreateFlags(), static_cast<uint32_t>(queueCreateInfos.size()),
       queueCreateInfos.data(),
@@ -762,8 +779,8 @@ static void InitDevice() {
 #else
       0, nullptr,
 #endif
-      static_cast<uint32_t>(g_deviceExtensions.size()),
-      g_deviceExtensions.data(), &deviceFeatures);
+      static_cast<uint32_t>(deviceExtensions.size()), deviceExtensions.data(),
+      &deviceFeatures);
 
   CHECK_VK_RESULT_FATAL(g_physicalDevice.createDevice(
                             &createInfo, g_allocationCallbacks, &g_device),

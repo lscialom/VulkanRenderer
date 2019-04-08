@@ -35,9 +35,8 @@ static constexpr const std::array<const char *, 2>
 #endif
 };
 
-static constexpr const std::array<const char *, 3> g_deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_NV_RAY_TRACING_EXTENSION_NAME,
-    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME};
+static constexpr const std::array<const char *, 1> g_deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 #ifndef NDEBUG
 static constexpr const uint8_t INSTANCE_DEBUG_EXTENSION_COUNT = 1;
@@ -187,7 +186,7 @@ static vk::Format FindSupportedFormat(vk::PhysicalDevice device,
   throw std::runtime_error("failed to find supported format!");
 }
 
-static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) {
+static bool CheckDefaultDeviceExtensionsSupport(vk::PhysicalDevice device) {
   const std::vector<vk::ExtensionProperties> availableExtensions =
       device.enumerateDeviceExtensionProperties();
 
@@ -200,10 +199,24 @@ static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) {
   return requiredExtensions.empty();
 }
 
+template <typename Iter>
+static bool CheckDeviceExtensionSupport(vk::PhysicalDevice device, Iter begin,
+                                        Iter end) {
+  const std::vector<vk::ExtensionProperties> availableExtensions =
+      device.enumerateDeviceExtensionProperties();
+
+  std::set<std::string> requiredExtensions(begin, end);
+
+  for (const auto &extension : availableExtensions)
+    requiredExtensions.erase(extension.extensionName);
+
+  return requiredExtensions.empty();
+}
+
 static uint64_t RateDeviceSuitability(vk::PhysicalDevice device,
                                       vk::SurfaceKHR surface) {
   if (!GetQueueFamilies(device, surface).isComplete() ||
-      !CheckDeviceExtensionSupport(device))
+      !CheckDefaultDeviceExtensionsSupport(device))
     return 0;
 
   // Done separately since we need to check for the swapchain extension support
