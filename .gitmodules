@@ -4,3 +4,6 @@
 [submodule "deps/WindowHandler"]
 	path = deps/WindowHandler
 	url = https://github.com/lscialom/WindowHandler.git
+[submodule "tinyobjloader"]
+	path = deps/tinyobjloader
+	url = https://github.com/syoyo/tinyobjloader.git

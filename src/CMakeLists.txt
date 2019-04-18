@@ -24,5 +24,5 @@ target_include_directories(vulkan_renderer PRIVATE ${PROJECT_SOURCE_DIR}/include
 												   $ENV{VK_SDK_PATH}/Include
 												   ${PROJECT_SOURCE_DIR}/resources/shaders/hr/include)
 
-target_link_libraries(vulkan_renderer PRIVATE ${VULKAN_LIBRARY})
+target_link_libraries(vulkan_renderer PRIVATE ${VULKAN_LIBRARY} tinyobjloader)
 set_target_properties(vulkan_renderer PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -DVULKAN_RENDERER_DLL_EXPORTS")

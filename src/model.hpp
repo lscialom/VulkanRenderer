@@ -7,6 +7,8 @@
 #include "memory.hpp"
 #include "obj_loader.hpp"
 
+#include "tinyobjloader_integration.hpp"
+
 namespace Renderer {
 
 struct GeometryInstance {
