@@ -10,19 +10,18 @@ template <class T> inline void hash_combine(std::size_t &seed, const T &v) {
 }
 
 namespace std {
-template <> struct hash<std::array<float, 3>> {
-  size_t operator()(const std::array<float, 3> &v) const {
-    size_t h = std::hash<float>()(v[0]);
-    hash_combine(h, v[1]);
-    hash_combine(h, v[2]);
-    return h;
-  }
-};
 
-template <> struct hash<std::array<float, 2>> {
-  size_t operator()(const std::array<float, 2> &v) const {
+template <size_t N> struct hash<std::array<float, N>> {
+
+  static_assert(N > 0);
+
+  size_t operator()(const std::array<float, N> &v) const {
+
     size_t h = std::hash<float>()(v[0]);
-    hash_combine(h, v[1]);
+
+    for (size_t i = 1; i < N; ++i)
+      hash_combine(h, v[i]);
+
     return h;
   }
 };
