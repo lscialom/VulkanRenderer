@@ -23,6 +23,7 @@ bool operator==(const LiteralVector<N> &v1, const LiteralVector<N> &v2) {
 struct LiteralVertex {
   LiteralVector<3> pos;
   LiteralVector<3> nor;
+  LiteralVector<2> texcoords;
 
   // Non-wrapped type for constexpr qualifier
   static constexpr VkVertexInputBindingDescription GetBindingDescription() {
@@ -31,9 +32,10 @@ struct LiteralVertex {
 
   // Non-wrapped type for constexpr qualifier
   static constexpr auto GetAttributeDescription() {
-    return std::array<VkVertexInputAttributeDescription, 2>{
+    return std::array<VkVertexInputAttributeDescription, 3>{
         {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LiteralVertex, pos)},
-         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LiteralVertex, nor)}}};
+         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LiteralVertex, nor)},
+         {2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(LiteralVertex, texcoords)}}};
   }
 };
 

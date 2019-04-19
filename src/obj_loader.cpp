@@ -71,6 +71,12 @@ void LoadObj(const std::string &filename,
                     attrib.normals[3 * index.normal_index + 1],
                     attrib.normals[3 * index.normal_index + 2]};
 
+      if (!attrib.texcoords.empty()) {
+        vertex.texcoords = {attrib.texcoords[2 * index.texcoord_index + 0],
+                            1.0f -
+                                attrib.texcoords[2 * index.texcoord_index + 1]};
+      }
+
       if (uniqueVertices.count(vertex) == 0) {
         uniqueVertices[vertex] = static_cast<uint32_t>(vertexBuffer.size());
         vertexBuffer.push_back(vertex);

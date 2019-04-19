@@ -236,20 +236,35 @@ int main() {
 
   // uint64_t bunnyId =
   //    Renderer::CreateModelFromPrimitive(Renderer::EPrimitive::Cube);
-  uint64_t bunnyId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/bunny.obj"));
-  uint64_t armadilloId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/armadillo.obj"));
-  uint64_t mapId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/sponza/sponza.obj"));
-  uint64_t sphereId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/sphere.obj"));
+
+  //uint64_t bunnyId = Renderer::CreateModelFromObj(
+  //    std::string("../resources/models/bunny.obj"));
+  //uint64_t armadilloId = Renderer::CreateModelFromObj(
+  //    std::string("../resources/models/armadillo.obj"));
+  //uint64_t mapId = Renderer::CreateModelFromObj(
+  //    std::string("../resources/models/sponza/sponza.obj"));
+  //uint64_t sphereId = Renderer::CreateModelFromObj(
+  //    std::string("../resources/models/sphere.obj"));
+
+  uint64_t cubeId = Renderer::CreateModelFromObj(
+      std::string("../resources/models/cube.obj"), "../resources/textures/statue_head.jpg");
+
+  uint64_t cubeId1 = Renderer::CreateModelFromObj(
+	  std::string("../resources/models/cube.obj"), "../resources/textures/default_tex.jpg");
 
   WindowHandler::CaptureMouse();
 
-  Renderer::ModelInstance *map =
-      Renderer::Spawn(mapId, {0.0f, -6.5f, 0.0f}, Renderer::Vec3::Zero(),
-                      {0.05f, 0.05f, 0.05f}); // {100.0f, 100.0f, 100.0f});
+  Renderer::ModelInstance* cube =
+	  Renderer::Spawn(cubeId, { 0.0f, -6.5f, 0.0f }, Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
+
+  Renderer::ModelInstance* cube1 =
+	  Renderer::Spawn(cubeId1, { 5.0f, -6.5f, 0.0f }, Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
+
+  cube1->color = Renderer::Color::Red;
+
+  //Renderer::ModelInstance *map =
+  //    Renderer::Spawn(mapId, {0.0f, -6.5f, 0.0f}, Renderer::Vec3::Zero(),
+  //                    {0.05f, 0.05f, 0.05f}); // {100.0f, 100.0f, 100.0f});
 
   // Point light
   //Renderer::Light *light =
@@ -285,26 +300,26 @@ int main() {
    //   {0.2f, -1.0f, -0.3f}, Renderer::Color::White, 0);
    //light->lightType = Renderer::LightType::Directional;
 
-  Renderer::ModelInstance *sphere = Renderer::Spawn(
-      sphereId, {-10, 10, 0.0f}, Renderer::Vec3::Zero(), {0.05f, 0.05f, 0.05f});
+  //Renderer::ModelInstance *sphere = Renderer::Spawn(
+  //    sphereId, {-10, 10, 0.0f}, Renderer::Vec3::Zero(), {0.05f, 0.05f, 0.05f});
 
-  Renderer::ModelInstance *inst0 = Renderer::Spawn(sphereId, Renderer::Vec3::Zero(), Renderer::Vec3::Zero(), { 0.05f, 0.05f, 0.05f });
+  //Renderer::ModelInstance *inst0 = Renderer::Spawn(sphereId, Renderer::Vec3::Zero(), Renderer::Vec3::Zero(), { 0.05f, 0.05f, 0.05f });
   // for (size_t i = 0; i < 100; ++i)
   // Renderer::Spawn(bunnyId, {i * 5.f, 0, 0});
 
   Renderer::Vec3 baseRot = {M_PI / 4.f, 0, 0};
-  Renderer::ModelInstance *inst1 =
-      Renderer::Spawn(armadilloId, {3.f, 0.f, 0.f}, baseRot);
-  Renderer::ModelInstance *inst2 =
-      Renderer::Spawn(armadilloId, {0.f, 3.f, 0.f}, baseRot);
-  Renderer::ModelInstance *inst3 = Renderer::Spawn(
-      bunnyId, {0.f, 0.f, 3.f}, Renderer::Vec3::Zero(), {0.5f, 0.5f, 0.5f});
+  //Renderer::ModelInstance *inst1 =
+  //    Renderer::Spawn(armadilloId, {3.f, 0.f, 0.f}, baseRot);
+  //Renderer::ModelInstance *inst2 =
+  //    Renderer::Spawn(armadilloId, {0.f, 3.f, 0.f}, baseRot);
+  //Renderer::ModelInstance *inst3 = Renderer::Spawn(
+  //    bunnyId, {0.f, 0.f, 3.f}, Renderer::Vec3::Zero(), {0.5f, 0.5f, 0.5f});
 
-  inst1->color = Renderer::Color::Red;
-  inst2->color = Renderer::Color::Green;
-  inst3->color = Renderer::Color::Blue;
+  //inst1->color = Renderer::Color::Red;
+  //inst2->color = Renderer::Color::Green;
+  //inst3->color = Renderer::Color::Blue;
 
-  map->color = Renderer::Color::Grey;
+  //map->color = Renderer::Color::Grey;
 
   auto startTime = std::chrono::high_resolution_clock::now();
   auto frameTimestamp = startTime;
@@ -338,18 +353,18 @@ int main() {
 
     frameTimestamp = currentTime;
 
-    inst0->SetRotation({time * 0.5f * static_cast<float>(M_PI) / 2.f,
-                        time * static_cast<float>(M_PI) / 2.f,
-                        time * static_cast<float>(M_PI)});
-    inst1->SetRotation(
-        {baseRot.x + time * static_cast<float>(M_PI) / 2.f, 0, 0});
-    inst2->SetRotation(
-        {0, baseRot.y + time * static_cast<float>(M_PI) / 2.f, 0});
-    inst3->SetRotation(
-        {0, baseRot.z + time * static_cast<float>(M_PI) / 2.f, 0});
+    //inst0->SetRotation({time * 0.5f * static_cast<float>(M_PI) / 2.f,
+    //                    time * static_cast<float>(M_PI) / 2.f,
+    //                    time * static_cast<float>(M_PI)});
+    //inst1->SetRotation(
+    //    {baseRot.x + time * static_cast<float>(M_PI) / 2.f, 0, 0});
+    //inst2->SetRotation(
+    //    {0, baseRot.y + time * static_cast<float>(M_PI) / 2.f, 0});
+    //inst3->SetRotation(
+    //    {0, baseRot.z + time * static_cast<float>(M_PI) / 2.f, 0});
 
-    //light->vector.x = sinf(time * 2.0f) * 10.0f;
-    sphere->SetPosition({light->vector.x, 10.0f, 0.0f});
+    ////light->vector.x = sinf(time * 2.0f) * 10.0f;
+    //sphere->SetPosition({light->vector.x, 10.0f, 0.0f});
 
     // Renderer::Camera::Rotation = {
     //    0, baseRot.x + time / 2.f * static_cast<float>(M_PI) / 2.f, 0};

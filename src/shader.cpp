@@ -56,7 +56,8 @@ void Shader::init_pipeline(
     const std::string &vertPath, const std::string &fragPath,
     const vk::RenderPass &renderPass, uint32_t nbColorAttachments,
     bool useVertexInput, bool cull, bool blendEnable,
-    const std::vector<vk::DescriptorSetLayout> &uboLayouts) {
+    const std::vector<vk::DescriptorSetLayout> &uboLayouts,
+    const std::vector<DescriptorLayout> &unmanagedDescriptors) {
 
   auto vertShaderCode = ReadFile(vertPath);
   auto fragShaderCode = ReadFile(fragPath);
@@ -142,6 +143,9 @@ void Shader::init_pipeline(
       static_cast<uint32_t>(dynamicStates.size()), dynamicStates.data());
 
   std::vector<vk::DescriptorSetLayout> descriptorLayouts;
+
+  for (size_t i = 0; i < unmanagedDescriptors.size(); ++i)
+    descriptorLayouts.push_back(unmanagedDescriptors[i].handle);
 
   for (size_t i = 0; i < uboLayouts.size(); ++i)
     descriptorLayouts.push_back(uboLayouts[i]);

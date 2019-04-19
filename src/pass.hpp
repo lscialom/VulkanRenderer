@@ -125,12 +125,21 @@ private:
 
     for (size_t i = 0; i < shaders.size(); ++i) {
 
-      shaders[i].handle.init(shaderInfos[i].vertPath, shaderInfos[i].fragPath,
-                             handle, nbColorAttachments,
-                             shaderInfos[i].useVertexInput, shaderInfos[i].cull,
-                             shaderInfos[i].blendEnable,
-                             shaderInfos[i].pushConstants,
-                             shaderInfos[i].descriptors, shaderInfos[i].ubos);
+      if (!shaderInfos[i].drawModels) {
+        shaders[i].handle.init(shaderInfos[i].vertPath, shaderInfos[i].fragPath,
+                               handle, nbColorAttachments,
+                               shaderInfos[i].useVertexInput,
+                               shaderInfos[i].cull, shaderInfos[i].blendEnable,
+                               shaderInfos[i].pushConstants,
+                               shaderInfos[i].descriptors, shaderInfos[i].ubos);
+      } else {
+        shaders[i].handle.init(
+            shaderInfos[i].vertPath, shaderInfos[i].fragPath, handle,
+            nbColorAttachments, shaderInfos[i].useVertexInput,
+            shaderInfos[i].cull, shaderInfos[i].blendEnable,
+            shaderInfos[i].pushConstants, shaderInfos[i].descriptors,
+            shaderInfos[i].ubos, {CommonResources::UniqueTextureLayout});
+      }
 
       shaders[i].drawModels = shaderInfos[i].drawModels;
       shaders[i].drawRectCount = shaderInfos[i].drawRectCount;

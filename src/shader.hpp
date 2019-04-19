@@ -34,13 +34,16 @@ private:
   std::vector<UniformBufferObject *> ubos;
   std::vector<vk::PushConstantRange> pushConstants;
 
+  size_t unmanagedDescriptorsCount;
+
   void init_descriptors(const std::vector<DescriptorSetInfo> &descriptors);
 
   void init_pipeline(const std::string &vertPath, const std::string &fragPath,
                      const vk::RenderPass &renderPass,
                      uint32_t nbColorAttachments, bool useVertexInput,
                      bool cull, bool blendEnable,
-                     const std::vector<vk::DescriptorSetLayout> &uboLayouts);
+                     const std::vector<vk::DescriptorSetLayout> &uboLayouts,
+                     const std::vector<DescriptorLayout> &unmanagedDescriptors);
 
 public:
   ~Shader() { destroy(); }
@@ -60,10 +63,13 @@ public:
             bool useVertexInput, bool cull, bool blendEnable,
             const std::vector<vk::PushConstantRange> &pcRanges = {},
             const std::vector<DescriptorSetInfo> &descriptors = {},
-            const std::vector<UniformBufferObject *> &vUbo = {}) {
+            const std::vector<UniformBufferObject *> &vUbo = {},
+            const std::vector<DescriptorLayout> &unmanagedDescriptors = {}) {
 
     pushConstants = pcRanges;
     ubos = vUbo;
+
+    unmanagedDescriptorsCount = unmanagedDescriptors.size();
 
     std::vector<vk::DescriptorSetLayout> uboLayouts;
     uboLayouts.resize(ubos.size());
@@ -73,7 +79,8 @@ public:
 
     init_descriptors(descriptors);
     init_pipeline(vertPath, fragPath, renderPass, nbColorAttachments,
-                  useVertexInput, cull, blendEnable, uboLayouts);
+                  useVertexInput, cull, blendEnable, uboLayouts,
+                  unmanagedDescriptors);
   }
 
   void update_descriptors() const {
@@ -85,7 +92,7 @@ public:
                         uint32_t offset = 0) const {
     for (size_t i = 0; i < descriptorSets.size(); ++i) {
       commandbuffer.bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, pipelineLayout, offset + i, 1,
+          vk::PipelineBindPoint::eGraphics, pipelineLayout, offset + i + unmanagedDescriptorsCount, 1,
           &descriptorSets[i].get_handle(), 0, nullptr);
     }
   }
@@ -109,7 +116,7 @@ public:
     for (size_t i = 0; i < ubos.size(); ++i) {
 
       commandbuffer.bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, pipelineLayout, i, 1,
+          vk::PipelineBindPoint::eGraphics, pipelineLayout, i + unmanagedDescriptorsCount, 1,
           &ubos[i]->get_descriptor_set(frameIndex), 0, nullptr);
     }
   }

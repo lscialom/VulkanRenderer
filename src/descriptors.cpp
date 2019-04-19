@@ -102,6 +102,8 @@ void DescriptorSet::update() const {
 
     } else if (descriptorTypeStr.find("Image") != std::string::npos) {
 
+      // TODO eCombinedImageSampler and eSampledImage both fall here
+
       vk::DescriptorImageInfo *infos =
           new vk::DescriptorImageInfo[bindingsInfo[i].descriptorCount];
       imageInfosToDestroy.push_back(infos);

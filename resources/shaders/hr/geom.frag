@@ -3,7 +3,9 @@
 
 #include <constants.glsl>
 
-layout(binding = 0) uniform CameraData {
+layout(set = 0, binding = 0) uniform sampler2D tex;
+
+layout(set = 1, binding = 0) uniform CameraData {
   mat4 view;
   mat4 proj;
   vec3 viewPos;
@@ -19,6 +21,7 @@ u_pushConstant;
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec3 fragPosition;
 layout(location = 2) in vec3 fragNormal;
+layout(location = 3) in vec2 fragUV;
 
 layout(location = POS_BUFFER_INDEX - 1) out vec4 outPos;
 layout(location = NORMAL_BUFFER_INDEX - 1) out vec4 outNormal;
@@ -37,7 +40,7 @@ void main() {
   // outPos.w = 1;
   outPos = vec4(fragPosition, 1.0); // position in world space
 
-  outColor = u_pushConstant.color;
+  outColor = u_pushConstant.color * texture(tex, fragUV);
 
   // outNormal = vec4(normalize(fragNormal), 1);
   // outPos = vec4(0, 1, 0, 1);

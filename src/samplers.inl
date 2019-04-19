@@ -39,6 +39,24 @@ DEFINE_SAMPLER(BaseSampler,
 		.unnormalizedCoordinates = false
 )
 
+DEFINE_SAMPLER(TextureSampler,
+	.magFilter = VK_FILTER_LINEAR,
+	.minFilter = VK_FILTER_LINEAR,
+	.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+	.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+	.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+	.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+	.mipLodBias = 0.f,
+	.anisotropyEnable = true,
+	.maxAnisotropy = 16,
+	.compareEnable = false,
+	.compareOp = VK_COMPARE_OP_ALWAYS,
+	.minLod = 0,
+	.maxLod = 0,
+	.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+	.unnormalizedCoordinates = false
+)
+
 DEFINE_SAMPLER(RepeatSampler,
 	.magFilter = VK_FILTER_NEAREST,
 	.minFilter = VK_FILTER_NEAREST,
@@ -67,11 +85,13 @@ DEFINE_SAMPLER(RepeatSampler,
 
 void InitSamplers() {
   CREATE_SAMPLER(BaseSampler);
+  CREATE_SAMPLER(TextureSampler);
   CREATE_SAMPLER(RepeatSampler);
 }
 
 void DestroySamplers() {
   DESTROY_SAMPLER(BaseSampler);
+  DESTROY_SAMPLER(TextureSampler);
   DESTROY_SAMPLER(RepeatSampler);
 }
 

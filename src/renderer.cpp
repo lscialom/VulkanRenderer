@@ -12,9 +12,6 @@
 #include "common_resources.hpp"
 #include "pass.hpp"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb/stb_image.h"
-
 #include <array>
 #include <map>
 #include <string>
@@ -89,37 +86,6 @@ static uint32_t requestedHeight = 0;
 Queue graphicsQueue;
 
 std::array<vk::Semaphore, MAX_IN_FLIGHT_FRAMES> renderFinishedSemaphores;
-
-struct Texture {
-private:
-  Image image;
-
-public:
-  void init(const std::string &path) {
-    int texWidth, texHeight, texChannels;
-    stbi_uc *pixels =
-        stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels,
-                  STBI_rgb_alpha); // TODO Support multiple pixel formats
-
-    if (!pixels) {
-      printf("[Error] Failed to load texture image %s\n", path.c_str());
-      return;
-    }
-
-    image.allocate(texWidth, texHeight, vk::Format::eR8G8B8A8Unorm,
-                   vk::ImageTiling::eOptimal,
-                   vk::ImageUsageFlagBits::eTransferDst |
-                       vk::ImageUsageFlagBits::eSampled,
-                   vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    // cast for correct template deduction (for inner staging buffer size
-    // deduction)
-    // TODO Support multiple image formats
-    image.write_from_raw_data(reinterpret_cast<uint32_t *>(pixels),
-                              vk::ImageLayout::eUndefined,
-                              vk::ImageLayout::eShaderReadOnlyOptimal);
-  }
-};
 
 struct RenderContext {
   std::vector<vk::CommandBuffer> commandbuffers;
@@ -752,6 +718,7 @@ static void InitDevice() {
   }
 
   vk::PhysicalDeviceFeatures deviceFeatures = {};
+  deviceFeatures.samplerAnisotropy = true;
 
   std::vector<const char *> deviceExtensions(g_deviceExtensions.begin(),
                                              g_deviceExtensions.end());
@@ -936,10 +903,11 @@ uint64_t CreateModelFromPrimitive(EPrimitive primitive) {
   return uintptr_t(renderContext.models.back());
 }
 
-uint64_t CreateModelFromObj(const std::string &objFilename) {
+uint64_t CreateModelFromObj(const std::string &objFilename,
+                            const std::string &texturePath) {
   Model *model = new Model();
 
-  model->init_from_obj_file(objFilename);
+  model->init_from_obj_file(objFilename, texturePath);
 
   renderContext.models.push_back(model);
 

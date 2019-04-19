@@ -147,7 +147,7 @@ enum class EPrimitive { Plane, Cube };
 
 VULKAN_RENDERER_EXPORTS uint64_t CreateModelFromPrimitive(EPrimitive primitive);
 VULKAN_RENDERER_EXPORTS uint64_t
-CreateModelFromObj(const std::string &objFilename);
+CreateModelFromObj(const std::string &objFilename, const std::string& texturePath);
 
 VULKAN_RENDERER_EXPORTS ModelInstance *Spawn(uint64_t modelId,
                                              Vec3 pos = Vec3::Zero(),
