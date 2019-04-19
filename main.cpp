@@ -241,8 +241,8 @@ int main() {
   //    std::string("../resources/models/bunny.obj"));
   //uint64_t armadilloId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/armadillo.obj"));
-  //uint64_t mapId = Renderer::CreateModelFromObj(
-  //    std::string("../resources/models/sponza/sponza.obj"));
+  uint64_t mapId = Renderer::CreateModelFromObj(
+      std::string("../resources/models/sponza/sponza.obj"), "../resources/textures/default_tex.jpg");
   //uint64_t sphereId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/sphere.obj"));
 
@@ -262,9 +262,9 @@ int main() {
 
   cube1->color = Renderer::Color::Red;
 
-  //Renderer::ModelInstance *map =
-  //    Renderer::Spawn(mapId, {0.0f, -6.5f, 0.0f}, Renderer::Vec3::Zero(),
-  //                    {0.05f, 0.05f, 0.05f}); // {100.0f, 100.0f, 100.0f});
+  Renderer::ModelInstance *map =
+      Renderer::Spawn(mapId, {0.0f, -6.5f, 0.0f}, Renderer::Vec3::Zero(),
+                      {0.05f, 0.05f, 0.05f}); // {100.0f, 100.0f, 100.0f});
 
   // Point light
   //Renderer::Light *light =
@@ -319,7 +319,7 @@ int main() {
   //inst2->color = Renderer::Color::Green;
   //inst3->color = Renderer::Color::Blue;
 
-  //map->color = Renderer::Color::Grey;
+  map->color = Renderer::Color::Grey;
 
   auto startTime = std::chrono::high_resolution_clock::now();
   auto frameTimestamp = startTime;

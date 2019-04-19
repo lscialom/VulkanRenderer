@@ -19,10 +19,19 @@ template <> struct hash<std::array<float, 3>> {
   }
 };
 
+template <> struct hash<std::array<float, 2>> {
+  size_t operator()(const std::array<float, 2> &v) const {
+    size_t h = std::hash<float>()(v[0]);
+    hash_combine(h, v[1]);
+    return h;
+  }
+};
+
 template <> struct hash<LiteralVertex> {
   size_t operator()(const LiteralVertex &v) const {
     std::array<float, 3> pos;
     std::array<float, 3> nor;
+    std::array<float, 2> texcoords;
 
     pos[0] = v.pos.members[0];
     pos[1] = v.pos.members[1];
@@ -32,8 +41,14 @@ template <> struct hash<LiteralVertex> {
     nor[1] = v.nor.members[1];
     nor[2] = v.nor.members[2];
 
+    texcoords[0] = v.texcoords.members[0];
+    texcoords[1] = v.texcoords.members[1];
+
     size_t h = std::hash<std::array<float, 3>>()(pos);
+
     hash_combine(h, nor);
+    hash_combine(h, texcoords);
+
     return h;
   }
 };
