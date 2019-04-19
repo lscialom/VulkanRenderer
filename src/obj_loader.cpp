@@ -4,23 +4,23 @@
 #include <tinyobjloader/tiny_obj_loader.h>
 
 template <class T> inline void hash_combine(std::size_t &seed, const T &v) {
-  std::hash<T> hasher;
+  std::hash<std::decay_t<T>> hasher;
   seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
   // seed ^= hasher(v) + 0x11111111 + (seed << 6) + (seed >> 2);
 }
 
 namespace std {
 
-template <size_t N> struct hash<std::array<float, N>> {
+template <size_t N> struct hash<LiteralVector<N>> {
 
   static_assert(N > 0);
 
-  size_t operator()(const std::array<float, N> &v) const {
+  size_t operator()(const LiteralVector<N> &v) const {
 
-    size_t h = std::hash<float>()(v[0]);
+    size_t h = std::hash<std::decay_t<decltype(v.members[0])>>()(v.members[0]);
 
     for (size_t i = 1; i < N; ++i)
-      hash_combine(h, v[i]);
+      hash_combine(h, v.members[i]);
 
     return h;
   }
@@ -28,25 +28,11 @@ template <size_t N> struct hash<std::array<float, N>> {
 
 template <> struct hash<LiteralVertex> {
   size_t operator()(const LiteralVertex &v) const {
-    std::array<float, 3> pos;
-    std::array<float, 3> nor;
-    std::array<float, 2> texcoords;
 
-    pos[0] = v.pos.members[0];
-    pos[1] = v.pos.members[1];
-    pos[2] = v.pos.members[2];
+    size_t h = std::hash<std::decay_t<decltype(v.pos)>>()(v.pos);
 
-    nor[0] = v.nor.members[0];
-    nor[1] = v.nor.members[1];
-    nor[2] = v.nor.members[2];
-
-    texcoords[0] = v.texcoords.members[0];
-    texcoords[1] = v.texcoords.members[1];
-
-    size_t h = std::hash<std::array<float, 3>>()(pos);
-
-    hash_combine(h, nor);
-    hash_combine(h, texcoords);
+    hash_combine(h, v.nor);
+    hash_combine(h, v.texcoords);
 
     return h;
   }
