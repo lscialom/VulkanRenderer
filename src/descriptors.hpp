@@ -5,7 +5,9 @@
 #include <vector>
 
 #include "global_context.hpp"
+#include "configuration_helper.hpp"
 #include "memory.hpp"
+#include "swapchain.hpp"
 
 namespace Renderer {
 
