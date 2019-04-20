@@ -15,7 +15,7 @@ enum class PresentMode { Immediate = 0, Mailbox = 1, VSync = 2 };
 namespace Config {
 VULKAN_RENDERER_EXPORTS extern bool ShowGBuffer;
 VULKAN_RENDERER_EXPORTS extern bool SSAOEnable;
-}
+} // namespace Config
 
 VULKAN_RENDERER_EXPORTS void Init(unsigned int width, unsigned int height,
                                   void *windowHandle);
@@ -145,9 +145,13 @@ public:
 
 enum class EPrimitive { Plane, Cube };
 
+VULKAN_RENDERER_EXPORTS void LoadTexture(const std::string &texturePath,
+                                         const std::string &name);
+
 VULKAN_RENDERER_EXPORTS uint64_t CreateModelFromPrimitive(EPrimitive primitive);
 VULKAN_RENDERER_EXPORTS uint64_t
-CreateModelFromObj(const std::string &objFilename, const std::string& texturePath);
+CreateModelFromObj(const std::string &objFilename,
+                   const std::string &textureName = "default_texture");
 
 VULKAN_RENDERER_EXPORTS ModelInstance *Spawn(uint64_t modelId,
                                              Vec3 pos = Vec3::Zero(),

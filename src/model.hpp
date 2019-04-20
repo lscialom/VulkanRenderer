@@ -70,7 +70,7 @@ private:
   // UniformBufferObject uboModelMat;
 
   GeometryInstance geometryInstance;
-  Texture texture;
+  Texture* texture;
 
   std::vector<ModelInstanceInternal *> modelInstances;
 
@@ -139,7 +139,8 @@ public:
                    Prim::Indices.begin(), Prim::Indices.end());
   }
 
-  void init_from_obj_file(const std::string &objFilename, const std::string& texturePath) {
+  void init_from_obj_file(const std::string &objFilename,
+                          const std::string &textureName) {
 
     std::vector<LiteralVertex> vertices;
     std::vector<VERTEX_INDICES_TYPE> indices;
@@ -149,7 +150,7 @@ public:
     init_from_data(vertices.begin(), vertices.end(), indices.begin(),
                    indices.end());
 
-     texture.init(texturePath);
+    texture = ResourceManager::GetTexture(textureName);
   }
 
   // TODO index param only used for descriptors (that are unused for now).
@@ -168,9 +169,9 @@ public:
     //                            vk::ShaderStageFlagBits::eVertex, 0,
     //                            sizeof(Eigen::Matrix4f), &Camera::Matrix);
 
-    commandbuffer.bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0, 1,
-        texture.get_descriptor_set(), 0, nullptr);
+    commandbuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                     shader.get_pipeline_layout(), 0, 1,
+                                     texture->get_descriptor_set(), 0, nullptr);
 
     for (uint64_t i = 0; i < modelInstances.size(); ++i) {
       // uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);

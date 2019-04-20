@@ -1,16 +1,15 @@
-
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
 #include "texture.hpp"
+
 #include "common_resources.hpp"
 
 #include <string>
 
 namespace Renderer {
 
-void Texture::init(const std::string &path) {
+bool Texture::init(const std::string &path) {
   int texWidth, texHeight, texChannels;
   stbi_uc *pixels =
       stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels,
@@ -18,7 +17,7 @@ void Texture::init(const std::string &path) {
 
   if (!pixels) {
     printf("[Error] Failed to load texture image %s\n", path.c_str());
-    return;
+    return false;
   }
 
   image.allocate(texWidth, texHeight, vk::Format::eR8G8B8A8Unorm,
@@ -40,5 +39,7 @@ void Texture::init(const std::string &path) {
   descriptorSetInfo.samplers = {&CommonResources::TextureSampler};
 
   descriptorSet.init(descriptorSetInfo);
+
+  return true;
 }
 } // namespace Renderer

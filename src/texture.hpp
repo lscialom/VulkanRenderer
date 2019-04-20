@@ -7,7 +7,7 @@ private:
   Image image;
 
 public:
-  void init(const std::string &path);
+  bool init(const std::string &path);
 
   const vk::DescriptorSet *get_descriptor_set() const {
     return &descriptorSet.get_handle();

@@ -444,6 +444,8 @@ struct RenderContext {
     CommonResources::InitSamplers();
     CommonResources::InitPostProcessResources();
 
+    ResourceManager::Init();
+
     init_ray_tracing();
 
     init_g_pass();
@@ -454,7 +456,8 @@ struct RenderContext {
     init_commandbuffers();
   }
 
-  void destroy(bool freeModels = true) {
+  void destroy() {
+    ResourceManager::Shutdown();
 
     CommonResources::DestroyDescriptorLayouts();
     CommonResources::DestroyUniformBufferObjects();
@@ -470,9 +473,6 @@ struct RenderContext {
     destroy_g_pass();
 
     Swapchain::Destroy();
-
-    if (!freeModels)
-      return;
 
     for (size_t j = 0; j < models.size(); ++j)
       delete models[j];
@@ -887,6 +887,10 @@ void GetCurrentResolution(int &w, int &h) {
   h = extent.height;
 }
 
+void LoadTexture(const std::string &texturePath, const std::string &name) {
+  ResourceManager::LoadTexture(texturePath, name);
+}
+
 uint64_t CreateModelFromPrimitive(EPrimitive primitive) {
   Model *model = new Model();
   switch (primitive) {
@@ -904,10 +908,10 @@ uint64_t CreateModelFromPrimitive(EPrimitive primitive) {
 }
 
 uint64_t CreateModelFromObj(const std::string &objFilename,
-                            const std::string &texturePath) {
+                            const std::string &textureName) {
   Model *model = new Model();
 
-  model->init_from_obj_file(objFilename, texturePath);
+  model->init_from_obj_file(objFilename, textureName);
 
   renderContext.models.push_back(model);
 

@@ -179,27 +179,24 @@ static void ToggleGBuffer(const std::vector<std::string> &args) {
   Renderer::Config::ShowGBuffer = !Renderer::Config::ShowGBuffer;
 }
 
-static void ToggleSSAO(const std::vector<std::string> &args)
-{
-	Renderer::Config::SSAOEnable = !Renderer::Config::SSAOEnable;
+static void ToggleSSAO(const std::vector<std::string> &args) {
+  Renderer::Config::SSAOEnable = !Renderer::Config::SSAOEnable;
 }
 
-static void GetCameraPosition(const std::vector<std::string> &args)
-{
-	float x = Renderer::Camera::Position.x;
-	float y = Renderer::Camera::Position.y;
-	float z = Renderer::Camera::Position.z;
+static void GetCameraPosition(const std::vector<std::string> &args) {
+  float x = Renderer::Camera::Position.x;
+  float y = Renderer::Camera::Position.y;
+  float z = Renderer::Camera::Position.z;
 
-	console->AddLog("%f; %f; %f", x, y, z);
+  console->AddLog("%f; %f; %f", x, y, z);
 }
 
-static void GetCameraRotation(const std::vector<std::string> &args)
-{
-	float x = Renderer::Camera::Rotation.x;
-	float y = Renderer::Camera::Rotation.y;
-	float z = Renderer::Camera::Rotation.z;
+static void GetCameraRotation(const std::vector<std::string> &args) {
+  float x = Renderer::Camera::Rotation.x;
+  float y = Renderer::Camera::Rotation.y;
+  float z = Renderer::Camera::Rotation.z;
 
-	console->AddLog("%f; %f; %f", x, y, z);
+  console->AddLog("%f; %f; %f", x, y, z);
 }
 
 int main() {
@@ -225,40 +222,44 @@ int main() {
   Renderer::Camera::Fov = 90.f;
   Renderer::Camera::Far = 300.f;
 
-  //Renderer::Camera::Position = {0, 4, 0};
-  //Renderer::Camera::Position = {-58.059, 0.6207, 3.102};
-  //Renderer::Camera::Rotation = {0.0408, 1.7506, 0};
+  // Renderer::Camera::Position = {0, 4, 0};
+  // Renderer::Camera::Position = {-58.059, 0.6207, 3.102};
+  // Renderer::Camera::Rotation = {0.0408, 1.7506, 0};
 
-  Renderer::Camera::Position = { -38.4718, -1.1234, -1.3119 };
-  Renderer::Camera::Rotation = { 0.6118, 1.6292, 0 };
+  Renderer::Camera::Position = {-38.4718, -1.1234, -1.3119};
+  Renderer::Camera::Rotation = {0.6118, 1.6292, 0};
 
   Renderer::Config::ShowGBuffer = false;
 
   // uint64_t bunnyId =
   //    Renderer::CreateModelFromPrimitive(Renderer::EPrimitive::Cube);
 
-  //uint64_t bunnyId = Renderer::CreateModelFromObj(
+  // uint64_t bunnyId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/bunny.obj"));
-  //uint64_t armadilloId = Renderer::CreateModelFromObj(
+  // uint64_t armadilloId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/armadillo.obj"));
   uint64_t mapId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/sponza/sponza.obj"), "../resources/textures/default_tex.jpg");
-  //uint64_t sphereId = Renderer::CreateModelFromObj(
+      std::string("../resources/models/sponza/sponza.obj"));
+  // uint64_t sphereId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/sphere.obj"));
 
-  uint64_t cubeId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/cube.obj"), "../resources/textures/statue_head.jpg");
+  Renderer::LoadTexture("../resources/textures/statue_head.jpg", "statue_head");
 
-  uint64_t cubeId1 = Renderer::CreateModelFromObj(
-	  std::string("../resources/models/cube.obj"), "../resources/textures/default_tex.jpg");
+  uint64_t cubeId = Renderer::CreateModelFromObj(
+      std::string("../resources/models/cube.obj"), "statue_head");
+
+  uint64_t cubeId1 =
+      Renderer::CreateModelFromObj(std::string("../resources/models/cube.obj"));
 
   WindowHandler::CaptureMouse();
 
-  Renderer::ModelInstance* cube =
-	  Renderer::Spawn(cubeId, { 0.0f, -6.5f, 0.0f }, Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
+  Renderer::ModelInstance *cube =
+      Renderer::Spawn(cubeId, {0.0f, -6.5f, 0.0f},
+                      Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
 
-  Renderer::ModelInstance* cube1 =
-	  Renderer::Spawn(cubeId1, { 5.0f, -6.5f, 0.0f }, Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
+  Renderer::ModelInstance *cube1 =
+      Renderer::Spawn(cubeId1, {5.0f, -6.5f, 0.0f},
+                      Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
 
   cube1->color = Renderer::Color::Red;
 
@@ -267,57 +268,55 @@ int main() {
                       {0.05f, 0.05f, 0.05f}); // {100.0f, 100.0f, 100.0f});
 
   // Point light
-  //Renderer::Light *light =
-	 // Renderer::SpawnLight({ -10, 10, 0.0f }, {50, 50, 50}, 0);
-  //light->lightType = Renderer::LightType::Point;
-  //light->maxDist = 100;
+  // Renderer::Light *light =
+  // Renderer::SpawnLight({ -10, 10, 0.0f }, {50, 50, 50}, 0);
+  // light->lightType = Renderer::LightType::Point;
+  // light->maxDist = 100;
 
   Renderer::Light *light;
-  Renderer::Vec3 lightColor = { 2.5, 2.5, 2.5 };
+  Renderer::Vec3 lightColor = {2.5, 2.5, 2.5};
 
-  light =
-	  Renderer::SpawnLight({ -30.83f, 0.109f, 6.87f }, lightColor, 0);
+  light = Renderer::SpawnLight({-30.83f, 0.109f, 6.87f}, lightColor, 0);
   light->lightType = Renderer::LightType::Point;
   light->maxDist = 100;
 
-  light =
-	  Renderer::SpawnLight({ -30.83f, 0.109f, -11.052f }, lightColor, 0);
+  light = Renderer::SpawnLight({-30.83f, 0.109f, -11.052f}, lightColor, 0);
   light->lightType = Renderer::LightType::Point;
   light->maxDist = 100;
 
-  light =
-	  Renderer::SpawnLight({ 24.174f, 0.109f, -11.052f }, lightColor, 0);
+  light = Renderer::SpawnLight({24.174f, 0.109f, -11.052f}, lightColor, 0);
   light->lightType = Renderer::LightType::Point;
   light->maxDist = 100;
 
-  light =
-	  Renderer::SpawnLight({ 24.174f, 0.109f, 6.87f }, lightColor, 0);
+  light = Renderer::SpawnLight({24.174f, 0.109f, 6.87f}, lightColor, 0);
   light->lightType = Renderer::LightType::Point;
   light->maxDist = 100;
 
   // Directional light
-   //light = Renderer::SpawnLight(
-   //   {0.2f, -1.0f, -0.3f}, Renderer::Color::White, 0);
-   //light->lightType = Renderer::LightType::Directional;
+  // light = Renderer::SpawnLight(
+  //   {0.2f, -1.0f, -0.3f}, Renderer::Color::White, 0);
+  // light->lightType = Renderer::LightType::Directional;
 
-  //Renderer::ModelInstance *sphere = Renderer::Spawn(
-  //    sphereId, {-10, 10, 0.0f}, Renderer::Vec3::Zero(), {0.05f, 0.05f, 0.05f});
+  // Renderer::ModelInstance *sphere = Renderer::Spawn(
+  //    sphereId, {-10, 10, 0.0f}, Renderer::Vec3::Zero(), {0.05f, 0.05f,
+  //    0.05f});
 
-  //Renderer::ModelInstance *inst0 = Renderer::Spawn(sphereId, Renderer::Vec3::Zero(), Renderer::Vec3::Zero(), { 0.05f, 0.05f, 0.05f });
+  // Renderer::ModelInstance *inst0 = Renderer::Spawn(sphereId,
+  // Renderer::Vec3::Zero(), Renderer::Vec3::Zero(), { 0.05f, 0.05f, 0.05f });
   // for (size_t i = 0; i < 100; ++i)
   // Renderer::Spawn(bunnyId, {i * 5.f, 0, 0});
 
   Renderer::Vec3 baseRot = {M_PI / 4.f, 0, 0};
-  //Renderer::ModelInstance *inst1 =
+  // Renderer::ModelInstance *inst1 =
   //    Renderer::Spawn(armadilloId, {3.f, 0.f, 0.f}, baseRot);
-  //Renderer::ModelInstance *inst2 =
+  // Renderer::ModelInstance *inst2 =
   //    Renderer::Spawn(armadilloId, {0.f, 3.f, 0.f}, baseRot);
-  //Renderer::ModelInstance *inst3 = Renderer::Spawn(
+  // Renderer::ModelInstance *inst3 = Renderer::Spawn(
   //    bunnyId, {0.f, 0.f, 3.f}, Renderer::Vec3::Zero(), {0.5f, 0.5f, 0.5f});
 
-  //inst1->color = Renderer::Color::Red;
-  //inst2->color = Renderer::Color::Green;
-  //inst3->color = Renderer::Color::Blue;
+  // inst1->color = Renderer::Color::Red;
+  // inst2->color = Renderer::Color::Green;
+  // inst3->color = Renderer::Color::Blue;
 
   map->color = Renderer::Color::Grey;
 
@@ -353,18 +352,18 @@ int main() {
 
     frameTimestamp = currentTime;
 
-    //inst0->SetRotation({time * 0.5f * static_cast<float>(M_PI) / 2.f,
+    // inst0->SetRotation({time * 0.5f * static_cast<float>(M_PI) / 2.f,
     //                    time * static_cast<float>(M_PI) / 2.f,
     //                    time * static_cast<float>(M_PI)});
-    //inst1->SetRotation(
+    // inst1->SetRotation(
     //    {baseRot.x + time * static_cast<float>(M_PI) / 2.f, 0, 0});
-    //inst2->SetRotation(
+    // inst2->SetRotation(
     //    {0, baseRot.y + time * static_cast<float>(M_PI) / 2.f, 0});
-    //inst3->SetRotation(
+    // inst3->SetRotation(
     //    {0, baseRot.z + time * static_cast<float>(M_PI) / 2.f, 0});
 
     ////light->vector.x = sinf(time * 2.0f) * 10.0f;
-    //sphere->SetPosition({light->vector.x, 10.0f, 0.0f});
+    // sphere->SetPosition({light->vector.x, 10.0f, 0.0f});
 
     // Renderer::Camera::Rotation = {
     //    0, baseRot.x + time / 2.f * static_cast<float>(M_PI) / 2.f, 0};
