@@ -1,33 +1,10 @@
 #pragma once
 
-#include "nv_helpers_vk/BottomLevelASGenerator.h"
-#include "nv_helpers_vk/TopLevelASGenerator.h"
-#include "nv_helpers_vk/VKHelpers.h"
-
 #include "memory.hpp"
 #include "obj_loader.hpp"
 #include "resource_manager.hpp"
 
 namespace Renderer {
-
-struct GeometryInstance {
-  Buffer buffer;
-
-  uint32_t vertexCount;
-  vk::DeviceSize vertexOffset;
-
-  uint32_t indexCount;
-  vk::DeviceSize indexOffset;
-  // Eigen::Matrix4f transform;
-};
-
-struct AccelerationStructure {
-  Buffer scratchBuffer;
-  Buffer resultBuffer;
-  Buffer instancesBuffer;
-
-  vk::AccelerationStructureNV structure;
-};
 
 struct ModelInstanceInternal : ModelInstance {
   using Transform = Eigen::Transform<float, 3, Eigen::Affine>;
@@ -69,55 +46,10 @@ struct Model {
 private:
   // UniformBufferObject uboModelMat;
 
-  GeometryInstance geometryInstance;
-  Texture* texture;
+  Mesh mesh;
+  Texture *texture;
 
   std::vector<ModelInstanceInternal *> modelInstances;
-
-  // /!\ Data must be contiguous
-  template <typename Iter1, typename Iter2>
-  void init_geometry_instance(Iter1 vertexBegin, Iter1 vertexEnd,
-                              Iter2 indexBegin, Iter2 indexEnd) {
-
-    using VertexType = std::decay_t<decltype(*vertexBegin)>;
-    using IndexType = std::decay_t<decltype(*indexBegin)>;
-
-    const uint32_t indexCount = indexEnd - indexBegin;
-    const uint32_t vertexCount = vertexEnd - vertexBegin;
-
-    const VkDeviceSize iBufferSize = sizeof(IndexType) * indexCount;
-    const VkDeviceSize vBufferSize = sizeof(VertexType) * vertexCount;
-
-    const VkDeviceSize bufferSize = iBufferSize + vBufferSize;
-    const VkDeviceSize vertexOffset = iBufferSize;
-
-    // Making the staging by ourselves is more optimized than the auto one in
-    // Buffer::write in this case (because ATM we would need 2 calls)
-
-    Buffer stagingBuffer;
-    stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-                           vk::MemoryPropertyFlagBits::eHostVisible |
-                               vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    // pointers to first element
-    stagingBuffer.write(&*indexBegin, iBufferSize);
-    stagingBuffer.write(&*vertexBegin, vBufferSize, vertexOffset);
-
-    geometryInstance.buffer.allocate(
-        bufferSize,
-        vk::BufferUsageFlagBits::eTransferDst |
-            vk::BufferUsageFlagBits::eVertexBuffer |
-            vk::BufferUsageFlagBits::eIndexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    stagingBuffer.copy_to(geometryInstance.buffer, bufferSize);
-
-    geometryInstance.indexOffset = 0;
-    geometryInstance.indexCount = indexCount;
-
-    geometryInstance.vertexCount = vertexCount;
-    geometryInstance.vertexOffset = vertexOffset;
-  }
 
 public:
   Model() = default;
@@ -127,16 +59,14 @@ public:
       delete modelInstances[i];
   }
 
-  // /!\ Data must be contiguous
-  template <typename Iter1, typename Iter2>
-  void init_from_data(Iter1 vertexBegin, Iter1 vertexEnd, Iter2 indexBegin,
-                      Iter2 indexEnd) {
-    init_geometry_instance(vertexBegin, vertexEnd, indexBegin, indexEnd);
-  }
-
   template <typename Prim> void init_from_primitive() {
-    init_from_data(Prim::Vertices.begin(), Prim::Vertices.end(),
-                   Prim::Indices.begin(), Prim::Indices.end());
+
+    constexpr std::array<ObjLoader::ShapeData, 1> shapeData = {
+        {{Prim::Indices.size()}}};
+
+    mesh.init(Prim::Vertices.begin(), Prim::Vertices.end(),
+              Prim::Indices.begin(), Prim::Indices.end(), shapeData.begin(),
+              shapeData.end());
   }
 
   void init_from_obj_file(const std::string &objFilename,
@@ -144,11 +74,12 @@ public:
 
     std::vector<LiteralVertex> vertices;
     std::vector<VERTEX_INDICES_TYPE> indices;
+    std::vector<ObjLoader::ShapeData> shapeData;
 
-    ObjLoader::LoadObj(objFilename, vertices, indices);
+    ObjLoader::LoadObj(objFilename, vertices, indices, shapeData);
 
-    init_from_data(vertices.begin(), vertices.end(), indices.begin(),
-                   indices.end());
+    mesh.init(vertices.begin(), vertices.end(), indices.begin(), indices.end(),
+              shapeData.begin(), shapeData.end());
 
     texture = ResourceManager::GetTexture(textureName);
   }
@@ -156,18 +87,12 @@ public:
   // TODO index param only used for descriptors (that are unused for now).
   void record(const vk::CommandBuffer &commandbuffer, const Shader &shader,
               size_t imageIndex) const {
-    commandbuffer.bindIndexBuffer(geometryInstance.buffer.get_handle(), 0,
-                                  VULKAN_INDICES_TYPE);
-    commandbuffer.bindVertexBuffers(0, 1, &geometryInstance.buffer.get_handle(),
-                                    &geometryInstance.vertexOffset);
+
+    mesh.bind_buffer(commandbuffer, shader);
 
     // uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
     ModelInstancePushConstant miPc = {};
-
-    // commandbuffer.pushConstants(shader.get_pipeline_layout(),
-    //                            vk::ShaderStageFlagBits::eVertex, 0,
-    //                            sizeof(Eigen::Matrix4f), &Camera::Matrix);
 
     commandbuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                      shader.get_pipeline_layout(), 0, 1,
@@ -186,22 +111,12 @@ public:
       miPc.color.tail<1>() << modelInstances[i]->shininess;
       miPc.model = modelInstances[i]->transform.matrix();
 
-      // commandbuffer.pushConstants(
-      //    shader.get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
-      //    sizeof(Eigen::Matrix4f) * 2, sizeof(Eigen::Vector3f),
-      //    &modelInstances[i]->color);
-
-      // commandbuffer.pushConstants(
-      //    shader.get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex,
-      //    sizeof(Eigen::Matrix4f), sizeof(Eigen::Matrix4f),
-      //    &modelInstances[i]->transform.matrix());
-
       commandbuffer.pushConstants(shader.get_pipeline_layout(),
                                   vk::ShaderStageFlagBits::eVertex |
                                       vk::ShaderStageFlagBits::eFragment,
                                   0, sizeof(miPc), &miPc);
 
-      commandbuffer.drawIndexed(geometryInstance.indexCount, 1, 0, 0, 0);
+      mesh.draw(commandbuffer, shader);
     }
   }
 
@@ -223,42 +138,5 @@ public:
       }
     }
   }
-
-  // Eigen::Matrix4f update_mvp(uint32_t modelInstanceIndex) const {
-  // UniformModelMat modelMat;
-
-  // Eigen::Affine3f rotX, rotY, rotZ;
-  // Eigen::Affine3f translation;
-
-  // for (size_t i = 0; i < modelInstances.size(); ++i) {
-  //  rotX =
-  //      Eigen::AngleAxisf(modelInstances[i]->rot.z,
-  //      Eigen::Vector3f::UnitX());
-  //  rotY =
-  //      Eigen::AngleAxisf(modelInstances[i]->rot.y,
-  //      Eigen::Vector3f::UnitY());
-  //  rotZ =
-  //      Eigen::AngleAxisf(modelInstances[i]->rot.x,
-  //      Eigen::Vector3f::UnitZ());
-
-  //  translation = Eigen::Translation3f(
-  //      Eigen::Vector3f(modelInstances[i]->pos.z, modelInstances[i]->pos.x,
-  //                      modelInstances[i]->pos.y));
-
-  // modelMat.model = (translation * (rotX * rotZ * rotY) *
-  //                  Eigen::Scaling(modelInstances[i]->scale.z,
-  //                                 modelInstances[i]->scale.x,
-  //                                 modelInstances[i]->scale.y))
-  //                     .matrix();
-  // uboModelMat.write(currentImageIndex, &modelMat,
-  //                  UniformBufferInfo<UniformModelMat>::Size, i);
-
-  // modelInstances[i]->mat = (translation * (rotX * rotZ * rotY) *
-  //                          Eigen::Scaling(modelInstances[i]->scale.z,
-  //                                         modelInstances[i]->scale.x,
-  //                                         modelInstances[i]->scale.y))
-  //                             .matrix();
-  //}
-  //}
 };
 } // namespace Renderer

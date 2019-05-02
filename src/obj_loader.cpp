@@ -43,7 +43,8 @@ namespace ObjLoader {
 
 void LoadObj(const std::string &filename,
              std::vector<LiteralVertex> &vertexBuffer,
-             std::vector<VERTEX_INDICES_TYPE> &indexBuffer) {
+             std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
+             std::vector<ShapeData> &shapeData) {
 
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
@@ -84,6 +85,8 @@ void LoadObj(const std::string &filename,
 
       indexBuffer.push_back(uniqueVertices[vertex]);
     }
+
+    shapeData.push_back({static_cast<uint32_t>(shape.mesh.indices.size())});
   }
 
   std::cout << "Loading complete !" << std::endl;

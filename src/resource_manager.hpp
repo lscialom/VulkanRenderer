@@ -1,4 +1,5 @@
 #include "texture.hpp"
+#include "mesh.hpp"
 
 #define RESOURCES_PATH std::string("../resources/")
 
