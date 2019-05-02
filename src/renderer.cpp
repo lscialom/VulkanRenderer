@@ -891,6 +891,10 @@ void LoadTexture(const std::string &texturePath, const std::string &name) {
   ResourceManager::LoadTexture(texturePath, name);
 }
 
+void LoadMesh(const std::string &meshPath, const std::string &name) {
+  ResourceManager::LoadMesh(meshPath, name);
+}
+
 uint64_t CreateModelFromPrimitive(EPrimitive primitive) {
   Model *model = new Model();
   switch (primitive) {
@@ -907,11 +911,11 @@ uint64_t CreateModelFromPrimitive(EPrimitive primitive) {
   return uintptr_t(renderContext.models.back());
 }
 
-uint64_t CreateModelFromObj(const std::string &objFilename,
-                            const std::string &textureName) {
-  Model *model = new Model();
+uint64_t CreateModel(const std::string &meshName,
+                     const std::string &textureName) {
 
-  model->init_from_obj_file(objFilename, textureName);
+  Model *model = new Model();
+  model->init(meshName, textureName);
 
   renderContext.models.push_back(model);
 

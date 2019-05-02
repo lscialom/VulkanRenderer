@@ -148,10 +148,13 @@ enum class EPrimitive { Plane, Cube };
 VULKAN_RENDERER_EXPORTS void LoadTexture(const std::string &texturePath,
                                          const std::string &name);
 
+VULKAN_RENDERER_EXPORTS void LoadMesh(const std::string &meshPath,
+                                      const std::string &name);
+
 VULKAN_RENDERER_EXPORTS uint64_t CreateModelFromPrimitive(EPrimitive primitive);
 VULKAN_RENDERER_EXPORTS uint64_t
-CreateModelFromObj(const std::string &objFilename,
-                   const std::string &textureName = "default_texture");
+CreateModel(const std::string &meshName,
+            const std::string &textureName = "default_texture");
 
 VULKAN_RENDERER_EXPORTS ModelInstance *Spawn(uint64_t modelId,
                                              Vec3 pos = Vec3::Zero(),

@@ -238,18 +238,19 @@ int main() {
   //    std::string("../resources/models/bunny.obj"));
   // uint64_t armadilloId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/armadillo.obj"));
-  uint64_t mapId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/sponza/sponza.obj"));
+
   // uint64_t sphereId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/sphere.obj"));
 
+  Renderer::LoadMesh(std::string("../resources/models/sponza/sponza.obj"),
+                     "sponza");
+  Renderer::LoadMesh(std::string("../resources/models/cube.obj"), "cube");
+
   Renderer::LoadTexture("../resources/textures/statue_head.jpg", "statue_head");
 
-  uint64_t cubeId = Renderer::CreateModelFromObj(
-      std::string("../resources/models/cube.obj"), "statue_head");
-
-  uint64_t cubeId1 =
-      Renderer::CreateModelFromObj(std::string("../resources/models/cube.obj"));
+  uint64_t mapId = Renderer::CreateModel("sponza");
+  uint64_t cubeId = Renderer::CreateModel("cube", "statue_head");
+  uint64_t cubeId1 = Renderer::CreateModel(std::string("cube"));
 
   WindowHandler::CaptureMouse();
 

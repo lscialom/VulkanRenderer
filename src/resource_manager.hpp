@@ -14,5 +14,10 @@ void DestroyTexture(const std::string &texName);
 
 Texture* GetTexture(const std::string& textureName);
 
+void LoadMesh(const std::string& meshPath, const std::string& meshName);
+void DestroyMesh(const std::string& meshName);
+
+Mesh* GetMesh(const std::string& meshName);
+
 } // namespace ResourceManager
 } // namespace Renderer

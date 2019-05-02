@@ -75,6 +75,7 @@ static bool operator==(const LiteralVertex &v1, const LiteralVertex &v2) {
 // PRIMITIVES
 //-----------------------------------------------------------------------------
 
+// TODO Replace with preloaded meshes
 template <size_t vNum, size_t iNum> struct Primitive {
   static constexpr const std::array<LiteralVertex, vNum> Vertices;
   static constexpr const std::array<VERTEX_INDICES_TYPE, iNum> Indices;

@@ -1,7 +1,10 @@
 #pragma once
 
 #include "memory.hpp"
+
+// TODO Remove when got rid of Primitive struct
 #include "obj_loader.hpp"
+
 #include "resource_manager.hpp"
 
 namespace Renderer {
@@ -46,7 +49,7 @@ struct Model {
 private:
   // UniformBufferObject uboModelMat;
 
-  Mesh mesh;
+  Mesh *mesh;
   Texture *texture;
 
   std::vector<ModelInstanceInternal *> modelInstances;
@@ -64,22 +67,15 @@ public:
     constexpr std::array<ObjLoader::ShapeData, 1> shapeData = {
         {{Prim::Indices.size()}}};
 
-    mesh.init(Prim::Vertices.begin(), Prim::Vertices.end(),
-              Prim::Indices.begin(), Prim::Indices.end(), shapeData.begin(),
-              shapeData.end());
+    mesh->init(Prim::Vertices.begin(), Prim::Vertices.end(),
+               Prim::Indices.begin(), Prim::Indices.end(), shapeData.begin(),
+               shapeData.end());
   }
 
-  void init_from_obj_file(const std::string &objFilename,
-                          const std::string &textureName) {
+  void init(const std::string &meshName, const std::string &textureName) {
 
-    std::vector<LiteralVertex> vertices;
-    std::vector<VERTEX_INDICES_TYPE> indices;
-    std::vector<ObjLoader::ShapeData> shapeData;
-
-    ObjLoader::LoadObj(objFilename, vertices, indices, shapeData);
-
-    mesh.init(vertices.begin(), vertices.end(), indices.begin(), indices.end(),
-              shapeData.begin(), shapeData.end());
+    mesh = ResourceManager::GetMesh(meshName);
+    assert(mesh != nullptr); // TODO Manage mesh not loaded
 
     texture = ResourceManager::GetTexture(textureName);
   }
@@ -88,7 +84,7 @@ public:
   void record(const vk::CommandBuffer &commandbuffer, const Shader &shader,
               size_t imageIndex) const {
 
-    mesh.bind_buffer(commandbuffer, shader);
+    mesh->bind_buffer(commandbuffer, shader);
 
     // uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
@@ -116,7 +112,7 @@ public:
                                       vk::ShaderStageFlagBits::eFragment,
                                   0, sizeof(miPc), &miPc);
 
-      mesh.draw(commandbuffer, shader);
+      mesh->draw(commandbuffer, shader);
     }
   }
 
