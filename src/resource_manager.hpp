@@ -3,6 +3,9 @@
 
 #define RESOURCES_PATH std::string("../resources/")
 
+#define DEFAULT_TEXTURE_NAME "default_texture"
+#define MISSING_TEXTURE_NAME "missing_texture"
+
 namespace Renderer {
 namespace ResourceManager {
 

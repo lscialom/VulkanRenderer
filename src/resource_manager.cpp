@@ -3,9 +3,6 @@
 
 #include <unordered_map>
 
-#define DEFAULT_TEXTURE_NAME "default_texture"
-#define MISSING_TEXTURE_NAME "missing_texture"
-
 namespace Renderer {
 namespace ResourceManager {
 

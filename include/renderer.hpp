@@ -152,9 +152,7 @@ VULKAN_RENDERER_EXPORTS void LoadMesh(const std::string &meshPath,
                                       const std::string &name);
 
 VULKAN_RENDERER_EXPORTS uint64_t CreateModelFromPrimitive(EPrimitive primitive);
-VULKAN_RENDERER_EXPORTS uint64_t
-CreateModel(const std::string &meshName,
-            const std::string &textureName = "default_texture");
+VULKAN_RENDERER_EXPORTS uint64_t CreateModel(const std::string &meshName);
 
 VULKAN_RENDERER_EXPORTS ModelInstance *Spawn(uint64_t modelId,
                                              Vec3 pos = Vec3::Zero(),

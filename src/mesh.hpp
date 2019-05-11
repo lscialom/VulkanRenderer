@@ -30,6 +30,7 @@ struct Mesh {
 private:
   struct SubMesh {
     VERTEX_INDICES_TYPE indexCount;
+    Texture *texture;
   };
 
   GeometryInstance geometryInstance;
@@ -81,8 +82,26 @@ public:
     geometryInstance.vertexOffset = vertexOffset;
 
     submeshes.resize(shapeDataEnd - shapeDataBegin);
-    memcpy(submeshes.data(), &*shapeDataBegin,
-           sizeof(submeshes[0]) * submeshes.size());
+
+    auto shapeDataIterator = shapeDataBegin;
+    for (size_t i = 0; i < submeshes.size(); ++i) {
+      auto currentShape = *shapeDataIterator;
+
+      submeshes[i].indexCount = currentShape.indexCount;
+
+      if (currentShape.texname.empty()) {
+
+        submeshes[i].texture = ResourceManager::GetTexture(
+            "default_texture"); // TODO Use macro DEFAULT_TEXTURE_NAME instead
+
+      } else {
+
+        submeshes[i].texture =
+            ResourceManager::GetTexture(currentShape.texname);
+      }
+
+      ++shapeDataIterator;
+    }
   }
 
   void bind_buffer(const vk::CommandBuffer &commandbuffer,
@@ -101,6 +120,10 @@ public:
     VERTEX_INDICES_TYPE currentIndex = 0;
 
     for (size_t i = 0; i < submeshes.size(); ++i) {
+      commandbuffer.bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0, 1,
+          submeshes[i].texture->get_descriptor_set(), 0, nullptr);
+
       commandbuffer.drawIndexed(submeshes[i].indexCount, 1, currentIndex, 0, 0);
       currentIndex += submeshes[i].indexCount;
     }

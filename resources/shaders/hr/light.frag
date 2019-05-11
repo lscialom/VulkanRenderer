@@ -122,6 +122,7 @@ void main() {
 
   // fragColor.rgb *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
+  //TODO Switch for ACES Tonemapping
   vec3 tonemap = vec3(1.0) - exp(-fragColor.rgb * exposure);
   tonemap = pow(tonemap, vec3(1.0 / gamma));
 

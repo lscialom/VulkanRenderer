@@ -50,7 +50,6 @@ private:
   // UniformBufferObject uboModelMat;
 
   Mesh *mesh;
-  Texture *texture;
 
   std::vector<ModelInstanceInternal *> modelInstances;
 
@@ -64,7 +63,7 @@ public:
 
   template <typename Prim> void init_from_primitive() {
 
-    constexpr std::array<ObjLoader::ShapeData, 1> shapeData = {
+    const std::array<ObjLoader::ShapeData, 1> shapeData = {
         {{Prim::Indices.size()}}};
 
     mesh->init(Prim::Vertices.begin(), Prim::Vertices.end(),
@@ -72,12 +71,10 @@ public:
                shapeData.end());
   }
 
-  void init(const std::string &meshName, const std::string &textureName) {
+  void init(const std::string &meshName) {
 
     mesh = ResourceManager::GetMesh(meshName);
     assert(mesh != nullptr); // TODO Manage mesh not loaded
-
-    texture = ResourceManager::GetTexture(textureName);
   }
 
   // TODO index param only used for descriptors (that are unused for now).
@@ -89,10 +86,6 @@ public:
     // uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
     ModelInstancePushConstant miPc = {};
-
-    commandbuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                     shader.get_pipeline_layout(), 0, 1,
-                                     texture->get_descriptor_set(), 0, nullptr);
 
     for (uint64_t i = 0; i < modelInstances.size(); ++i) {
       // uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);

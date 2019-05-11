@@ -246,11 +246,12 @@ int main() {
                      "sponza");
   Renderer::LoadMesh(std::string("../resources/models/cube.obj"), "cube");
 
-  Renderer::LoadTexture("../resources/textures/statue_head.jpg", "statue_head");
+  // Renderer::LoadTexture("../resources/textures/statue_head.jpg",
+  // "statue_head");
 
   uint64_t mapId = Renderer::CreateModel("sponza");
-  uint64_t cubeId = Renderer::CreateModel("cube", "statue_head");
-  uint64_t cubeId1 = Renderer::CreateModel(std::string("cube"));
+  uint64_t cubeId = Renderer::CreateModel("cube");
+  // uint64_t cubeId1 = Renderer::CreateModel(std::string("cube"));
 
   WindowHandler::CaptureMouse();
 
@@ -259,7 +260,7 @@ int main() {
                       Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
 
   Renderer::ModelInstance *cube1 =
-      Renderer::Spawn(cubeId1, {5.0f, -6.5f, 0.0f},
+      Renderer::Spawn(cubeId, {5.0f, -6.5f, 0.0f},
                       Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
 
   cube1->color = Renderer::Color::Red;
@@ -292,6 +293,9 @@ int main() {
   light = Renderer::SpawnLight({24.174f, 0.109f, 6.87f}, lightColor, 0);
   light->lightType = Renderer::LightType::Point;
   light->maxDist = 100;
+
+  light = Renderer::SpawnLight({1, -1, 1}, {0.2f, 0.2f, 0.2f}, 0);
+  light->lightType = Renderer::LightType::Directional;
 
   // Directional light
   // light = Renderer::SpawnLight(

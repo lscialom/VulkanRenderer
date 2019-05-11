@@ -513,6 +513,8 @@ struct RenderContext {
     Light *light = new Light(position, color, ambientStrength);
     lights.push_back(light);
 
+	assert(lights.size() <= MAX_LIGHTS);
+
     return lights.back();
   }
 
@@ -911,11 +913,10 @@ uint64_t CreateModelFromPrimitive(EPrimitive primitive) {
   return uintptr_t(renderContext.models.back());
 }
 
-uint64_t CreateModel(const std::string &meshName,
-                     const std::string &textureName) {
+uint64_t CreateModel(const std::string &meshName) {
 
   Model *model = new Model();
-  model->init(meshName, textureName);
+  model->init(meshName);
 
   renderContext.models.push_back(model);
 

@@ -1,5 +1,7 @@
 #include "obj_loader.hpp"
 
+#include "resource_manager.hpp"
+
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tinyobjloader/tiny_obj_loader.h>
 
@@ -55,12 +57,23 @@ void LoadObj(const std::string &filename,
 
   std::cout << "\nLoading " << filename << "\nPlease wait..." << std::endl;
 
+  size_t cwd_npos = filename.rfind("/");
+  if (cwd_npos == std::string::npos)
+    cwd_npos = filename.rfind("\\");
+
+  std::string cwd = "";
+  if (cwd_npos != std::string::npos)
+    cwd = filename.substr(0, cwd_npos + 1);
+
   if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
-                        filename.c_str())) {
+                        filename.c_str(), cwd.c_str())) {
     throw std::runtime_error(warn + err);
   }
 
   for (const auto &shape : shapes) {
+
+    std::cout << "Loading " << shape.name << std::endl;
+
     for (const auto &index : shape.mesh.indices) {
       LiteralVertex vertex = {};
 
@@ -86,7 +99,32 @@ void LoadObj(const std::string &filename,
       indexBuffer.push_back(uniqueVertices[vertex]);
     }
 
-    shapeData.push_back({static_cast<uint32_t>(shape.mesh.indices.size())});
+    std::set<std::string> diffuse_textures;
+    for (const auto &matId : shape.mesh.material_ids) {
+
+      if (matId < 0 || materials[matId].diffuse_texname.empty())
+        continue;
+
+      std::string texPath = cwd + materials[matId].diffuse_texname;
+      auto res = diffuse_textures.insert(texPath);
+
+      if (res.second)
+        Renderer::ResourceManager::LoadTexture(texPath, texPath);
+    }
+
+    // TODO Manage per-face textures
+    // assert(diffuse_textures.size() == 1);
+
+    if (diffuse_textures.empty()) {
+
+      shapeData.push_back(
+          {static_cast<uint32_t>(shape.mesh.indices.size()), std::string()});
+
+    } else {
+
+      shapeData.push_back({static_cast<uint32_t>(shape.mesh.indices.size()),
+                           *diffuse_textures.begin()});
+    }
   }
 
   std::cout << "Loading complete !" << std::endl;
