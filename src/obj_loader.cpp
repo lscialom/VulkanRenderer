@@ -99,32 +99,23 @@ void LoadObj(const std::string &filename,
       indexBuffer.push_back(uniqueVertices[vertex]);
     }
 
-    std::set<std::string> diffuse_textures;
+    ShapeData data;
+    data.textures = std::vector(shape.mesh.material_ids.size(), std::string());
+
+    size_t index = 0;
     for (const auto &matId : shape.mesh.material_ids) {
 
       if (matId < 0 || materials[matId].diffuse_texname.empty())
         continue;
 
       std::string texPath = cwd + materials[matId].diffuse_texname;
-      auto res = diffuse_textures.insert(texPath);
+      Renderer::ResourceManager::LoadTexture(texPath, texPath);
 
-      if (res.second)
-        Renderer::ResourceManager::LoadTexture(texPath, texPath);
+      data.textures[index++] = texPath;
     }
 
-    // TODO Manage per-face textures
-    // assert(diffuse_textures.size() == 1);
-
-    if (diffuse_textures.empty()) {
-
-      shapeData.push_back(
-          {static_cast<uint32_t>(shape.mesh.indices.size()), std::string()});
-
-    } else {
-
-      shapeData.push_back({static_cast<uint32_t>(shape.mesh.indices.size()),
-                           *diffuse_textures.begin()});
-    }
+    data.indexCount = static_cast<uint32_t>(shape.mesh.indices.size());
+    shapeData.push_back(data);
   }
 
   std::cout << "Loading complete !" << std::endl;

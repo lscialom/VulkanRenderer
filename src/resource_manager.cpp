@@ -33,10 +33,10 @@ void LoadTexture(const std::string &texturePath, const std::string &texName) {
 
   if (textures.find(texName) != textures.end()) {
 
-    std::cout << "Skipping texture " << texName
-              << " because another texture (or the same) has already been "
-                 "registered with that name."
-              << std::endl;
+    // std::cout << "Skipping texture " << texName
+    //          << " because another texture (or the same) has already been "
+    //             "registered with that name."
+    //          << std::endl;
 
     return;
   }

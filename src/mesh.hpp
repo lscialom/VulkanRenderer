@@ -28,9 +28,14 @@ struct AccelerationStructure {
 
 struct Mesh {
 private:
+  struct FacePool {
+    uint64_t numFaces = 0;
+    Texture *texture;
+  };
+
   struct SubMesh {
     VERTEX_INDICES_TYPE indexCount;
-    Texture *texture;
+    std::vector<FacePool> facePools;
   };
 
   GeometryInstance geometryInstance;
@@ -89,15 +94,20 @@ public:
 
       submeshes[i].indexCount = currentShape.indexCount;
 
-      if (currentShape.texname.empty()) {
+      for (size_t j = 0; j < currentShape.textures.size();) {
+        std::string currentTex = currentShape.textures[j];
 
-        submeshes[i].texture = ResourceManager::GetTexture(
-            "default_texture"); // TODO Use macro DEFAULT_TEXTURE_NAME instead
+        uint64_t numFaces = 1;
+        while (++j < currentShape.textures.size() &&
+               currentShape.textures[j] == currentTex) {
 
-      } else {
+          ++numFaces;
+        }
 
-        submeshes[i].texture =
-            ResourceManager::GetTexture(currentShape.texname);
+        submeshes[i].facePools.push_back(
+            {numFaces, currentTex.empty()
+                           ? ResourceManager::GetTexture("default_texture")
+                           : ResourceManager::GetTexture(currentTex)});
       }
 
       ++shapeDataIterator;
@@ -120,14 +130,21 @@ public:
     VERTEX_INDICES_TYPE currentIndex = 0;
 
     for (size_t i = 0; i < submeshes.size(); ++i) {
-      commandbuffer.bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0, 1,
-          submeshes[i].texture->get_descriptor_set(), 0, nullptr);
 
-      commandbuffer.drawIndexed(submeshes[i].indexCount, 1, currentIndex, 0, 0);
-      currentIndex += submeshes[i].indexCount;
+      for (size_t j = 0; j < submeshes[i].facePools.size(); ++j) {
+
+        commandbuffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0,
+            1, submeshes[i].facePools[j].texture->get_descriptor_set(), 0,
+            nullptr);
+
+        commandbuffer.drawIndexed(submeshes[i].facePools[j].numFaces * 3, 1,
+                                  currentIndex, 0, 0);
+
+        currentIndex += submeshes[i].facePools[j].numFaces * 3;
+      }
     }
   }
-};
+}; // namespace Renderer
 
 } // namespace Renderer

@@ -4,7 +4,7 @@ namespace ObjLoader {
 
 struct ShapeData {
   VERTEX_INDICES_TYPE indexCount;
-  std::string texname;
+  std::vector<std::string> textures;
 };
 
 void LoadObj(const std::string &filename,
