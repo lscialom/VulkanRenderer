@@ -39,7 +39,7 @@ layout(location = 0) out vec4 fragColor;
 
 //TODO Push constant
 const float ssaoStrength = 1;
-const float exposure = 1.5;
+const float exposure = 1.0;
 const float shininess = 0.5;
 // const float ditherFactor = 768;
 

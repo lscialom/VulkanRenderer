@@ -298,6 +298,9 @@ int main() {
   light = Renderer::SpawnLight({1, -1, 1}, {1.0f, 1.0f, 1.0f}, 0);
   light->lightType = Renderer::LightType::Directional;
 
+  light = Renderer::SpawnLight({ -1, -1, -1 }, { 1.0f, 1.0f, 1.0f }, 0);
+  light->lightType = Renderer::LightType::Directional;
+
   // Directional light
   // light = Renderer::SpawnLight(
   //   {0.2f, -1.0f, -0.3f}, Renderer::Color::White, 0);
