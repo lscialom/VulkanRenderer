@@ -3,7 +3,7 @@
 
 #include <constants.glsl>
 
-layout(set = 0, binding = 0) uniform sampler2D tex;
+layout(set = 0, binding = 0) uniform sampler2D tDiffuse;
 
 layout(set = 1, binding = 0) uniform CameraData {
   mat4 view;
@@ -27,7 +27,10 @@ layout(location = NORMAL_BUFFER_INDEX - 1) out vec4 outNormal;
 layout(location = COLOR_BUFFER_INDEX - 1) out vec4 outColor;
 
 void main() {
-  outColor = u_pushConstant.color * texture(tex, fragUV);
+  // sRGB => Linear conversion
+  vec4 userColor = vec4(pow(u_pushConstant.color.rgb, vec3(2.2f)), u_pushConstant.color.a);
+
+  outColor = userColor * texture(tDiffuse, fragUV);
 
   // outNormal.xyz =
   //    normalize(mat3(camData.view) *
