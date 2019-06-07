@@ -9,6 +9,7 @@
 
 namespace Renderer {
 
+// TODO Only diffuse tex as SRGB, rest as UNORM
 bool Texture::init(const std::string &path) {
   int texWidth, texHeight, texChannels;
   stbi_uc *pixels =
@@ -20,11 +21,12 @@ bool Texture::init(const std::string &path) {
     return false;
   }
 
-  image.allocate(texWidth, texHeight, vk::Format::eR8G8B8A8Unorm,
-                 vk::ImageTiling::eOptimal,
-                 vk::ImageUsageFlagBits::eTransferDst |
-                     vk::ImageUsageFlagBits::eSampled,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal);
+  image.allocate(
+      texWidth, texHeight,
+      vk::Format::eR8G8B8A8Srgb, // TODO Only diffuse tex as SRGB, rest as UNORM
+      vk::ImageTiling::eOptimal,
+      vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
 
   // cast for correct template deduction (for inner staging buffer size
   // deduction)

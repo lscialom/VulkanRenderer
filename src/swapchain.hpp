@@ -7,7 +7,7 @@ namespace Swapchain {
 
 extern vk::PresentModeKHR PreferredPresentMode;
 static constexpr vk::SurfaceFormatKHR PreferredImageFormat = {
-    vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear};
+    vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear};
 
 size_t ImageCount();
 uint32_t GetCurrentImageIndex();

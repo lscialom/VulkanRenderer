@@ -123,10 +123,10 @@ void main() {
   // fragColor.rgb *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
   //TODO Switch for ACES Tonemapping
-  vec3 tonemap = vec3(1.0) - exp(-fragColor.rgb * exposure);
-  tonemap = pow(tonemap, vec3(1.0 / gamma));
+  // vec3 tonemap = vec3(1.0) - exp(-fragColor.rgb * exposure);
+  // tonemap = pow(tonemap, vec3(1.0 / gamma));
 
-  fragColor.rgb = tonemap;
+  // fragColor.rgb = tonemap;
 
   float noise = texture(ditherTex, gl_FragCoord.xy / textureSize(ditherTex, 0).xy).r / BAYER_MATRIX_DIVISOR;
 

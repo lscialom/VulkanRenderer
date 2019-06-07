@@ -295,7 +295,7 @@ int main() {
   light->lightType = Renderer::LightType::Point;
   light->maxDist = 100;
 
-  light = Renderer::SpawnLight({1, -1, 1}, {0.2f, 0.2f, 0.2f}, 0);
+  light = Renderer::SpawnLight({1, -1, 1}, {1.0f, 1.0f, 1.0f}, 0);
   light->lightType = Renderer::LightType::Directional;
 
   // Directional light
