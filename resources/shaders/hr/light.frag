@@ -40,7 +40,7 @@ layout(location = 0) out vec4 fragColor;
 //TODO Push constant
 const float ssaoStrength = 1;
 const float gamma = 2.2;
-const float exposure = 1;
+const float exposure = 1.5;
 const float shininess = 0.5;
 // const float ditherFactor = 768;
 
@@ -123,10 +123,12 @@ void main() {
   // fragColor.rgb *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
   //TODO Switch for ACES Tonemapping
-  // vec3 tonemap = vec3(1.0) - exp(-fragColor.rgb * exposure);
+  vec3 tonemap = vec3(1.0) - exp(-fragColor.rgb * exposure);
+
+  // Gamma correction. useless if image output format is already srgb.
   // tonemap = pow(tonemap, vec3(1.0 / gamma));
 
-  // fragColor.rgb = tonemap;
+  fragColor.rgb = tonemap;
 
   float noise = texture(ditherTex, gl_FragCoord.xy / textureSize(ditherTex, 0).xy).r / BAYER_MATRIX_DIVISOR;
 
