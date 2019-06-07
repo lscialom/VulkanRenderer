@@ -1,7 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-#include <constants.glsl>
+#include <colorspace.glsl>
 #include <utils.glsl>
 
 #define BAYER_MATRIX_DIVISOR 64 // Because bayer matrix range is from 0 to 63;
@@ -161,9 +161,7 @@ void main() {
 
   vec3 tonemap = fragColor.rgb * exposure;
 
-  // Linear => sRGB
-  tonemap = pow(tonemap, vec3(1.0 / GAMMA));
-
+  tonemap = LinearTosRGB(tonemap);
   tonemap = ACESFitted(tonemap);
 
   fragColor.rgb = tonemap;

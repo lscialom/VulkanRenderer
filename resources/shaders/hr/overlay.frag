@@ -1,7 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-#include <constants.glsl>
+#include <colorspace.glsl>
 
 layout(set = 0, binding = 0) uniform sampler2D[G_BUFFER_SIZE] gBuffer;
 
@@ -18,5 +18,5 @@ void main() {
   else
     fragColor.rgb = vec4(texture(gBuffer[currentInstanceId], fragUV)).xxx;
 
-  fragColor.rgb = pow(fragColor.rgb, vec3(1.0f / GAMMA));
+  fragColor.rgb = LinearTosRGB(fragColor.rgb);
 }

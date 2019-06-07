@@ -1,7 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-#include <constants.glsl>
+#include <colorspace.glsl>
 
 layout(set = 0, binding = 0) uniform sampler2D tDiffuse;
 
@@ -28,7 +28,7 @@ layout(location = COLOR_BUFFER_INDEX - 1) out vec4 outColor;
 
 void main() {
   // sRGB => Linear conversion
-  vec4 userColor = vec4(pow(u_pushConstant.color.rgb, vec3(GAMMA)), u_pushConstant.color.a);
+  vec4 userColor = vec4(SRGBToLinear(u_pushConstant.color.rgb), u_pushConstant.color.a);
 
   outColor = userColor * texture(tDiffuse, fragUV);
 
