@@ -9,3 +9,5 @@
 
 #define SSAO_NOISE_DIM 4
 #define SSAO_NUM_SAMPLES 32
+
+#define GAMMA 2.2

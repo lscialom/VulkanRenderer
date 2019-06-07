@@ -295,7 +295,7 @@ struct RenderContext {
     shaderInfos[1].fragPath = "../resources/shaders/spv/overlay.frag.spv";
     shaderInfos[1].useVertexInput = false;
     shaderInfos[1].cull = false;
-    shaderInfos[1].blendEnable = true;
+    shaderInfos[1].blendEnable = false;
     shaderInfos[1].drawModels = false;
     shaderInfos[1].pushConstants = {overlayShaderPushConstant};
     shaderInfos[1].descriptors = {descriptorSetInfos[0]};

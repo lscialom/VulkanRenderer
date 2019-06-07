@@ -17,4 +17,6 @@ void main() {
     fragColor.rgb = vec4(texture(gBuffer[currentInstanceId], fragUV)).xyz;
   else
     fragColor.rgb = vec4(texture(gBuffer[currentInstanceId], fragUV)).xxx;
+
+  fragColor.rgb = pow(fragColor.rgb, vec3(1.0f / GAMMA));
 }

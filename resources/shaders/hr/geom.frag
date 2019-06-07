@@ -28,7 +28,7 @@ layout(location = COLOR_BUFFER_INDEX - 1) out vec4 outColor;
 
 void main() {
   // sRGB => Linear conversion
-  vec4 userColor = vec4(pow(u_pushConstant.color.rgb, vec3(2.2f)), u_pushConstant.color.a);
+  vec4 userColor = vec4(pow(u_pushConstant.color.rgb, vec3(GAMMA)), u_pushConstant.color.a);
 
   outColor = userColor * texture(tDiffuse, fragUV);
 

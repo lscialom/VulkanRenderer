@@ -39,7 +39,6 @@ layout(location = 0) out vec4 fragColor;
 
 //TODO Push constant
 const float ssaoStrength = 1;
-const float gamma = 2.2;
 const float exposure = 1.5;
 const float shininess = 0.5;
 // const float ditherFactor = 768;
@@ -163,7 +162,7 @@ void main() {
   vec3 tonemap = fragColor.rgb * exposure;
 
   // Linear => sRGB
-  tonemap = pow(tonemap, vec3(1.0 / gamma));
+  tonemap = pow(tonemap, vec3(1.0 / GAMMA));
 
   tonemap = ACESFitted(tonemap);
 
