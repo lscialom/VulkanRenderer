@@ -51,7 +51,7 @@ void main() {
   vec3 n = normalize(mat3(camData.view) * wn);
 
   // world-space position
-  vec4 wp = texture(gBuffer[POS_BUFFER_INDEX], fragUV);
+  vec4 wp = vec4(texture(gBuffer[POS_BUFFER_INDEX], fragUV).rgb, 1.0f);
   vec3 p = (camData.view * wp).xyz;
 
   vec3 v = normalize(-p);          // vector towards eye
@@ -112,7 +112,7 @@ void main() {
         finalLightColor;
   }
 
-  fragColor.a = diffuseColor.a;
+  fragColor.a = 1.0f;
 
   float luminance = dot(fragColor.rgb, vec3(0.299, 0.587, 0.114));
   fragColor.rgb *= mix(vec3(pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength)), vec3(1.0), vec3(luminance));

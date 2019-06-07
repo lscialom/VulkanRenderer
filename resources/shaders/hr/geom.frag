@@ -27,19 +27,24 @@ layout(location = NORMAL_BUFFER_INDEX - 1) out vec4 outNormal;
 layout(location = COLOR_BUFFER_INDEX - 1) out vec4 outColor;
 
 void main() {
+  outColor = u_pushConstant.color * texture(tex, fragUV);
+
   // outNormal.xyz =
   //    normalize(mat3(camData.view) *
   //              fragNormal); // convert normal to view space, u_vm (view
   //                           // matrix), is a rigid body transform.
   // outNormal.w = 1;
-  outNormal = vec4(normalize(fragNormal), 1.0);
+
+  //using alpha for blending. Should use outNormal.w = 1.0f in other shaders
+  outNormal = vec4(normalize(fragNormal), outColor.a);
 
   // outPos.xyz =
   //    vec3(camData.view * vec4(fragPosition, 1.0)); // position in view space
   // outPos.w = 1;
-  outPos = vec4(fragPosition, 1.0); // position in world space
 
-  outColor = u_pushConstant.color * texture(tex, fragUV);
+  //using alpha for blending. Should use OutPos.w = 1.0f in other shaders
+  outPos = vec4(fragPosition, outColor.a); // position in world space
+
 
   // outNormal = vec4(normalize(fragNormal), 1);
   // outPos = vec4(0, 1, 0, 1);

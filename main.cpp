@@ -264,7 +264,7 @@ int main() {
                       Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
 
   cube1->color = Renderer::Color::Red;
-  cube1->alpha = 0.0f;
+  cube1->alpha = 0.1f;
 
   Renderer::ModelInstance *map =
       Renderer::Spawn(mapId, {0.0f, -6.5f, 0.0f}, Renderer::Vec3::Zero(),

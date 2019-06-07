@@ -281,7 +281,7 @@ struct RenderContext {
     shaderInfos[0].fragPath = "../resources/shaders/spv/light.frag.spv";
     shaderInfos[0].useVertexInput = false;
     shaderInfos[0].cull = false;
-    shaderInfos[0].blendEnable = true;
+    shaderInfos[0].blendEnable = false;
     shaderInfos[0].drawModels = false;
     shaderInfos[0].pushConstants = {lightShaderPushConstant};
     shaderInfos[0].descriptors = descriptorSetInfos;

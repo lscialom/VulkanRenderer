@@ -51,7 +51,7 @@ float computeSSAO(vec3 pos, vec3 normal)
       offset.xyz /= offset.w;               // perspective divide
       offset.xyz  = offset.xyz * 0.5 + 0.5; // transform to range 0.0 - 1.0    }
 
-      float sampleDepth = (camData.view * texture(gBuffer[POS_BUFFER_INDEX], offset.xy)).z;
+      float sampleDepth = (camData.view * vec4(texture(gBuffer[POS_BUFFER_INDEX], offset.xy).rgb, 1.0f)).z;
 
       // range check & accumulate
       float rangeCheck = smoothstep(0.0, 1.0, radius / abs(pos.z - sampleDepth));
@@ -69,7 +69,7 @@ void main() {
   vec3 n = normalize(mat3(camData.view) * wn);
 
   // world-space position
-  vec4 wp = texture(gBuffer[POS_BUFFER_INDEX], fragUV);
+  vec4 wp = vec4(texture(gBuffer[POS_BUFFER_INDEX], fragUV).rgb, 1.0f);
   vec3 p = (camData.view * wp).xyz;
 
   fragColor = computeSSAO(p, n);
