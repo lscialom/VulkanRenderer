@@ -109,7 +109,7 @@ protected:
 
 public:
   Vec3 color = Color::White;
-  float shininess = 0.5f;
+  float alpha = 1.0f;
 
   Vec3 GetPosition() const { return pos; }
   Vec3 GetRotation() const { return rot; }

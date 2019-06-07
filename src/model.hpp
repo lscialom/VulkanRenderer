@@ -50,7 +50,6 @@ private:
   // UniformBufferObject uboModelMat;
 
   Mesh *mesh;
-
   std::vector<ModelInstanceInternal *> modelInstances;
 
 public:
@@ -97,7 +96,7 @@ public:
       modelInstances[i]->update_matrix();
 
       miPc.color.head<3>() << Maths::EigenizeVec3(modelInstances[i]->color);
-      miPc.color.tail<1>() << modelInstances[i]->shininess;
+      miPc.color.tail<1>() << modelInstances[i]->alpha;
       miPc.model = modelInstances[i]->transform.matrix();
 
       commandbuffer.pushConstants(shader.get_pipeline_layout(),

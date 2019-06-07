@@ -18,10 +18,9 @@ layout(push_constant) uniform pushConstant {
 }
 u_pushConstant;
 
-layout(location = 0) in vec3 fragColor;
-layout(location = 1) in vec3 fragPosition;
-layout(location = 2) in vec3 fragNormal;
-layout(location = 3) in vec2 fragUV;
+layout(location = 0) in vec3 fragPosition;
+layout(location = 1) in vec3 fragNormal;
+layout(location = 2) in vec2 fragUV;
 
 layout(location = POS_BUFFER_INDEX - 1) out vec4 outPos;
 layout(location = NORMAL_BUFFER_INDEX - 1) out vec4 outNormal;

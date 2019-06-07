@@ -145,7 +145,7 @@ struct RenderContext {
     shaderInfo.fragPath = "../resources/shaders/spv/geom.frag.spv";
     shaderInfo.useVertexInput = true;
     shaderInfo.cull = true;
-    shaderInfo.blendEnable = false;
+    shaderInfo.blendEnable = true;
     shaderInfo.drawModels = true;
     shaderInfo.pushConstants = pushConstantRanges;
     shaderInfo.ubos = ubos;

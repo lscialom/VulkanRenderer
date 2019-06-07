@@ -41,6 +41,7 @@ layout(location = 0) out vec4 fragColor;
 const float ssaoStrength = 1;
 const float gamma = 2.2;
 const float exposure = 1;
+const float shininess = 0.5;
 // const float ditherFactor = 768;
 
 void main() {
@@ -63,9 +64,8 @@ void main() {
   //     wp.xyz, (inverse(camData.view) * vec4(lightData[0].vector.xyz, 1.0)).xyz,
   //     32);
 
-  // rgb = color; a = specular intensity
-  vec4 fragColorProps = vec4(texture(gBuffer[COLOR_BUFFER_INDEX], fragUV));
-  // fragColorProps *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
+  vec4 diffuseColor = vec4(texture(gBuffer[COLOR_BUFFER_INDEX], fragUV));
+  // diffuseColor *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
   for(int i = 0; i<u_pushConstant.numLights; ++i)
   {
@@ -82,13 +82,13 @@ void main() {
     vec3 halfDir = normalize(lightDir + viewDir);
 
     float diff = max(dot(n, lightDir), 0.0);
-    vec3 diffuse = fragColorProps.rgb * diff * lightData[i].color;
+    vec3 diffuse = diffuseColor.rgb * diff * lightData[i].color;
 
     float spec = pow(max(dot(n, halfDir), 0.0), 32);
-    vec3 specular = fragColorProps.a * spec * lightData[i].color;
+    vec3 specular = shininess * spec * lightData[i].color;
 
     // No ambient with hdr / tonemapping since exposure performs its job well enough
-    // vec3 ambient = fragColorProps.rgb * lightData[i].ambientFactor * lightData[i].color;
+    // vec3 ambient = diffuseColor.rgb * lightData[i].ambientFactor * lightData[i].color;
 
     vec3 finalLightColor;
     if (notDirectional) {
@@ -112,7 +112,7 @@ void main() {
         finalLightColor;
   }
 
-  fragColor.a = 1.0;
+  fragColor.a = diffuseColor.a;
 
   float luminance = dot(fragColor.rgb, vec3(0.299, 0.587, 0.114));
   fragColor.rgb *= mix(vec3(pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength)), vec3(1.0), vec3(luminance));
