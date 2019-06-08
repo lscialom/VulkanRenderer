@@ -30,7 +30,10 @@ void main() {
   // sRGB => Linear conversion
   vec4 userColor = vec4(SRGBToLinear(u_pushConstant.color.rgb), u_pushConstant.color.a);
 
-  outColor = userColor * texture(tDiffuse, fragUV);
+  vec4 diffuseColor = texture(tDiffuse, fragUV);
+  diffuseColor.rgb = SRGBToLinear(diffuseColor.rgb); // TODO Avoid conversion overhead by pushing tDiffuse as R8G8B8A8Srgb ?
+
+  outColor = userColor * diffuseColor;
 
   // outNormal.xyz =
   //    normalize(mat3(camData.view) *
