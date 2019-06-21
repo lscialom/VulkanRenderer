@@ -1,3 +1,5 @@
+#pragma once
+
 #include "descriptors.hpp"
 
 namespace Renderer {

@@ -1,6 +1,8 @@
 #include "resource_manager.hpp"
 #include "obj_loader.hpp"
 
+#include "mesh.hpp"
+
 #include <unordered_map>
 
 namespace Renderer {
@@ -13,11 +15,18 @@ void Init() {
 
   LoadTexture(RESOURCES_PATH + "textures/default_texture.jpg",
               DEFAULT_TEXTURE_NAME);
+  textures[DEFAULT_TEXTURE_NAME_ALT] = textures[DEFAULT_TEXTURE_NAME];
+
   LoadTexture(RESOURCES_PATH + "textures/missing_texture.png",
               MISSING_TEXTURE_NAME);
 }
 
 void Shutdown() {
+  textures.erase(
+      DEFAULT_TEXTURE_NAME_ALT); // Same pointer as DEFAULT_TEXTURE_NAME, so
+                                 // this keeps the program from freeing the same
+                                 // pointer twice
+
   for (const auto &pair : textures)
     delete pair.second;
 

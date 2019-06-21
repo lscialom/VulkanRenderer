@@ -1,3 +1,5 @@
+#pragma once
+
 #include "nv_helpers_vk/BottomLevelASGenerator.h"
 #include "nv_helpers_vk/TopLevelASGenerator.h"
 #include "nv_helpers_vk/VKHelpers.h"
@@ -6,6 +8,8 @@
 #include "shader.hpp"
 
 #include "common_resources.hpp"
+
+#include "texture.hpp"
 
 namespace Renderer {
 
@@ -51,17 +55,20 @@ private:
       return *this;
     }
 
-	void init_descriptor(Texture* diffuseMap, Texture* alphaMap)
-	{
-		DescriptorSetInfo descriptorSetInfo;
-		descriptorSetInfo.layout = CommonResources::MeshLayout;
-		descriptorSetInfo.images = { diffuseMap->get_image(),
-									alphaMap->get_image() };
-		descriptorSetInfo.samplers = { &CommonResources::TextureSampler,
-									  &CommonResources::TextureSampler };
+    void init_descriptor(const std::string &diffuse, const std::string &alpha) {
 
-		descriptorSet.init(descriptorSetInfo);
-	}
+      DescriptorSetInfo descriptorSetInfo;
+      descriptorSetInfo.layout = CommonResources::MeshLayout;
+
+      descriptorSetInfo.images = {
+		  ResourceManager::GetTexture(diffuse)->get_image(),
+          ResourceManager::GetTexture(alpha)->get_image()};
+
+      descriptorSetInfo.samplers = {&CommonResources::TextureSampler,
+                                    &CommonResources::TextureSampler};
+
+      descriptorSet.init(descriptorSetInfo);
+    }
   };
 
   using Queue = std::vector<Submesh>;
@@ -151,29 +158,15 @@ public:
         }
 
         Submesh submesh;
-
         submesh.indexCount = numFaces * 3;
         submesh.indexOffset = indexOffset;
 
-        Texture *diffuseMap =
-            currentDiffuseMap.empty()
-                ? ResourceManager::GetTexture("default_texture")
-                : ResourceManager::GetTexture(currentDiffuseMap);
+        submesh.init_descriptor(currentDiffuseMap, currentAlphaMap);
 
-        if (!isTransparent) {
-
-          Texture *alphaMap = ResourceManager::GetTexture("default_texture");
-
-		  submesh.init_descriptor(diffuseMap, alphaMap);
+        if (!isTransparent)
           opaqueQueue.emplace_back(std::move(submesh));
-
-        } else {
-
-          Texture *alphaMap = ResourceManager::GetTexture(currentAlphaMap);
-
-		  submesh.init_descriptor(diffuseMap, alphaMap);
+        else
           transparentQueue.emplace_back(std::move(submesh));
-        }
 
         indexOffset += submesh.indexCount;
       }

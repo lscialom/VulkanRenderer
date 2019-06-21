@@ -7,6 +7,8 @@
 
 #include "resource_manager.hpp"
 
+#include "mesh.hpp"
+
 namespace Renderer {
 
 struct ModelInstanceInternal : ModelInstance {
