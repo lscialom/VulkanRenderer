@@ -115,9 +115,7 @@ void LoadObj(const std::string &filename,
 
       if (!materials[matId].alpha_texname.empty()) {
         std::string texPath = cwd + materials[matId].alpha_texname;
-
-        // TODO Manage alphaMaps
-        // Renderer::ResourceManager::LoadTexture(texPath, texPath);
+        Renderer::ResourceManager::LoadTexture(texPath, texPath);
 
         data.alphaMaps[index] = texPath;
       }

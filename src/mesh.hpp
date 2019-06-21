@@ -28,20 +28,36 @@ struct AccelerationStructure {
 
 struct Mesh {
 private:
-  struct FacePool {
+  struct Submesh {
     uint64_t indexCount = 0;
     VERTEX_INDICES_TYPE indexOffset = 0;
 
-    Texture *diffuseMap;
+    Texture *diffuseMap = nullptr;
+    Texture *alphaMap = nullptr;
   };
 
-  struct SubMesh {
-    std::vector<FacePool> facePools;
-  };
+  using Queue = std::vector<Submesh>;
 
   GeometryInstance geometryInstance;
-  std::vector<SubMesh> opaqueQueue;
-  std::vector<SubMesh> transparentQueue;
+  Queue opaqueQueue;
+  Queue transparentQueue;
+
+  void drawQueue(const Queue &queue, const vk::CommandBuffer &commandbuffer,
+                 const Shader &shader) const {
+
+    for (size_t i = 0; i < queue.size(); ++i) {
+      commandbuffer.bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0, 1,
+          queue[i].diffuseMap->get_descriptor_set(), 0, nullptr);
+
+      commandbuffer.bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 1, 1,
+          queue[i].alphaMap->get_descriptor_set(), 0, nullptr);
+
+      commandbuffer.drawIndexed(queue[i].indexCount, 1, queue[i].indexOffset, 0,
+                                0);
+    }
+  }
 
 public:
   // /!\ Data must be contiguous
@@ -96,9 +112,6 @@ public:
 
       VERTEX_INDICES_TYPE indexOffset = currentShape.indexOffset;
 
-      SubMesh submesh;
-      SubMesh submeshAlpha;
-
       for (size_t j = 0; j < currentShape.diffuseMaps.size();) {
         std::string currentDiffuseMap = currentShape.diffuseMaps[j];
         std::string currentAlphaMap = currentShape.alphaMaps[j];
@@ -113,29 +126,29 @@ public:
           ++numFaces;
         }
 
-        VERTEX_INDICES_TYPE indexCount = numFaces * 3;
+        Submesh submesh;
+
+        submesh.indexCount = numFaces * 3;
+        submesh.indexOffset = indexOffset;
+
+        submesh.diffuseMap =
+            currentDiffuseMap.empty()
+                ? ResourceManager::GetTexture("default_texture")
+                : ResourceManager::GetTexture(currentDiffuseMap);
 
         if (!isTransparent) {
-          submesh.facePools.push_back(
-              {indexCount, indexOffset,
-               currentDiffuseMap.empty()
-                   ? ResourceManager::GetTexture("default_texture")
-                   : ResourceManager::GetTexture(currentDiffuseMap)});
+
+          submesh.alphaMap = ResourceManager::GetTexture("default_texture");
+          opaqueQueue.push_back(submesh);
+
         } else {
-          submeshAlpha.facePools.push_back(
-              {indexCount, indexOffset,
-               currentDiffuseMap.empty()
-                   ? ResourceManager::GetTexture("default_texture")
-                   : ResourceManager::GetTexture(currentDiffuseMap)});
+
+          submesh.alphaMap = ResourceManager::GetTexture(currentAlphaMap);
+          transparentQueue.push_back(submesh);
         }
 
-        indexOffset += indexCount;
+        indexOffset += submesh.indexCount;
       }
-
-      if (!submesh.facePools.empty())
-        opaqueQueue.push_back(submesh);
-      if (!submeshAlpha.facePools.empty())
-        transparentQueue.push_back(submeshAlpha);
 
       ++shapeDataIterator;
     }
@@ -154,36 +167,8 @@ public:
   void draw(const vk::CommandBuffer &commandbuffer,
             const Shader &shader) const {
 
-    for (size_t i = 0; i < opaqueQueue.size(); ++i) {
-
-      for (size_t j = 0; j < opaqueQueue[i].facePools.size(); ++j) {
-
-        commandbuffer.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0,
-            1, opaqueQueue[i].facePools[j].diffuseMap->get_descriptor_set(), 0,
-            nullptr);
-
-        commandbuffer.drawIndexed(opaqueQueue[i].facePools[j].indexCount, 1,
-                                  opaqueQueue[i].facePools[j].indexOffset, 0,
-                                  0);
-      }
-    }
-
-    for (size_t i = 0; i < transparentQueue.size(); ++i) {
-
-      for (size_t j = 0; j < transparentQueue[i].facePools.size(); ++j) {
-
-        commandbuffer.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0,
-            1,
-            transparentQueue[i].facePools[j].diffuseMap->get_descriptor_set(),
-            0, nullptr);
-
-        commandbuffer.drawIndexed(
-            transparentQueue[i].facePools[j].indexCount, 1,
-            transparentQueue[i].facePools[j].indexOffset, 0, 0);
-      }
-    }
+    drawQueue(opaqueQueue, commandbuffer, shader);
+    drawQueue(transparentQueue, commandbuffer, shader);
   }
 }; // namespace Renderer
 

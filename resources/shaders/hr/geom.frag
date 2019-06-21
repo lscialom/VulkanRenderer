@@ -3,9 +3,11 @@
 
 #include <colorspace.glsl>
 
+// TODO multiple bindings instead of multiple sets
 layout(set = 0, binding = 0) uniform sampler2D tDiffuse;
+layout(set = 1, binding = 0) uniform sampler2D tAlpha;
 
-layout(set = 1, binding = 0) uniform CameraData {
+layout(set = 2, binding = 0) uniform CameraData {
   mat4 view;
   mat4 proj;
   vec3 viewPos;
@@ -34,6 +36,7 @@ void main() {
   diffuseColor.rgb = SRGBToLinear(diffuseColor.rgb); // TODO Avoid conversion overhead by pushing tDiffuse as R8G8B8A8Srgb ?
 
   outColor = userColor * diffuseColor;
+  outColor.a *= texture(tAlpha, fragUV).r;
 
   // outNormal.xyz =
   //    normalize(mat3(camData.view) *
