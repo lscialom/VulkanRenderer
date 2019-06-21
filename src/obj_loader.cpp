@@ -100,18 +100,32 @@ void LoadObj(const std::string &filename,
     }
 
     ShapeData data;
-    data.textures = std::vector(shape.mesh.material_ids.size(), std::string());
+    data.diffuseMaps =
+        std::vector(shape.mesh.material_ids.size(), std::string());
+    data.alphaMaps = std::vector(shape.mesh.material_ids.size(), std::string());
 
-    size_t index = 0;
-    for (const auto &matId : shape.mesh.material_ids) {
+    for (size_t index = 0; index < shape.mesh.material_ids.size(); ++index) {
 
-      if (matId < 0 || materials[matId].diffuse_texname.empty())
+      int matId = shape.mesh.material_ids[index];
+
+      if (matId < 0)
         continue;
 
-      std::string texPath = cwd + materials[matId].diffuse_texname;
-      Renderer::ResourceManager::LoadTexture(texPath, texPath);
+      if (!materials[matId].alpha_texname.empty()) {
+        std::string texPath = cwd + materials[matId].alpha_texname;
 
-      data.textures[index++] = texPath;
+        // TODO Manage alphaMaps
+        // Renderer::ResourceManager::LoadTexture(texPath, texPath);
+
+        data.alphaMaps[index] = texPath;
+      }
+
+      if (!materials[matId].diffuse_texname.empty()) {
+        std::string texPath = cwd + materials[matId].diffuse_texname;
+        Renderer::ResourceManager::LoadTexture(texPath, texPath);
+
+        data.diffuseMaps[index] = texPath;
+      }
     }
 
     data.indexCount = static_cast<uint32_t>(shape.mesh.indices.size());

@@ -30,7 +30,7 @@ struct Mesh {
 private:
   struct FacePool {
     uint64_t numFaces = 0;
-    Texture *texture;
+    Texture *diffuseMap;
   };
 
   struct SubMesh {
@@ -94,20 +94,20 @@ public:
 
       submeshes[i].indexCount = currentShape.indexCount;
 
-      for (size_t j = 0; j < currentShape.textures.size();) {
-        std::string currentTex = currentShape.textures[j];
+      for (size_t j = 0; j < currentShape.diffuseMaps.size();) {
+        std::string currentDiffuseMap = currentShape.diffuseMaps[j];
 
         uint64_t numFaces = 1;
-        while (++j < currentShape.textures.size() &&
-               currentShape.textures[j] == currentTex) {
+        while (++j < currentShape.diffuseMaps.size() &&
+               currentShape.diffuseMaps[j] == currentDiffuseMap) {
 
           ++numFaces;
         }
 
         submeshes[i].facePools.push_back(
-            {numFaces, currentTex.empty()
+            {numFaces, currentDiffuseMap.empty()
                            ? ResourceManager::GetTexture("default_texture")
-                           : ResourceManager::GetTexture(currentTex)});
+                           : ResourceManager::GetTexture(currentDiffuseMap)});
       }
 
       ++shapeDataIterator;
@@ -135,7 +135,7 @@ public:
 
         commandbuffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0,
-            1, submeshes[i].facePools[j].texture->get_descriptor_set(), 0,
+            1, submeshes[i].facePools[j].diffuseMap->get_descriptor_set(), 0,
             nullptr);
 
         commandbuffer.drawIndexed(submeshes[i].facePools[j].numFaces * 3, 1,
