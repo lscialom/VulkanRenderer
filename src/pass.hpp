@@ -133,14 +133,12 @@ private:
                                shaderInfos[i].pushConstants,
                                shaderInfos[i].descriptors, shaderInfos[i].ubos);
       } else {
-        shaders[i].handle.init(shaderInfos[i].vertPath, shaderInfos[i].fragPath,
-                               handle, nbColorAttachments,
-                               shaderInfos[i].useVertexInput,
-                               shaderInfos[i].cull, shaderInfos[i].blendEnable,
-                               shaderInfos[i].pushConstants,
-                               shaderInfos[i].descriptors, shaderInfos[i].ubos,
-                               {CommonResources::UniqueTextureLayout,
-                                CommonResources::UniqueTextureLayout});
+        shaders[i].handle.init(
+            shaderInfos[i].vertPath, shaderInfos[i].fragPath, handle,
+            nbColorAttachments, shaderInfos[i].useVertexInput,
+            shaderInfos[i].cull, shaderInfos[i].blendEnable,
+            shaderInfos[i].pushConstants, shaderInfos[i].descriptors,
+            shaderInfos[i].ubos, {CommonResources::MeshLayout});
       }
 
       shaders[i].drawModels = shaderInfos[i].drawModels;

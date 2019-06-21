@@ -14,6 +14,7 @@ namespace CommonResources {
 
 //#include "descriptor_layouts.inl"
 extern ::Renderer::DescriptorLayout UniqueTextureLayout;
+extern ::Renderer::DescriptorLayout MeshLayout;
 extern ::Renderer::DescriptorLayout GBufferLayout;
 extern ::Renderer::DescriptorLayout SSAOLayout;
 

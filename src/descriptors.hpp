@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "global_context.hpp"
+
 #include "configuration_helper.hpp"
 #include "memory.hpp"
 #include "swapchain.hpp"
@@ -26,11 +27,11 @@ struct DescriptorSetInfo {
 struct DescriptorSet {
 private:
   // TODO Optimize
-  vk::DescriptorPool pool;
-  vk::DescriptorSet set;
+  vk::DescriptorPool pool = std::nullptr_t(VK_NULL_HANDLE);
+  vk::DescriptorSet set = std::nullptr_t(VK_NULL_HANDLE);
 
   // Does not own it
-  vk::DescriptorSetLayout layout;
+  vk::DescriptorSetLayout layout = std::nullptr_t(VK_NULL_HANDLE);
 
   std::vector<vk::DescriptorSetLayoutBinding> bindingsInfo;
 
@@ -39,6 +40,9 @@ private:
   std::vector<const vk::Sampler *> samplers;
 
 public:
+  DescriptorSet() = default;
+  DescriptorSet(const DescriptorSet &o) = delete;
+  DescriptorSet(DescriptorSet &&other);
   ~DescriptorSet() { destroy(); }
 
   void init(const DescriptorSetInfo &info, bool updateNow = true);
@@ -49,6 +53,9 @@ public:
 
   const vk::DescriptorSet &get_handle() const { return set; }
   vk::DescriptorSetLayout get_layout() const { return layout; }
+
+  DescriptorSet &operator=(const DescriptorSet &o) = delete;
+  DescriptorSet &operator=(DescriptorSet &&other);
 };
 
 // TODO Find a way to move UniformObjectLayout here

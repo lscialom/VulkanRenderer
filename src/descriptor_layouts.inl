@@ -48,6 +48,23 @@ DEFINE_LAYOUT(UniqueTextureLayout, 1,
 		)
 	})
 
+DEFINE_LAYOUT(MeshLayout, 2,
+	{
+		DEFINE_LAYOUT_BINDING(
+			.binding = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		),
+
+		DEFINE_LAYOUT_BINDING(
+			.binding = 1,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		)
+	})
+
 DEFINE_LAYOUT(GBufferLayout, 1,
 	{
 		// G-Buffer attachments
@@ -90,12 +107,14 @@ DEFINE_LAYOUT(SSAOLayout, 2,
 
 void InitDescriptorLayouts() {
   CREATE_DESCRIPTOR_SET_LAYOUT(UniqueTextureLayout);
+  CREATE_DESCRIPTOR_SET_LAYOUT(MeshLayout);
   CREATE_DESCRIPTOR_SET_LAYOUT(GBufferLayout);
   CREATE_DESCRIPTOR_SET_LAYOUT(SSAOLayout);
 }
 
 void DestroyDescriptorLayouts() {
   DESTROY_DESCRIPTOR_SET_LAYOUT(UniqueTextureLayout);
+  DESTROY_DESCRIPTOR_SET_LAYOUT(MeshLayout);
   DESTROY_DESCRIPTOR_SET_LAYOUT(GBufferLayout);
   DESTROY_DESCRIPTOR_SET_LAYOUT(SSAOLayout);
 }

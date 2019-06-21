@@ -5,6 +5,8 @@
 #include "memory.hpp"
 #include "shader.hpp"
 
+#include "common_resources.hpp"
+
 namespace Renderer {
 
 struct GeometryInstance {
@@ -32,8 +34,34 @@ private:
     uint64_t indexCount = 0;
     VERTEX_INDICES_TYPE indexOffset = 0;
 
-    Texture *diffuseMap = nullptr;
-    Texture *alphaMap = nullptr;
+    DescriptorSet descriptorSet;
+
+    Submesh() = default;
+    Submesh(const Submesh &other) = delete;
+
+    Submesh(Submesh &&other) { *this = std::move(other); }
+
+    Submesh &operator=(const Submesh &other) = delete;
+
+    Submesh &operator=(Submesh &&other) {
+      indexCount = other.indexCount;
+      indexOffset = other.indexOffset;
+      descriptorSet = std::move(other.descriptorSet);
+
+      return *this;
+    }
+
+	void init_descriptor(Texture* diffuseMap, Texture* alphaMap)
+	{
+		DescriptorSetInfo descriptorSetInfo;
+		descriptorSetInfo.layout = CommonResources::MeshLayout;
+		descriptorSetInfo.images = { diffuseMap->get_image(),
+									alphaMap->get_image() };
+		descriptorSetInfo.samplers = { &CommonResources::TextureSampler,
+									  &CommonResources::TextureSampler };
+
+		descriptorSet.init(descriptorSetInfo);
+	}
   };
 
   using Queue = std::vector<Submesh>;
@@ -42,17 +70,13 @@ private:
   Queue opaqueQueue;
   Queue transparentQueue;
 
-  void drawQueue(const Queue &queue, const vk::CommandBuffer &commandbuffer,
-                 const Shader &shader) const {
+  void draw_queue(const Queue &queue, const vk::CommandBuffer &commandbuffer,
+                  const Shader &shader) const {
 
     for (size_t i = 0; i < queue.size(); ++i) {
       commandbuffer.bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0, 1,
-          queue[i].diffuseMap->get_descriptor_set(), 0, nullptr);
-
-      commandbuffer.bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 1, 1,
-          queue[i].alphaMap->get_descriptor_set(), 0, nullptr);
+          &queue[i].descriptorSet.get_handle(), 0, nullptr);
 
       commandbuffer.drawIndexed(queue[i].indexCount, 1, queue[i].indexOffset, 0,
                                 0);
@@ -131,20 +155,24 @@ public:
         submesh.indexCount = numFaces * 3;
         submesh.indexOffset = indexOffset;
 
-        submesh.diffuseMap =
+        Texture *diffuseMap =
             currentDiffuseMap.empty()
                 ? ResourceManager::GetTexture("default_texture")
                 : ResourceManager::GetTexture(currentDiffuseMap);
 
         if (!isTransparent) {
 
-          submesh.alphaMap = ResourceManager::GetTexture("default_texture");
-          opaqueQueue.push_back(submesh);
+          Texture *alphaMap = ResourceManager::GetTexture("default_texture");
+
+		  submesh.init_descriptor(diffuseMap, alphaMap);
+          opaqueQueue.emplace_back(std::move(submesh));
 
         } else {
 
-          submesh.alphaMap = ResourceManager::GetTexture(currentAlphaMap);
-          transparentQueue.push_back(submesh);
+          Texture *alphaMap = ResourceManager::GetTexture(currentAlphaMap);
+
+		  submesh.init_descriptor(diffuseMap, alphaMap);
+          transparentQueue.emplace_back(std::move(submesh));
         }
 
         indexOffset += submesh.indexCount;
@@ -167,8 +195,8 @@ public:
   void draw(const vk::CommandBuffer &commandbuffer,
             const Shader &shader) const {
 
-    drawQueue(opaqueQueue, commandbuffer, shader);
-    drawQueue(transparentQueue, commandbuffer, shader);
+    draw_queue(opaqueQueue, commandbuffer, shader);
+    draw_queue(transparentQueue, commandbuffer, shader);
   }
 }; // namespace Renderer
 

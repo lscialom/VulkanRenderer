@@ -176,4 +176,33 @@ void DescriptorSet::destroy() {
   }
 }
 
+DescriptorSet::DescriptorSet(DescriptorSet &&other) {
+  *this = std::move(other);
+}
+
+DescriptorSet &DescriptorSet::operator=(DescriptorSet &&other) {
+  pool = other.pool;
+  other.pool = nullptr;
+
+  set = other.set;
+  other.set = nullptr;
+
+  layout = other.layout;
+  other.layout = nullptr;
+
+  bindingsInfo = other.bindingsInfo;
+  other.bindingsInfo.clear();
+
+  buffers = other.buffers;
+  other.buffers.clear();
+
+  images = other.images;
+  other.images.clear();
+
+  samplers = other.samplers;
+  other.samplers.clear();
+
+  return *this;
+}
+
 } // namespace Renderer

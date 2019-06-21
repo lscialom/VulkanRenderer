@@ -46,6 +46,28 @@ private:
                      const std::vector<DescriptorLayout> &unmanagedDescriptors);
 
 public:
+  Shader() = default;
+  Shader(Shader &&other) { *this = std::move(other); }
+
+  Shader &operator=(Shader &&other) {
+    pipeline = other.pipeline;
+    other.pipeline = std::nullptr_t(VK_NULL_HANDLE);
+
+    pipelineLayout = other.pipelineLayout;
+    other.pipelineLayout = std::nullptr_t(VK_NULL_HANDLE);
+
+    descriptorSets = std::move(other.descriptorSets);
+    other.descriptorSets.clear();
+
+    ubos = other.ubos;
+    other.ubos.clear();
+
+    pushConstants = other.pushConstants;
+    other.pushConstants.clear();
+
+    return *this;
+  }
+
   ~Shader() { destroy(); }
 
   const vk::PipelineLayout get_pipeline_layout() const {
@@ -92,7 +114,8 @@ public:
                         uint32_t offset = 0) const {
     for (size_t i = 0; i < descriptorSets.size(); ++i) {
       commandbuffer.bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, pipelineLayout, offset + i + unmanagedDescriptorsCount, 1,
+          vk::PipelineBindPoint::eGraphics, pipelineLayout,
+          offset + i + unmanagedDescriptorsCount, 1,
           &descriptorSets[i].get_handle(), 0, nullptr);
     }
   }
@@ -116,7 +139,8 @@ public:
     for (size_t i = 0; i < ubos.size(); ++i) {
 
       commandbuffer.bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics, pipelineLayout, i + unmanagedDescriptorsCount, 1,
+          vk::PipelineBindPoint::eGraphics, pipelineLayout,
+          i + unmanagedDescriptorsCount, 1,
           &ubos[i]->get_descriptor_set(frameIndex), 0, nullptr);
     }
   }

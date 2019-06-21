@@ -33,12 +33,12 @@ bool Texture::init(const std::string &path) {
                             vk::ImageLayout::eUndefined,
                             vk::ImageLayout::eShaderReadOnlyOptimal);
 
-  DescriptorSetInfo descriptorSetInfo;
-  descriptorSetInfo.layout = CommonResources::UniqueTextureLayout;
-  descriptorSetInfo.images = {&image};
-  descriptorSetInfo.samplers = {&CommonResources::TextureSampler};
+  //DescriptorSetInfo descriptorSetInfo;
+  //descriptorSetInfo.layout = CommonResources::UniqueTextureLayout;
+  //descriptorSetInfo.images = {&image};
+  //descriptorSetInfo.samplers = {&CommonResources::TextureSampler};
 
-  descriptorSet.init(descriptorSetInfo);
+  //descriptorSet.init(descriptorSetInfo);
 
   return true;
 }
