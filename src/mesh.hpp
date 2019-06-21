@@ -61,7 +61,7 @@ private:
       descriptorSetInfo.layout = CommonResources::MeshLayout;
 
       descriptorSetInfo.images = {
-		  ResourceManager::GetTexture(diffuse)->get_image(),
+          ResourceManager::GetTexture(diffuse)->get_image(),
           ResourceManager::GetTexture(alpha)->get_image()};
 
       descriptorSetInfo.samplers = {&CommonResources::TextureSampler,
