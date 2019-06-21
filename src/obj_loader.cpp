@@ -70,6 +70,8 @@ void LoadObj(const std::string &filename,
     throw std::runtime_error(warn + err);
   }
 
+  VERTEX_INDICES_TYPE indexOffset = 0;
+
   for (const auto &shape : shapes) {
 
     std::cout << "Loading " << shape.name << std::endl;
@@ -129,7 +131,11 @@ void LoadObj(const std::string &filename,
     }
 
     data.indexCount = static_cast<uint32_t>(shape.mesh.indices.size());
+    data.indexOffset = indexOffset;
+
     shapeData.push_back(data);
+
+    indexOffset += data.indexCount;
   }
 
   std::cout << "Loading complete !" << std::endl;
