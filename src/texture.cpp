@@ -9,7 +9,7 @@
 
 namespace Renderer {
 
-bool Texture::init(const std::string &path) {
+bool Texture::init(const std::string &path, TextureUsage usage) {
   int texWidth, texHeight, texChannels;
   stbi_uc *pixels =
       stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels,
@@ -20,8 +20,22 @@ bool Texture::init(const std::string &path) {
     return false;
   }
 
-  image.allocate(texWidth, texHeight, vk::Format::eR8G8B8A8Unorm,
-                 vk::ImageTiling::eOptimal,
+  vk::Format imageFormat;
+
+  switch (usage) {
+  case TextureUsage::Color:
+    imageFormat = vk::Format::eR8G8B8A8Srgb;
+    break;
+
+    // TODO eR8G8B8A8Snorm for normal maps ?
+
+  case TextureUsage::Data:
+  default:
+    imageFormat = vk::Format::eR8G8B8A8Unorm;
+    break;
+  }
+
+  image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
                  vk::ImageUsageFlagBits::eTransferDst |
                      vk::ImageUsageFlagBits::eSampled,
                  vk::MemoryPropertyFlagBits::eDeviceLocal);
@@ -33,12 +47,12 @@ bool Texture::init(const std::string &path) {
                             vk::ImageLayout::eUndefined,
                             vk::ImageLayout::eShaderReadOnlyOptimal);
 
-  //DescriptorSetInfo descriptorSetInfo;
-  //descriptorSetInfo.layout = CommonResources::UniqueTextureLayout;
-  //descriptorSetInfo.images = {&image};
-  //descriptorSetInfo.samplers = {&CommonResources::TextureSampler};
+  // DescriptorSetInfo descriptorSetInfo;
+  // descriptorSetInfo.layout = CommonResources::UniqueTextureLayout;
+  // descriptorSetInfo.images = {&image};
+  // descriptorSetInfo.samplers = {&CommonResources::TextureSampler};
 
-  //descriptorSet.init(descriptorSetInfo);
+  // descriptorSet.init(descriptorSetInfo);
 
   return true;
 }

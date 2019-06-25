@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 #ifdef VULKAN_RENDERER_DLL_EXPORTS
@@ -145,8 +145,9 @@ public:
 
 enum class EPrimitive { Plane, Cube };
 
-VULKAN_RENDERER_EXPORTS void LoadTexture(const std::string &texturePath,
-                                         const std::string &name);
+// VULKAN_RENDERER_EXPORTS void LoadTexture(const std::string &texturePath,
+//                                         const std::string &name, TextureUsage
+//                                         textureUsage);
 
 VULKAN_RENDERER_EXPORTS void LoadMesh(const std::string &meshPath,
                                       const std::string &name);

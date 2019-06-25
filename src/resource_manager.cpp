@@ -14,11 +14,11 @@ static std::unordered_map<std::string, Mesh *> meshes;
 void Init() {
 
   LoadTexture(RESOURCES_PATH + "textures/default_texture.jpg",
-              DEFAULT_TEXTURE_NAME);
+              DEFAULT_TEXTURE_NAME, TextureUsage::Color);
   textures[DEFAULT_TEXTURE_NAME_ALT] = textures[DEFAULT_TEXTURE_NAME];
 
   LoadTexture(RESOURCES_PATH + "textures/missing_texture.png",
-              MISSING_TEXTURE_NAME);
+              MISSING_TEXTURE_NAME, TextureUsage::Color);
 }
 
 void Shutdown() {
@@ -38,7 +38,8 @@ void Shutdown() {
   meshes.clear();
 }
 
-void LoadTexture(const std::string &texturePath, const std::string &texName) {
+void LoadTexture(const std::string &texturePath, const std::string &texName,
+                 TextureUsage textureUsage) {
 
   if (textures.find(texName) != textures.end()) {
 
@@ -51,7 +52,7 @@ void LoadTexture(const std::string &texturePath, const std::string &texName) {
   }
 
   textures[texName] = new Texture();
-  if (!textures[texName]->init(texturePath)) {
+  if (!textures[texName]->init(texturePath, textureUsage)) {
     DestroyTexture(texName);
     return;
   }

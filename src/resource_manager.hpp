@@ -10,6 +10,8 @@
 
 namespace Renderer {
 
+enum class TextureUsage : uint8_t;
+
 struct Texture;
 struct Mesh;
 
@@ -18,7 +20,8 @@ namespace ResourceManager {
 void Init();
 void Shutdown();
 
-void LoadTexture(const std::string &texturePath, const std::string &texName);
+void LoadTexture(const std::string &texturePath, const std::string &texName,
+                 TextureUsage textureUsage);
 void DestroyTexture(const std::string &texName);
 
 Texture *GetTexture(const std::string &textureName);

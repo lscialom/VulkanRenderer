@@ -513,7 +513,7 @@ struct RenderContext {
     Light *light = new Light(position, color, ambientStrength);
     lights.push_back(light);
 
-	assert(lights.size() <= MAX_LIGHTS);
+    assert(lights.size() <= MAX_LIGHTS);
 
     return lights.back();
   }
@@ -889,9 +889,10 @@ void GetCurrentResolution(int &w, int &h) {
   h = extent.height;
 }
 
-void LoadTexture(const std::string &texturePath, const std::string &name) {
-  ResourceManager::LoadTexture(texturePath, name);
-}
+// void LoadTexture(const std::string &texturePath, const std::string &name,
+//                 TextureUsage textureUsage) {
+//  ResourceManager::LoadTexture(texturePath, name, textureUsage);
+//}
 
 void LoadMesh(const std::string &meshPath, const std::string &name) {
   ResourceManager::LoadMesh(meshPath, name);

@@ -40,7 +40,7 @@ layout(location = 0) out vec4 fragColor;
 //TODO Push constant
 const float ssaoStrength = 1;
 const float exposure = 1.0;
-const float shininess = 0.5;
+const float shininess = 0.1;
 // const float ditherFactor = 768;
 
 void main() {
@@ -121,12 +121,9 @@ void main() {
 
   // fragColor.rgb *= pow(texture(ssaoBlurColor, fragUV).r, ssaoStrength);
 
-  vec3 tonemap = fragColor.rgb * exposure;
-
-  tonemap = LinearTosRGB(tonemap);
-  tonemap = ACESFitted(tonemap);
-
-  fragColor.rgb = tonemap;
+  //tonemap + exposure
+  fragColor.rgb *= exposure;
+  fragColor.rgb = ACESFitted(fragColor.rgb);
 
   float noise = texture(ditherTex, gl_FragCoord.xy / textureSize(ditherTex, 0).xy).r / BAYER_MATRIX_DIVISOR;
 
