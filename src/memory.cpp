@@ -125,6 +125,13 @@ uint8_t GetPixelSizeFromFormat(vk::Format format) {
   case vk::Format::eR32G32B32A32Sfloat:
     return 16;
 
+  case vk::Format::eR16G16B16A16Sfloat:
+    return 8;
+
+  case vk::Format::eR8Uint:
+  case vk::Format::eR8Unorm:
+    return 1;
+
   default:
     printf("[WARNING] Unsupported image format specified (%s).\n",
            vk::to_string(format).c_str());

@@ -126,7 +126,7 @@ struct RenderContext {
 
     for (size_t i = 1; i < attachmentInfos.size(); ++i) {
       attachmentInfos[i].extent = extent;
-      attachmentInfos[i].format = vk::Format::eR32G32B32A32Sfloat;
+      attachmentInfos[i].format = vk::Format::eR16G16B16A16Sfloat;
       attachmentInfos[i].isDepth = false;
     }
 
@@ -158,7 +158,7 @@ struct RenderContext {
 
     AttachmentInfo attachmentInfo;
     attachmentInfo.extent = extent;
-    attachmentInfo.format = vk::Format::eR32Sfloat;
+    attachmentInfo.format = vk::Format::eR8Unorm;
     attachmentInfo.isDepth = false;
 
     std::vector<const Image *> images;
@@ -215,7 +215,7 @@ struct RenderContext {
 
     AttachmentInfo attachmentInfo;
     attachmentInfo.extent = extent;
-    attachmentInfo.format = vk::Format::eR32Sfloat;
+    attachmentInfo.format = vk::Format::eR8Unorm;
     attachmentInfo.isDepth = false;
 
     DescriptorSetInfo descriptorSetInfo;
