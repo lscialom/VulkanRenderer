@@ -295,10 +295,12 @@ int main() {
   light->lightType = Renderer::LightType::Point;
   light->maxDist = 100;
 
-  light = Renderer::SpawnLight({1, -1, 1}, {1.0f, 1.0f, 1.0f}, 0);
+  Renderer::Vec3 sunColor = {1.5f, 1.5f, 1.5f};
+
+  light = Renderer::SpawnLight({1, -1, 1}, sunColor, 0);
   light->lightType = Renderer::LightType::Directional;
 
-  light = Renderer::SpawnLight({ -1, -1, -1 }, { 1.0f, 1.0f, 1.0f }, 0);
+  light = Renderer::SpawnLight({-1, -1, -1}, sunColor, 0);
   light->lightType = Renderer::LightType::Directional;
 
   // Directional light

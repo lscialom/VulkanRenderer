@@ -132,12 +132,14 @@ void LoadObj(const std::string &filename,
       }
     }
 
-    data.indexCount = static_cast<uint32_t>(shape.mesh.indices.size());
+    // data.indexCount = static_cast<uint32_t>(shape.mesh.indices.size());
+    // //ShapeData::indexCount currently not in use
+
     data.indexOffset = indexOffset;
 
     shapeData.push_back(data);
 
-    indexOffset += data.indexCount;
+    indexOffset += static_cast<uint32_t>(shape.mesh.indices.size());
   }
 
   std::cout << "Loading complete !" << std::endl;
