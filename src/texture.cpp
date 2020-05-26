@@ -25,6 +25,23 @@ bool Texture::init(const std::string &path, TextureUsage usage) {
   switch (usage) {
   case TextureUsage::Color:
     imageFormat = vk::Format::eR8G8B8A8Srgb;
+    mipLevels = static_cast<uint32_t>(
+                    std::floor(std::log2(std::max(texWidth, texHeight)))) +
+                1;
+
+    image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
+                   vk::ImageUsageFlagBits::eTransferSrc |
+                       vk::ImageUsageFlagBits::eTransferDst |
+                       vk::ImageUsageFlagBits::eSampled,
+                   vk::MemoryPropertyFlagBits::eDeviceLocal, mipLevels);
+
+    // cast for correct template deduction (for inner staging buffer size
+    // deduction)
+    // TODO Support multiple image formats
+    image.write_from_raw_data(reinterpret_cast<uint32_t *>(pixels),
+                              vk::ImageLayout::eUndefined,
+                              vk::ImageLayout::eTransferDstOptimal);
+    image.generateMipMaps();
     break;
 
     // TODO eR8G8B8A8Snorm for normal maps ?
@@ -32,20 +49,19 @@ bool Texture::init(const std::string &path, TextureUsage usage) {
   case TextureUsage::Data:
   default:
     imageFormat = vk::Format::eR8G8B8A8Unorm;
+    image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
+                   vk::ImageUsageFlagBits::eTransferDst |
+                       vk::ImageUsageFlagBits::eSampled,
+                   vk::MemoryPropertyFlagBits::eDeviceLocal, mipLevels);
+
+    // cast for correct template deduction (for inner staging buffer size
+    // deduction)
+    // TODO Support multiple image formats
+    image.write_from_raw_data(reinterpret_cast<uint32_t *>(pixels),
+                              vk::ImageLayout::eUndefined,
+                              vk::ImageLayout::eShaderReadOnlyOptimal);
     break;
   }
-
-  image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
-                 vk::ImageUsageFlagBits::eTransferDst |
-                     vk::ImageUsageFlagBits::eSampled,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-  // cast for correct template deduction (for inner staging buffer size
-  // deduction)
-  // TODO Support multiple image formats
-  image.write_from_raw_data(reinterpret_cast<uint32_t *>(pixels),
-                            vk::ImageLayout::eUndefined,
-                            vk::ImageLayout::eShaderReadOnlyOptimal);
 
   // DescriptorSetInfo descriptorSetInfo;
   // descriptorSetInfo.layout = CommonResources::UniqueTextureLayout;

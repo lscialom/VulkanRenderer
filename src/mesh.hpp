@@ -11,6 +11,19 @@
 
 #include "texture.hpp"
 
+#define DEFINE_SAMPLER(name, ...)                                              \
+  VkSamplerCreateInfo name##Info = {                                           \
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, __VA_ARGS__};
+
+// clang-format off
+
+#define CREATE_SAMPLER(sampler)                                                \
+  g_device.createSampler(                                                      \
+      reinterpret_cast<const vk::SamplerCreateInfo *>(&sampler##Info),         \
+      g_allocationCallbacks, &sampler);
+
+// clang-format on
+
 namespace Renderer {
 
 struct GeometryInstance {
@@ -38,6 +51,8 @@ private:
     uint64_t indexCount = 0;
     VERTEX_INDICES_TYPE indexOffset = 0;
 
+    vk::Sampler diffuseSampler = nullptr;
+
     DescriptorSet descriptorSet;
 
     Submesh() = default;
@@ -50,6 +65,8 @@ private:
     Submesh &operator=(Submesh &&other) {
       indexCount = other.indexCount;
       indexOffset = other.indexOffset;
+      diffuseSampler = std::move(other.diffuseSampler);
+      other.diffuseSampler = nullptr;
       descriptorSet = std::move(other.descriptorSet);
 
       return *this;
@@ -64,12 +81,35 @@ private:
           ResourceManager::GetTexture(diffuse)->get_image(),
           ResourceManager::GetTexture(alpha)->get_image()};
 
-      descriptorSetInfo.samplers = {&CommonResources::TextureSampler,
-                                    &CommonResources::TextureSampler};
+      // TODO Optimize sampler count
+      DEFINE_SAMPLER(
+          diffuseSampler, .magFilter = VK_FILTER_LINEAR,
+          .minFilter = VK_FILTER_LINEAR,
+          .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+          .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+          .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+          .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT, .mipLodBias = 0.f,
+          .anisotropyEnable = true, .maxAnisotropy = 16, .compareEnable = false,
+          .compareOp = VK_COMPARE_OP_ALWAYS, .minLod = 0,
+          .maxLod = static_cast<float>(
+              ResourceManager::GetTexture(diffuse)
+                  ->get_mipLevels()), // TODO CUSTOM SAMPLER BY TEXTURE MIPMAP
+          .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+          .unnormalizedCoordinates = false)
+
+      CREATE_SAMPLER(diffuseSampler)
+
+      descriptorSetInfo.samplers = {&diffuseSampler, &diffuseSampler};
 
       descriptorSet.init(descriptorSetInfo);
     }
+
+    ~Submesh() {
+      g_device.destroySampler(diffuseSampler, g_allocationCallbacks);
+    }
   };
+
+#undef DEFINE_SAMPLER
 
   using Queue = std::vector<Submesh>;
 

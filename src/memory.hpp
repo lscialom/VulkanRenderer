@@ -80,6 +80,7 @@ struct Texture2DInfo {
   vk::ImageTiling tiling;
   vk::ImageUsageFlags usage;
   vk::MemoryPropertyFlags memProperties;
+  uint32_t mipLevels = 1;
   vk::ImageAspectFlags aspectFlags;
 };
 
@@ -96,6 +97,8 @@ private:
   uint32_t width;
   uint32_t height;
 
+  uint32_t mipLevels;
+
 public:
   Image() = default;
 
@@ -111,17 +114,19 @@ public:
   void
   allocate(uint32_t texWidth, uint32_t texHeight, vk::Format texFormat,
            vk::ImageTiling tiling, vk::ImageUsageFlags usage,
-           vk::MemoryPropertyFlags properties,
+           vk::MemoryPropertyFlags properties, uint32_t mipLevels,
            vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor);
 
   void allocate(Texture2DInfo info) {
     allocate(info.texWidth, info.texHeight, info.format, info.tiling,
-             info.usage, info.memProperties, info.aspectFlags);
+             info.usage, info.memProperties, info.mipLevels, info.aspectFlags);
   }
 
   void free();
 
   void transition_layout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+
+  void generateMipMaps();
 
   void write_from_buffer(vk::Buffer buffer, uint32_t dimX, uint32_t dimY);
 
@@ -168,11 +173,10 @@ public:
 // ATTACHMENT
 //-----------------------------------------------------------------------------
 
-struct AttachmentInfo
-{
-	vk::Format format;
-	bool isDepth = false;
-	vk::Extent2D extent = { 0, 0 };
+struct AttachmentInfo {
+  vk::Format format;
+  bool isDepth = false;
+  vk::Extent2D extent = {0, 0};
 };
 
 struct Attachment {
@@ -194,7 +198,7 @@ public:
        vk::ImageLayout dstLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
 
     image.allocate(texWidth, texHeight, requiredFormat, tiling, usage,
-                   properties, aspectFlags);
+                   properties, 1, aspectFlags);
     image.transition_layout(vk::ImageLayout::eUndefined, dstLayout);
   }
 
@@ -259,7 +263,8 @@ public:
 // static void
 // CreateIndexBuffer(const std::vector<VERTEX_INDICES_TYPE> &indexBuffer,
 //                  Buffer &buffer) {
-//  VkDeviceSize bufferSize = sizeof(VERTEX_INDICES_TYPE) * indexBuffer.size();
+//  VkDeviceSize bufferSize = sizeof(VERTEX_INDICES_TYPE) *
+//  indexBuffer.size();
 //
 //  Buffer stagingBuffer;
 //  stagingBuffer.allocate(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,

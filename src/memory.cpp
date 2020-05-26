@@ -279,7 +279,7 @@ Image::~Image() {
 void Image::allocate(uint32_t texWidth, uint32_t texHeight,
                      vk::Format texFormat, vk::ImageTiling tiling,
                      vk::ImageUsageFlags usage,
-                     vk::MemoryPropertyFlags properties,
+                     vk::MemoryPropertyFlags properties, uint32_t p_mipLevels,
                      vk::ImageAspectFlags aspectFlags) {
 #ifndef NDEBUG
   if (handle)
@@ -293,6 +293,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight,
 
   aspect = aspectFlags;
   format = texFormat;
+  mipLevels = p_mipLevels;
 
   size = width * height * Allocator::GetPixelSizeFromFormat(format);
 
@@ -301,7 +302,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight,
       vk::ImageType::e2D,
       format,
       {texWidth, texHeight, 1},
-      1, // TODO Support mipmapping
+      mipLevels,
       1,
       vk::SampleCountFlagBits::e1, // TODO Support multisampling image
                                    // attachments
@@ -333,7 +334,7 @@ void Image::allocate(uint32_t texWidth, uint32_t texHeight,
   viewInfo.subresourceRange.baseArrayLayer = 0;
   viewInfo.subresourceRange.baseMipLevel = 0;
   viewInfo.subresourceRange.layerCount = 1;
-  viewInfo.subresourceRange.levelCount = 1;
+  viewInfo.subresourceRange.levelCount = mipLevels;
 
   view = g_device.createImageView(viewInfo, g_allocationCallbacks);
 }
@@ -361,7 +362,7 @@ void Image::transition_layout(vk::ImageLayout oldLayout,
   vk::ImageSubresourceRange subresourceRange;
   subresourceRange.aspectMask = aspect;
   subresourceRange.baseMipLevel = 0;
-  subresourceRange.levelCount = 1;
+  subresourceRange.levelCount = mipLevels;
   subresourceRange.baseArrayLayer = 0;
   subresourceRange.layerCount = 1;
 
@@ -432,6 +433,15 @@ void Image::transition_layout(vk::ImageLayout oldLayout,
     srcStage = vk::PipelineStageFlagBits::eFragmentShader;
     dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
+  } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
+             newLayout == vk::ImageLayout::eTransferDstOptimal) {
+
+    barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+    barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+    srcStage = vk::PipelineStageFlagBits::eTransfer;
+    dstStage = vk::PipelineStageFlagBits::eTransfer;
+
   } else {
 
     std::string msg = "Unsupported layout transition."
@@ -487,6 +497,84 @@ Image &Image::operator=(Image &&other) {
   aspect = other.aspect;
 
   return *this;
+}
+
+void Image::generateMipMaps() {
+
+  vk::CommandBuffer commandBuffer = BeginSingleTimeCommand();
+
+  vk::ImageMemoryBarrier barrier{};
+  barrier.image = handle;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+  barrier.subresourceRange.levelCount = 1;
+
+  int32_t mipWidth = width;
+  int32_t mipHeight = height;
+
+  for (uint32_t i = 1; i < mipLevels; i++) {
+
+    barrier.subresourceRange.baseMipLevel = i - 1;
+    barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+    barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+    barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+
+    commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                  vk::PipelineStageFlagBits::eTransfer,
+                                  vk::DependencyFlagBits(0), 0, nullptr, 0,
+                                  nullptr, 1, &barrier);
+
+    vk::ImageBlit blit{};
+    blit.srcOffsets[0] = vk::Offset3D{0, 0, 0};
+    blit.srcOffsets[1] = vk::Offset3D{mipWidth, mipHeight, 1};
+    blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+    blit.srcSubresource.mipLevel = i - 1;
+    blit.srcSubresource.baseArrayLayer = 0;
+    blit.srcSubresource.layerCount = 1;
+    blit.dstOffsets[0] = vk::Offset3D{0, 0, 0};
+    blit.dstOffsets[1] = vk::Offset3D{mipWidth > 1 ? mipWidth / 2 : 1,
+                                      mipHeight > 1 ? mipHeight / 2 : 1, 1};
+    blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+    blit.dstSubresource.mipLevel = i;
+    blit.dstSubresource.baseArrayLayer = 0;
+    blit.dstSubresource.layerCount = 1;
+
+    commandBuffer.blitImage(handle, vk::ImageLayout::eTransferSrcOptimal,
+                            handle, vk::ImageLayout::eTransferDstOptimal, 1,
+                            &blit, vk::Filter::eLinear);
+
+    barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+    barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+    commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                  vk::PipelineStageFlagBits::eFragmentShader,
+                                  vk::DependencyFlagBits(0), 0, nullptr, 0,
+                                  nullptr, 1, &barrier);
+
+    if (mipWidth > 1)
+      mipWidth /= 2;
+    if (mipHeight > 1)
+      mipHeight /= 2;
+  }
+
+  barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+  barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+  barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+  barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+  barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+  commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                vk::PipelineStageFlagBits::eFragmentShader,
+                                vk::DependencyFlagBits(0), 0, nullptr, 0,
+                                nullptr, 1, &barrier);
+
+  EndSingleTimeCommand(commandBuffer);
 }
 
 } // namespace Renderer
