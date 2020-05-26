@@ -52,5 +52,26 @@ target_include_directories(TestExe PRIVATE ${PROJECT_SOURCE_DIR}/include
 
 target_link_libraries(TestExe window_handler vulkan_renderer ext_imgui) #Replace with your own window handler if needed
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/${CMAKE_BUILD_TYPE}/ext_imgui.dll
-        DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/bin)
+if (WIN32)
+	set(ext_imgui_path ${CMAKE_CURRENT_SOURCE_DIR}/libs/${CMAKE_BUILD_TYPE}/ext_imgui.dll)
+	set(test_exe_bin_folder ${OUTPUT_DIRECTORY})
+	FILE(TO_NATIVE_PATH ${ext_imgui_path} ext_imgui_path)
+	FILE(TO_NATIVE_PATH ${test_exe_bin_folder} test_exe_bin_folder)
+
+	add_custom_command(TARGET TestExe
+	    # Run after sources have been compiled but before linking the binary or running the librarian or archiver tool of a static library. This is not defined for targets created by the add_custom_target() command
+	    PRE_LINK
+	    COMMAND copy ${ext_imgui_path} ${test_exe_bin_folder}
+	    VERBATIM
+	)
+else()
+	add_custom_command(TARGET TestExe
+	    # Run after sources have been compiled but before linking the binary or running the librarian or archiver tool of a static library. This is not defined for targets created by the add_custom_target() command
+	    PRE_LINK
+	    COMMAND cp "${CMAKE_CURRENT_SOURCE_DIR}/libs/${CMAKE_BUILD_TYPE}/ext_imgui.dll" "${CMAKE_CURRENT_SOURCE_DIR}/bin"
+	    VERBATIM
+	)
+endif (WIN32)
+
+# file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/${CMAKE_BUILD_TYPE}/ext_imgui.dll
+#        DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/bin)
