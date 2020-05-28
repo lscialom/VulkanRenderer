@@ -13,15 +13,19 @@ layout(set = 0, binding = 0) uniform CameraData {
 }
 camData;
 
-layout(set = 1, binding = 0) uniform LightData {
+struct LightDataStruct{
   vec4 vector;
   vec3 color;
 
   float ambientFactor;
 
   float maxDist;
+};
+
+layout(set = 1, binding = 0) uniform LightUBO {
+  LightDataStruct lights[MAX_LIGHTS];
 }
-lightData[MAX_LIGHTS];
+lightData;
 
 layout(set = 2, binding = 0) uniform sampler2D[G_BUFFER_SIZE] gBuffer;
 
@@ -60,7 +64,7 @@ void main() {
   vec3 viewDir = normalize(-p);
 
   // float shadowFactor = shadow(
-  //     wp.xyz, (inverse(camData.view) * vec4(lightData[0].vector.xyz, 1.0)).xyz,
+  //     wp.xyz, (inverse(camData.view) * vec4(lightData.lights[0].vector.xyz, 1.0)).xyz,
   //     32);
 
   vec4 diffuseColor = vec4(texture(gBuffer[COLOR_BUFFER_INDEX], fragUV));
@@ -68,7 +72,7 @@ void main() {
 
   for(int i = 0; i<u_pushConstant.numLights; ++i)
   {
-    bool notDirectional = bool(lightData[i].vector.w);
+    bool notDirectional = bool(lightData.lights[i].vector.w);
 
     // avoiding branching
     // if(vector.w == 1) then vector is a position (point light)
@@ -77,30 +81,30 @@ void main() {
     //
     // if(vector.w == 0) then vector is a direction (directional light)
     //  so lightDir is -vector.xyz // 0 - (1 * (1-0)) = -1 <=> -1 * vector.xyz - p * 0
-    vec3 lightDir = normalize((lightData[i].vector.w - 1 * (1 - lightData[i].vector.w)) * lightData[i].vector.xyz - (p * lightData[i].vector.w));
+    vec3 lightDir = normalize((lightData.lights[i].vector.w - 1 * (1 - lightData.lights[i].vector.w)) * lightData.lights[i].vector.xyz - (p * lightData.lights[i].vector.w));
     vec3 halfDir = normalize(lightDir + viewDir);
 
     float diff = max(dot(n, lightDir), 0.0);
-    vec3 diffuse = diffuseColor.rgb * diff * lightData[i].color;
+    vec3 diffuse = diffuseColor.rgb * diff * lightData.lights[i].color;
 
     float spec = pow(max(dot(n, halfDir), 0.0), 32);
-    vec3 specular = shininess * spec * lightData[i].color;
+    vec3 specular = shininess * spec * lightData.lights[i].color;
 
     // No ambient with hdr / tonemapping since exposure performs its job well enough
-    // vec3 ambient = diffuseColor.rgb * lightData[i].ambientFactor * lightData[i].color;
+    // vec3 ambient = diffuseColor.rgb * lightData.lights[i].ambientFactor * lightData.lights[i].color;
 
     vec3 finalLightColor;
     if (notDirectional) {
-      // vec3 attenuationConstants = getAttenuationConstants(lightData[i].maxDist);
+      // vec3 attenuationConstants = getAttenuationConstants(lightData.lights[i].maxDist);
       // float constant = attenuationConstants.x;
       // float linear = attenuationConstants.y;
       // float quadratic = attenuationConstants.z;
 
-      // float distance = length(lightData[i].vector.xyz - p);
+      // float distance = length(lightData.lights[i].vector.xyz - p);
       // float attenuation = 1.0 / (constant + linear * distance +
       //                            quadratic * (distance * distance));
 
-      float distance = length(p - lightData[i].vector.xyz);
+      float distance = length(p - lightData.lights[i].vector.xyz);
       float attenuation = 1.0 / (distance * distance);
 
       finalLightColor = (/* ambient +  */diffuse + specular) * attenuation;

@@ -384,9 +384,9 @@ struct RenderContext {
 
     // TODO WRAP INTO LIGHT STRUCT
     // std::vector<LightUBO> lightsUBOData;
+    LightUBO light_final_ubo{};
     for (size_t i = 0; i < lights.size(); ++i) {
-      LightUBO ubo{};
-
+      LightUBO::LightData ubo{};
       ubo.vector.head<3>() << Maths::EigenizeVec3(lights[i]->vector);
 
       // Apply translation only if vector represents a position
@@ -398,10 +398,11 @@ struct RenderContext {
       ubo.ambientFactor = lights[i]->ambientFactor;
       ubo.maxDist = lights[i]->maxDist;
 
-      CommonResources::LightUBOSet.write(index, &ubo, sizeof(LightUBO), i);
-
-      // lightsUBOData.push_back(ubo);
+      light_final_ubo.lights[i] = ubo;
     }
+
+    CommonResources::LightUBOSet.write(index, &light_final_ubo,
+                                       sizeof(light_final_ubo), 0);
 
     // TODO Support alignment for multiple elements at once
     // lightsUBO.write(index, lightsUBOData.data(),

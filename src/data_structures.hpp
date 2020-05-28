@@ -130,12 +130,16 @@ struct CameraUBO {
 };
 
 struct LightUBO {
-  Eigen::Vector4f vector;
+  struct LightData {
+    Eigen::Vector4f vector;
 
-  Eigen::Vector3f color;
-  float ambientFactor;
+    Eigen::Vector3f color;
+    float ambientFactor;
 
-  float maxDist;
+    float maxDist;
+  };
+
+  std::array<LightData, MAX_LIGHTS> lights;
 };
 
 //-----------------------------------------------------------------------------
