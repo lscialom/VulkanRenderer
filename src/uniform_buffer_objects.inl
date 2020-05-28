@@ -72,7 +72,7 @@ DEFINE_UBO(CameraUBO, vk::DescriptorType::eUniformBuffer,
 
 DEFINE_UBO(LightUBO, vk::DescriptorType::eUniformBuffer,
            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-           MAX_LIGHTS)
+           1)
 
 #undef DEFINE_UBO
 

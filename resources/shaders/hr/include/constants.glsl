@@ -1,4 +1,4 @@
-#define MAX_LIGHTS 20
+#define MAX_LIGHTS 1
 
 #define DEPTH_BUFFER_INDEX 0
 #define POS_BUFFER_INDEX 1

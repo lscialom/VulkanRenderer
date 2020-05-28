@@ -103,7 +103,6 @@ struct RenderContext {
   void init_ray_tracing() {
     vk::PhysicalDeviceProperties2 pdProperties;
     pdProperties.pNext = &rtProperties;
-    pdProperties.properties = {};
 
     g_physicalDevice.getProperties2(&pdProperties);
   }

@@ -70,7 +70,7 @@ static void CursorPosCallback(double x, double y) {
     float dx = (x - xMouse);
     float dy = (y - yMouse);
 
-    float dTime = frameTime * 0.5f;
+    float dTime = frameTime * 0.5f * 0.125f;
 
     Renderer::Camera::Rotation =
         Renderer::Camera::Rotation +
@@ -279,29 +279,29 @@ int main() {
   Renderer::Light *light;
   Renderer::Vec3 lightColor = {2.5, 2.5, 2.5};
 
-  light = Renderer::SpawnLight({-30.83f, 0.109f, 6.87f}, lightColor, 0);
-  light->lightType = Renderer::LightType::Point;
-  light->maxDist = 100;
+  //light = Renderer::SpawnLight({-30.83f, 0.109f, 6.87f}, lightColor, 0);
+  //light->lightType = Renderer::LightType::Point;
+  //light->maxDist = 100;
 
-  light = Renderer::SpawnLight({-30.83f, 0.109f, -11.052f}, lightColor, 0);
-  light->lightType = Renderer::LightType::Point;
-  light->maxDist = 100;
+  //light = Renderer::SpawnLight({-30.83f, 0.109f, -11.052f}, lightColor, 0);
+  //light->lightType = Renderer::LightType::Point;
+  //light->maxDist = 100;
 
-  light = Renderer::SpawnLight({24.174f, 0.109f, -11.052f}, lightColor, 0);
-  light->lightType = Renderer::LightType::Point;
-  light->maxDist = 100;
+  //light = Renderer::SpawnLight({24.174f, 0.109f, -11.052f}, lightColor, 0);
+  //light->lightType = Renderer::LightType::Point;
+  //light->maxDist = 100;
 
-  light = Renderer::SpawnLight({24.174f, 0.109f, 6.87f}, lightColor, 0);
-  light->lightType = Renderer::LightType::Point;
-  light->maxDist = 100;
+  //light = Renderer::SpawnLight({24.174f, 0.109f, 6.87f}, lightColor, 0);
+  //light->lightType = Renderer::LightType::Point;
+  //light->maxDist = 100;
 
   Renderer::Vec3 sunColor = {1.5f, 1.5f, 1.5f};
 
   light = Renderer::SpawnLight({1, -1, 1}, sunColor, 0);
   light->lightType = Renderer::LightType::Directional;
 
-  light = Renderer::SpawnLight({-1, -1, -1}, sunColor, 0);
-  light->lightType = Renderer::LightType::Directional;
+  //light = Renderer::SpawnLight({-1, -1, -1}, sunColor, 0);
+  //light->lightType = Renderer::LightType::Directional;
 
   // Directional light
   // light = Renderer::SpawnLight(
