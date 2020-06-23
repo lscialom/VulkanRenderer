@@ -108,6 +108,9 @@ void LoadObj(const std::string &filename,
         std::vector(shape.mesh.material_ids.size(), std::string());
     data.alphaMaps = std::vector(shape.mesh.material_ids.size(), std::string());
 
+    data.diffuseColors =
+        std::vector(shape.mesh.material_ids.size(), Eigen::Vector3f(1, 1, 1));
+
     for (size_t index = 0; index < shape.mesh.material_ids.size(); ++index) {
 
       int matId = shape.mesh.material_ids[index];
@@ -130,6 +133,8 @@ void LoadObj(const std::string &filename,
 
         data.diffuseMaps[index] = texPath;
       }
+
+      data.diffuseColors[index] = Eigen::Vector3f(materials[matId].diffuse);
     }
 
     // data.indexCount = static_cast<uint32_t>(shape.mesh.indices.size());

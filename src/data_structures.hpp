@@ -149,10 +149,10 @@ struct LightUBO {
 template <typename PushConstantStruct> struct PushConstantDescriptor {
   static constexpr uint32_t Size = sizeof(PushConstantStruct);
   static constexpr VkShaderStageFlags ShaderStageFlags = 0;
-  uint32_t Offset = 0;
+  uint32_t offset = 0;
 
   vk::PushConstantRange make_push_constant_range() {
-    return vk::PushConstantRange(vk::ShaderStageFlags(ShaderStageFlags), Offset,
+    return vk::PushConstantRange(vk::ShaderStageFlags(ShaderStageFlags), offset,
                                  Size);
   }
 };
@@ -165,8 +165,12 @@ template <typename PushConstantStruct> struct PushConstantDescriptor {
   static_assert(sizeof(PushConstantStructType) <= 128);
 
 struct ModelInstancePushConstant {
-  Eigen::Matrix4f model;
-  Eigen::Vector4f color;
+  struct ModelInstanceData {
+    Eigen::Matrix<float, 4, 4, Eigen::DontAlign> model;
+    Eigen::Matrix<float, 4, 1, Eigen::DontAlign> color;
+  } modelInstanceData;
+
+  Eigen::Matrix<float, 3, 1, Eigen::DontAlign> submeshColor;
 };
 
 DEFINE_PUSH_CONSTANT(ModelInstancePushConstant,

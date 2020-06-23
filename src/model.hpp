@@ -86,7 +86,7 @@ public:
 
     // uint64_t dynamicAlignment = uboModelMat.get_alignment();
 
-    ModelInstancePushConstant miPc = {};
+    ModelInstancePushConstant::ModelInstanceData miPc = {};
 
     for (uint64_t i = 0; i < modelInstances.size(); ++i) {
       // uint32_t dynamicOffset = i * static_cast<uint32_t>(dynamicAlignment);

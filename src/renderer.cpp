@@ -873,7 +873,7 @@ void Shutdown() {
 
 void Resize(unsigned int width, unsigned int height) {
   requestedWidth = width, requestedHeight = height;
-  renderContext.refresh();
+  renderContext.refresh(); // TODO Dynamic resize via dynamic state instead
 }
 
 void SetPresentMode(PresentMode presentMode) {

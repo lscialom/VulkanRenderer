@@ -8,6 +8,7 @@ struct ShapeData {
   // VERTEX_INDICES_TYPE indexCount; //Currently not used
   VERTEX_INDICES_TYPE indexOffset;
   std::vector<std::string> diffuseMaps;
+  std::vector<Eigen::Vector3f> diffuseColors;
   std::vector<std::string> alphaMaps;
 };
 

@@ -47,6 +47,8 @@ private:
     uint64_t indexCount = 0;
     VERTEX_INDICES_TYPE indexOffset = 0;
 
+    Eigen::Vector3f diffuseColor;
+
     vk::Sampler diffuseSampler = nullptr;
 
     DescriptorSet descriptorSet;
@@ -61,6 +63,8 @@ private:
     Submesh &operator=(Submesh &&other) {
       indexCount = other.indexCount;
       indexOffset = other.indexOffset;
+
+      diffuseColor = other.diffuseColor;
 
       diffuseSampler = std::move(other.diffuseSampler);
       other.diffuseSampler = nullptr;
@@ -82,25 +86,28 @@ private:
       // clang-format off
 
       // TODO Optimize sampler count
-      DEFINE_SAMPLER(diffuseSampler,
+	  DEFINE_SAMPLER(diffuseSampler,
 		  .magFilter = VK_FILTER_LINEAR,
-          .minFilter = VK_FILTER_LINEAR,
-          .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-          .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-          .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-          .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-          .mipLodBias = 0.f,
+		  .minFilter = VK_FILTER_LINEAR,
+		  .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+		  .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		  .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		  .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		  .mipLodBias = 0.f,
 		  .anisotropyEnable = true,
-          .maxAnisotropy = 16,
+		  .maxAnisotropy = 16,
 		  .compareEnable = false,
-          .compareOp = VK_COMPARE_OP_ALWAYS,
+		  .compareOp = VK_COMPARE_OP_ALWAYS,
 		  .minLod = 0,
-          .maxLod = static_cast<float>(
-						ResourceManager::GetTexture(diffuse)->get_mipLevels()),
-          .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
-          .unnormalizedCoordinates = false)
+		  .maxLod = static_cast<float>(
+			  ResourceManager::GetTexture(diffuse)->get_mipLevels()),
+		  .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+		  .unnormalizedCoordinates = false)
 
       // clang-format on
+
+      // assert(ResourceManager::GetTexture(diffuse)->get_mipLevels() ==
+      //       ResourceManager::GetTexture(alpha)->get_mipLevels());
 
       CREATE_SAMPLER(diffuseSampler)
 
@@ -130,6 +137,12 @@ private:
       commandbuffer.bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics, shader.get_pipeline_layout(), 0, 1,
           &queue[i].descriptorSet.get_handle(), 0, nullptr);
+
+      commandbuffer.pushConstants(
+          shader.get_pipeline_layout(),
+          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+          sizeof(ModelInstancePushConstant::ModelInstanceData),
+          sizeof(Eigen::Vector3f), &queue[i].diffuseColor);
 
       commandbuffer.drawIndexed(queue[i].indexCount, 1, queue[i].indexOffset, 0,
                                 0);
@@ -193,12 +206,15 @@ public:
         std::string currentDiffuseMap = currentShape.diffuseMaps[j];
         std::string currentAlphaMap = currentShape.alphaMaps[j];
 
+        Eigen::Vector3f currentDiffuseColor = currentShape.diffuseColors[j];
+
         uint64_t numFaces = 1;
         bool isTransparent = !currentAlphaMap.empty();
 
         while (++j < currentShape.diffuseMaps.size() &&
                currentShape.diffuseMaps[j] == currentDiffuseMap &&
-               currentShape.alphaMaps[j] == currentAlphaMap) {
+               currentShape.alphaMaps[j] == currentAlphaMap &&
+               currentShape.diffuseColors[j] == currentDiffuseColor) {
 
           ++numFaces;
         }
@@ -206,6 +222,8 @@ public:
         Submesh submesh;
         submesh.indexCount = numFaces * 3;
         submesh.indexOffset = indexOffset;
+
+        submesh.diffuseColor = currentDiffuseColor;
 
         submesh.init_descriptor(currentDiffuseMap, currentAlphaMap);
 

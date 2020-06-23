@@ -15,7 +15,8 @@ camData;
 
 layout(push_constant) uniform pushConstant {
   mat4 model;
-  vec4 color;
+  vec4 userColor;
+  vec3 diffuseColor;  //Is sRGB => Linear conversion needed ?
 }
 u_pushConstant;
 
@@ -28,11 +29,9 @@ layout(location = NORMAL_BUFFER_INDEX - 1) out vec4 outNormal;
 layout(location = COLOR_BUFFER_INDEX - 1) out vec4 outColor;
 
 void main() {
-  // sRGB => Linear conversion
-  vec4 userColor = u_pushConstant.color;
-  vec4 diffuseColor = texture(tDiffuse, fragUV);
+  vec4 diffuseTexColor = texture(tDiffuse, fragUV);
 
-  outColor = userColor * diffuseColor;
+  outColor = u_pushConstant.userColor * diffuseTexColor * vec4(u_pushConstant.diffuseColor, 1);
   outColor.a *= texture(tAlpha, fragUV).r;
 
   // outNormal.xyz =

@@ -10,7 +10,6 @@ camData;
 
 layout(push_constant) uniform pushConstant {
   mat4 model;
-  vec3 color;
 }
 u_pushConstant;
 
