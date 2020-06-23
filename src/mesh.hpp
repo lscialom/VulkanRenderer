@@ -50,6 +50,7 @@ private:
     Eigen::Vector3f diffuseColor;
 
     vk::Sampler diffuseSampler = nullptr;
+    vk::Sampler alphaSampler = nullptr;
 
     DescriptorSet descriptorSet;
 
@@ -68,6 +69,9 @@ private:
 
       diffuseSampler = std::move(other.diffuseSampler);
       other.diffuseSampler = nullptr;
+
+      alphaSampler = std::move(other.alphaSampler);
+      other.alphaSampler = nullptr;
 
       descriptorSet = std::move(other.descriptorSet);
 
@@ -104,20 +108,37 @@ private:
 		  .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
 		  .unnormalizedCoordinates = false)
 
+      DEFINE_SAMPLER(alphaSampler,
+          .magFilter = VK_FILTER_LINEAR,
+          .minFilter = VK_FILTER_LINEAR,
+          .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+          .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+          .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+          .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+          .mipLodBias = 0.f,
+          .anisotropyEnable = true,
+          .maxAnisotropy = 16,
+          .compareEnable = false,
+          .compareOp = VK_COMPARE_OP_ALWAYS,
+          .minLod = 0,
+          .maxLod = static_cast<float>(
+			  ResourceManager::GetTexture(alpha)->get_mipLevels()),
+          .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+          .unnormalizedCoordinates = false)
+
       // clang-format on
 
-      // assert(ResourceManager::GetTexture(diffuse)->get_mipLevels() ==
-      //       ResourceManager::GetTexture(alpha)->get_mipLevels());
-
       CREATE_SAMPLER(diffuseSampler)
+      CREATE_SAMPLER(alphaSampler)
 
-      descriptorSetInfo.samplers = {&diffuseSampler, &diffuseSampler};
+      descriptorSetInfo.samplers = {&diffuseSampler, &alphaSampler};
 
       descriptorSet.init(descriptorSetInfo);
     }
 
     ~Submesh() {
       g_device.destroySampler(diffuseSampler, g_allocationCallbacks);
+      g_device.destroySampler(alphaSampler, g_allocationCallbacks);
     }
   };
 

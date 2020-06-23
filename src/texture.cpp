@@ -9,7 +9,7 @@
 
 namespace Renderer {
 
-bool Texture::init(const std::string &path, TextureUsage usage) {
+bool Texture::init(const std::string &path, TextureUsage usage, bool mipMap) {
   int texWidth, texHeight, texChannels;
   stbi_uc *pixels =
       stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels,
@@ -25,9 +25,22 @@ bool Texture::init(const std::string &path, TextureUsage usage) {
   switch (usage) {
   case TextureUsage::Color:
     imageFormat = vk::Format::eR8G8B8A8Srgb;
+    break;
+
+  // TODO eR8G8B8A8Snorm for normal maps ?
+  case TextureUsage::Data:
+  default:
+    imageFormat = vk::Format::eR8G8B8A8Unorm;
+    break;
+  }
+
+  if (mipMap) {
     mipLevels = static_cast<uint32_t>(
                     std::floor(std::log2(std::max(texWidth, texHeight)))) +
                 1;
+
+    std::cout << "Generating " << mipLevels << " mipmaps for " << path.c_str()
+              << std::endl;
 
     image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
                    vk::ImageUsageFlagBits::eTransferSrc |
@@ -42,13 +55,7 @@ bool Texture::init(const std::string &path, TextureUsage usage) {
                               vk::ImageLayout::eUndefined,
                               vk::ImageLayout::eTransferDstOptimal);
     image.generateMipMaps();
-    break;
-
-    // TODO eR8G8B8A8Snorm for normal maps ?
-
-  case TextureUsage::Data:
-  default:
-    imageFormat = vk::Format::eR8G8B8A8Unorm;
+  } else {
     image.allocate(texWidth, texHeight, imageFormat, vk::ImageTiling::eOptimal,
                    vk::ImageUsageFlagBits::eTransferDst |
                        vk::ImageUsageFlagBits::eSampled,
@@ -60,7 +67,6 @@ bool Texture::init(const std::string &path, TextureUsage usage) {
     image.write_from_raw_data(reinterpret_cast<uint32_t *>(pixels),
                               vk::ImageLayout::eUndefined,
                               vk::ImageLayout::eShaderReadOnlyOptimal);
-    break;
   }
 
   // DescriptorSetInfo descriptorSetInfo;

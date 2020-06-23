@@ -11,7 +11,7 @@ private:
   uint32_t mipLevels = 1;
 
 public:
-  bool init(const std::string &path, TextureUsage usage);
+  bool init(const std::string &path, TextureUsage usage, bool mipMap);
 
   const Image *get_image() const { return &image; }
   uint32_t get_mipLevels() const { return mipLevels; }

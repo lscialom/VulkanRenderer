@@ -21,7 +21,7 @@ void Init();
 void Shutdown();
 
 void LoadTexture(const std::string &texturePath, const std::string &texName,
-                 TextureUsage textureUsage);
+                 TextureUsage textureUsage, bool mipMap);
 void DestroyTexture(const std::string &texName);
 
 Texture *GetTexture(const std::string &textureName);

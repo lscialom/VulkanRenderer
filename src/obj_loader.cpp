@@ -120,16 +120,16 @@ void LoadObj(const std::string &filename,
 
       if (!materials[matId].alpha_texname.empty()) {
         std::string texPath = cwd + materials[matId].alpha_texname;
-        Renderer::ResourceManager::LoadTexture(texPath, texPath,
-                                               Renderer::TextureUsage::Data);
+        Renderer::ResourceManager::LoadTexture(
+            texPath, texPath, Renderer::TextureUsage::Data, true);
 
         data.alphaMaps[index] = texPath;
       }
 
       if (!materials[matId].diffuse_texname.empty()) {
         std::string texPath = cwd + materials[matId].diffuse_texname;
-        Renderer::ResourceManager::LoadTexture(texPath, texPath,
-                                               Renderer::TextureUsage::Color);
+        Renderer::ResourceManager::LoadTexture(
+            texPath, texPath, Renderer::TextureUsage::Color, true);
 
         data.diffuseMaps[index] = texPath;
       }
