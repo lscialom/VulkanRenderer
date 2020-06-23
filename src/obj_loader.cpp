@@ -106,7 +106,7 @@ void LoadObj(const std::string &filename,
     ShapeData data;
     data.diffuseMaps =
         std::vector(shape.mesh.material_ids.size(), std::string());
-    data.alphaMaps = std::vector(shape.mesh.material_ids.size(), std::string());
+    data.dissolves = std::vector(shape.mesh.material_ids.size(), 0.f);
 
     data.diffuseColors =
         std::vector(shape.mesh.material_ids.size(), Eigen::Vector3f(1, 1, 1));
@@ -118,13 +118,7 @@ void LoadObj(const std::string &filename,
       if (matId < 0)
         continue;
 
-      if (!materials[matId].alpha_texname.empty()) {
-        std::string texPath = cwd + materials[matId].alpha_texname;
-        Renderer::ResourceManager::LoadTexture(
-            texPath, texPath, Renderer::TextureUsage::Data, true);
-
-        data.alphaMaps[index] = texPath;
-      }
+      data.dissolves[index] = materials[matId].dissolve;
 
       if (!materials[matId].diffuse_texname.empty()) {
         std::string texPath = cwd + materials[matId].diffuse_texname;

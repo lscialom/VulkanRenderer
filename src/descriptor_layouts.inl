@@ -48,17 +48,10 @@ DEFINE_LAYOUT(UniqueTextureLayout, 1,
 		)
 	})
 
-DEFINE_LAYOUT(MeshLayout, 2,
+DEFINE_LAYOUT(MeshLayout, 1,
 	{
 		DEFINE_LAYOUT_BINDING(
 			.binding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		),
-
-		DEFINE_LAYOUT_BINDING(
-			.binding = 1,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,

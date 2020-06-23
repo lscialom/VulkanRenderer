@@ -242,7 +242,7 @@ int main() {
   // uint64_t sphereId = Renderer::CreateModelFromObj(
   //    std::string("../resources/models/sphere.obj"));
 
-  Renderer::LoadMesh(std::string("../resources/models/sponza/sponza.obj"),
+  Renderer::LoadMesh(std::string("../resources/models/sponza_v2/sponza.obj"),
                      "sponza");
   Renderer::LoadMesh(std::string("../resources/models/cube.obj"), "cube");
 

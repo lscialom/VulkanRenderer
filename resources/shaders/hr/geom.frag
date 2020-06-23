@@ -4,7 +4,6 @@
 #include <colorspace.glsl>
 
 layout(set = 0, binding = 0) uniform sampler2D tDiffuse;
-layout(set = 0, binding = 1) uniform sampler2D tAlpha;
 
 layout(set = 1, binding = 0) uniform CameraData {
   mat4 view;
@@ -32,7 +31,6 @@ void main() {
   vec4 diffuseTexColor = texture(tDiffuse, fragUV);
 
   outColor = u_pushConstant.userColor * diffuseTexColor * vec4(u_pushConstant.diffuseColor, 1);
-  outColor.a *= texture(tAlpha, fragUV).r;
 
   // outNormal.xyz =
   //    normalize(mat3(camData.view) *
