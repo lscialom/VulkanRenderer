@@ -124,9 +124,9 @@ SET_PRIMITIVE_INDICES(Cube,
 //-----------------------------------------------------------------------------
 
 struct CameraUBO {
-  Eigen::Matrix4f view;
-  Eigen::Matrix4f proj;
-  Eigen::Vector3f viewPos;
+  Eigen::Matrix<float, 4, 4, Eigen::DontAlign> view;
+  Eigen::Matrix<float, 4, 4, Eigen::DontAlign> proj;
+  Eigen::Matrix<float, 3, 1, Eigen::DontAlign> viewPos;
 };
 
 struct LightUBO {

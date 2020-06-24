@@ -106,10 +106,14 @@ void LoadObj(const std::string &filename,
     ShapeData data;
     data.diffuseMaps =
         std::vector(shape.mesh.material_ids.size(), std::string());
+
     data.dissolves = std::vector(shape.mesh.material_ids.size(), 0.f);
 
     data.diffuseColors =
         std::vector(shape.mesh.material_ids.size(), Eigen::Vector3f(1, 1, 1));
+
+    data.normalMaps =
+        std::vector(shape.mesh.material_ids.size(), std::string());
 
     for (size_t index = 0; index < shape.mesh.material_ids.size(); ++index) {
 
@@ -118,6 +122,7 @@ void LoadObj(const std::string &filename,
       if (matId < 0)
         continue;
 
+      // TODO Use it if no diffuse tex
       data.dissolves[index] = materials[matId].dissolve;
 
       if (!materials[matId].diffuse_texname.empty()) {
@@ -126,6 +131,14 @@ void LoadObj(const std::string &filename,
             texPath, texPath, Renderer::TextureUsage::Color, true);
 
         data.diffuseMaps[index] = texPath;
+      }
+
+      if (!materials[matId].normal_texname.empty()) {
+        std::string texPath = cwd + materials[matId].normal_texname;
+        Renderer::ResourceManager::LoadTexture(
+            texPath, texPath, Renderer::TextureUsage::Color, true);
+
+        data.normalMaps[index] = texPath;
       }
 
       data.diffuseColors[index] = Eigen::Vector3f(materials[matId].diffuse);

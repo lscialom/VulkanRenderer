@@ -43,13 +43,14 @@ layout(location = 0) out vec4 fragColor;
 
 //TODO Push constant
 const float ssaoStrength = 1;
-const float exposure = 1.0;
-const float shininess = 0.1;
+const float exposure = 2.0;
+const float shininess = 0.025;
 // const float ditherFactor = 768;
 
 void main() {
   // world-space normal
   vec3 wn = texture(gBuffer[NORMAL_BUFFER_INDEX], fragUV).xyz;
+  wn = normalize(wn * 2.0 - 1.0);
 
   vec3 n = normalize(mat3(camData.view) * wn);
 

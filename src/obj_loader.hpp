@@ -9,7 +9,8 @@ struct ShapeData {
   VERTEX_INDICES_TYPE indexOffset;
   std::vector<std::string> diffuseMaps;
   std::vector<Eigen::Vector3f> diffuseColors;
-  std::vector<float> dissolves;
+  std::vector<std::string> normalMaps;
+  std::vector<float> dissolves; // 0 = opaque; 1 = fully transparent
   // std::vector<std::string> alphaMaps;
 };
 

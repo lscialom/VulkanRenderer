@@ -4,6 +4,7 @@
 #include <colorspace.glsl>
 
 layout(set = 0, binding = 0) uniform sampler2D tDiffuse;
+layout(set = 0, binding = 1) uniform sampler2D tNormal;
 
 layout(set = 1, binding = 0) uniform CameraData {
   mat4 view;
@@ -38,8 +39,9 @@ void main() {
   //                           // matrix), is a rigid body transform.
   // outNormal.w = 1;
 
+  vec3 normal = texture(tNormal, fragUV).rgb;
   //using alpha for blending. Should use outNormal.w = 1.0f in other shaders
-  outNormal = vec4(normalize(fragNormal), outColor.a);
+  outNormal = vec4(normal, outColor.a);
 
   // outPos.xyz =
   //    vec3(camData.view * vec4(fragPosition, 1.0)); // position in view space

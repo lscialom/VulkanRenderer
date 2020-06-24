@@ -263,6 +263,7 @@ int main() {
       Renderer::Spawn(cubeId, {5.0f, -6.5f, 0.0f},
                       Renderer::Vec3::Zero()); // {100.0f, 100.0f, 100.0f});
 
+  // TODO Manage alpha by user so it is rendered in correct order
   cube1->color = Renderer::Color::Red;
   cube1->alpha = 0.1f;
 
@@ -277,7 +278,7 @@ int main() {
   // light->maxDist = 100;
 
   Renderer::Light *light;
-  Renderer::Vec3 lightColor = {2.5, 2.5, 2.5};
+  Renderer::Vec3 lightColor = {25.5, 25.5, 25.5};
 
   light = Renderer::SpawnLight({-30.83f, 0.109f, 6.87f}, lightColor, 0);
   light->lightType = Renderer::LightType::Point;
@@ -297,10 +298,10 @@ int main() {
 
   Renderer::Vec3 sunColor = {1.5f, 1.5f, 1.5f};
 
-  light = Renderer::SpawnLight({1, -1, 1}, sunColor, 0);
+  light = Renderer::SpawnLight({50, -1, 5}, sunColor, 0);
   light->lightType = Renderer::LightType::Directional;
 
-  light = Renderer::SpawnLight({-1, -1, -1}, sunColor, 0);
+  light = Renderer::SpawnLight({-50, -1, -5}, sunColor, 0);
   light->lightType = Renderer::LightType::Directional;
 
   // Directional light

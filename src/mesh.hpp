@@ -50,6 +50,7 @@ private:
     Eigen::Vector3f diffuseColor;
 
     vk::Sampler diffuseSampler = nullptr;
+    vk::Sampler normalSampler = nullptr;
 
     DescriptorSet descriptorSet;
 
@@ -69,18 +70,23 @@ private:
       diffuseSampler = std::move(other.diffuseSampler);
       other.diffuseSampler = nullptr;
 
+      normalSampler = std::move(other.normalSampler);
+      other.normalSampler = nullptr;
+
       descriptorSet = std::move(other.descriptorSet);
 
       return *this;
     }
 
-    void init_descriptor(const std::string &diffuse) {
+    void init_descriptor(const std::string &diffuse,
+                         const std::string &normal) {
 
       DescriptorSetInfo descriptorSetInfo;
       descriptorSetInfo.layout = CommonResources::MeshLayout;
 
       descriptorSetInfo.images = {
-          ResourceManager::GetTexture(diffuse)->get_image()};
+          ResourceManager::GetTexture(diffuse)->get_image(),
+          ResourceManager::GetTexture(normal)->get_image()};
 
       // clang-format off
 
@@ -103,17 +109,37 @@ private:
 		  .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
 		  .unnormalizedCoordinates = false)
 
+	  DEFINE_SAMPLER(normalSampler,
+		  .magFilter = VK_FILTER_LINEAR,
+		  .minFilter = VK_FILTER_LINEAR,
+		  .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+		  .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		  .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		  .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		  .mipLodBias = 0.f,
+		  .anisotropyEnable = true,
+		  .maxAnisotropy = 16,
+		  .compareEnable = false,
+		  .compareOp = VK_COMPARE_OP_ALWAYS,
+		  .minLod = 0,
+		  .maxLod = static_cast<float>(
+			  ResourceManager::GetTexture(normal)->get_mipLevels()),
+		  .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+		  .unnormalizedCoordinates = false)
+
       // clang-format on
 
       CREATE_SAMPLER(diffuseSampler)
+      CREATE_SAMPLER(normalSampler)
 
-      descriptorSetInfo.samplers = {&diffuseSampler};
+      descriptorSetInfo.samplers = {&diffuseSampler, &normalSampler};
 
       descriptorSet.init(descriptorSetInfo);
     }
 
     ~Submesh() {
       g_device.destroySampler(diffuseSampler, g_allocationCallbacks);
+      g_device.destroySampler(normalSampler, g_allocationCallbacks);
     }
   };
 
@@ -200,6 +226,7 @@ public:
 
       for (size_t j = 0; j < currentShape.diffuseMaps.size();) {
         std::string currentDiffuseMap = currentShape.diffuseMaps[j];
+        std::string currentNormalMap = currentShape.normalMaps[j];
         float currentDissolve = currentShape.dissolves[j];
 
         Eigen::Vector3f currentDiffuseColor = currentShape.diffuseColors[j];
@@ -209,6 +236,7 @@ public:
 
         while (++j < currentShape.diffuseMaps.size() &&
                currentShape.diffuseMaps[j] == currentDiffuseMap &&
+               currentShape.normalMaps[j] == currentNormalMap &&
                currentShape.dissolves[j] == currentDissolve &&
                currentShape.diffuseColors[j] == currentDiffuseColor) {
 
@@ -221,7 +249,7 @@ public:
 
         submesh.diffuseColor = currentDiffuseColor;
 
-        submesh.init_descriptor(currentDiffuseMap);
+        submesh.init_descriptor(currentDiffuseMap, currentNormalMap);
 
         if (!isTransparent)
           opaqueQueue.emplace_back(std::move(submesh));
