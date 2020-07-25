@@ -69,6 +69,10 @@ void InitPostProcessResources() {
   SSAOKernelBuffer.allocate(SSAOKernelBufferInfo);
   SSAOKernelBuffer.write(ssaoKernelData.data(), SSAOKernelBufferInfo.size);
 
+  std::transform(Maths::DitheringPattern.begin(), Maths::DitheringPattern.end(),
+                 Maths::DitheringPattern.begin(),
+                 [](float element) { return element / 64.0f; });
+
   // Dithering Resources
   DitherTex.allocate(DitherTexInfo);
   DitherTex.write_from_raw_data(Maths::DitheringPattern.data(),

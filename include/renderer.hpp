@@ -29,13 +29,15 @@ VULKAN_RENDERER_EXPORTS void SetPresentMode(PresentMode presentMode);
 VULKAN_RENDERER_EXPORTS void GetCurrentResolution(int &w, int &h);
 
 struct Vec3 {
-  float x, y, z = 0;
+  float x = 0;
+  float y = 0;
+  float z = 0;
 
-  const Vec3 operator+(const Vec3 &other) {
+  const Vec3 operator+(const Vec3 &other) const noexcept {
     return {x + other.x, y + other.y, z + other.z};
   }
 
-  const Vec3 operator*(float a) { return {x * a, y * a, z * a}; }
+  const Vec3 operator*(float a) const noexcept { return {x * a, y * a, z * a}; }
 
   static constexpr Vec3 Zero() { return {0, 0, 0}; }
   static constexpr Vec3 One() { return {1, 1, 1}; }

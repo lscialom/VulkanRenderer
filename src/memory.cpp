@@ -187,9 +187,11 @@ void Buffer::allocate(VkDeviceSize allocationSize, vk::BufferUsageFlags usage,
   allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
   allocInfo.requiredFlags = (VkMemoryPropertyFlags)memProperties;
 
+  VmaAllocationInfo resultInfo = {};
+
   CHECK_VK_RESULT_FATAL(vmaCreateBuffer(vmaAllocator, &bufferInfo, &allocInfo,
                                         (VkBuffer *)&handle, &allocation,
-                                        nullptr),
+                                        &resultInfo),
                         "Failed to create buffer.");
 }
 

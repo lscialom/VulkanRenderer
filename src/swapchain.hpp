@@ -2,6 +2,8 @@
 
 #include "global_context.hpp"
 
+#include <array>
+
 namespace Renderer {
 namespace Swapchain {
 
@@ -18,6 +20,7 @@ vk::Fence GetCurrentFrameFence();
 
 vk::AttachmentDescription GetAttachmentDescription();
 vk::Extent2D GetExtent();
+std::array<float, 2> GetExtentF();
 
 const std::vector<vk::ImageView> &GetImageViews();
 

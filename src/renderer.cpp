@@ -300,6 +300,26 @@ struct RenderContext {
     shaderInfos[1].descriptors = {descriptorSetInfos[0]};
     shaderInfos[1].drawRectCount = G_BUFFER_SIZE;
 
+    std::array<float, 2> currentExtent = Swapchain::GetExtentF();
+
+    vk::SpecializationMapEntry specMapEntryX = {};
+    specMapEntryX.constantID = 0;
+    specMapEntryX.offset = 0;
+    specMapEntryX.size = sizeof(float);
+
+    vk::SpecializationMapEntry specMapEntryY = {};
+    specMapEntryY.constantID = 1;
+    specMapEntryY.offset = sizeof(float);
+    specMapEntryY.size = sizeof(float);
+
+    std::array mapEntries = {specMapEntryX, specMapEntryY};
+
+    vk::SpecializationInfo specInfo = {};
+    specInfo.mapEntryCount = mapEntries.size();
+    specInfo.pMapEntries = mapEntries.data();
+    specInfo.dataSize = sizeof(currentExtent);
+    specInfo.pData = currentExtent.data();
+
     lightPass.init(shaderInfos);
   }
 

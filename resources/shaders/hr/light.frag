@@ -4,7 +4,11 @@
 #include <colorspace.glsl>
 #include <utils.glsl>
 
-#define BAYER_MATRIX_DIVISOR 64 // Because bayer matrix range is from 0 to 63;
+#define BAYER_MATRIX_DIVISOR 64.0f // Because bayer matrix range is from 0 to 63;
+#define DITHER_TEX_X_DIM 8.0f
+
+layout(constant_id = 0) const float framebufferSizeX = 0;
+layout(constant_id = 1) const float framebufferSizeY = 0;
 
 layout(set = 0, binding = 0) uniform CameraData {
   mat4 view;
@@ -130,7 +134,7 @@ void main() {
   fragColor.rgb *= exposure;
   fragColor.rgb = ACESFitted(fragColor.rgb);
 
-  float noise = texture(ditherTex, gl_FragCoord.xy / textureSize(ditherTex, 0).xy).r / BAYER_MATRIX_DIVISOR;
+  float noise = texture(ditherTex, gl_FragCoord.xy / vec2(framebufferSizeX, framebufferSizeY) / DITHER_TEX_X_DIM).r;
 
   // higher mix range = less color banding but more noise
   fragColor.rgb += mix(-0.5/255.0, 1.5/255.0, noise);

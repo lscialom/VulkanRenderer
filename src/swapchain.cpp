@@ -45,6 +45,11 @@ vk::Fence GetCurrentFrameFence() { return inFlightFences[currentFrame]; }
 
 vk::Extent2D GetExtent() { return extent; }
 
+std::array<float, 2> GetExtentF() {
+  return {
+      {static_cast<float>(extent.width), static_cast<float>(extent.height)}};
+}
+
 const std::vector<vk::ImageView> &GetImageViews() { return imageViews; }
 
 void SetPresentQueue(Queue queue) { presentQueue = queue; }
